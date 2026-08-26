@@ -27,14 +27,15 @@
   <div id="root"></div>
 
   <script>
-    // --- 1. 기본 글로벌 설정 및 변수 ---
+    // --- 1. 아버님의 실제 Firebase 프로젝트 키 내장 (family-8fba4) ---
     const DEFAULT_FIREBASE_CONFIG = {
-      apiKey: "AIzaSyC2d0M_Sample_Key_For_Family_Connect",
-      authDomain: "familiy-connect-shared.firebaseapp.com",
-      projectId: "familiy-connect-shared",
-      storageBucket: "familiy-connect-shared.appspot.com",
-      messagingSenderId: "987654321012",
-      appId: "1:987654321012:web:a1b2c3d4e5f6g7h8"
+      apiKey: "AIzaSyC6OW9ACw4LYewILAcZlE3jxhNX5KzmS7w",
+      authDomain: "family-8fba4.firebaseapp.com",
+      projectId: "family-8fba4",
+      storageBucket: "family-8fba4.firebasestorage.app",
+      messagingSenderId: "8325144717",
+      appId: "1:8325144717:web:cc7bd673149e50f7e942c4",
+      measurementId: "G-G2Z3SS1BZX"
     };
 
     const FAMILY_MEMBERS = [
@@ -174,7 +175,7 @@
     };
 
     let dbInstance = null;
-    let appId = 'familiy-connect-shared-v1';
+    let appId = 'family-8fba4-v1';
 
     if (localStorage.getItem('family_connect_login_member')) {
       state.isLoggedIn = true;
@@ -192,11 +193,12 @@
     function initFirebase() {
       let activeConfig = DEFAULT_FIREBASE_CONFIG;
 
+      // URL 파라미터나 로컬스토리지에 별도 설정이 있으면 그것도 사용
       if (window.location.hash && window.location.hash.includes('config=')) {
         try {
           const rawCfg = window.location.hash.split('config=')[1];
           const parsed = JSON.parse(decodeURIComponent(rawCfg));
-          if (parsed && parsed.apiKey && !parsed.apiKey.includes('Sample')) {
+          if (parsed && parsed.apiKey) {
             localStorage.setItem('family_connect_firebase_cfg', JSON.stringify(parsed));
             activeConfig = parsed;
           }
@@ -206,14 +208,12 @@
         if (savedCfg) {
           try {
             const parsed = JSON.parse(savedCfg);
-            if (parsed && parsed.apiKey && !parsed.apiKey.includes('Sample')) {
+            if (parsed && parsed.apiKey) {
               activeConfig = parsed;
             }
           } catch(e) {}
         }
       }
-
-      const isRealConfig = activeConfig.apiKey && !activeConfig.apiKey.includes('Sample');
 
       try {
         if (firebase.apps.length) firebase.app().delete();
@@ -223,13 +223,8 @@
         dbInstance = firestore;
 
         auth.signInAnonymously().then(() => {
-          if (isRealConfig) {
-            state.syncStatus = '실시간 동기화 완료';
-            state.isConnected = true;
-          } else {
-            state.syncStatus = '오프라인 로컬 모드';
-            state.isConnected = false;
-          }
+          state.syncStatus = '실시간 동기화 완료';
+          state.isConnected = true;
           render();
 
           firestore.collection('artifacts').doc(appId).collection('public').doc('data').collection('schedules')
@@ -421,31 +416,42 @@
       showToast(`${currentMember.name}님의 실시간 현황이 공유되었습니다! 📢`);
     }
 
-    function handleSaveFirebaseConfig(e) {
-      if (e) e.preventDefault();
+    // 자바스크립트 코드 구문(const firebaseConfig = { ... })과 JSON을 모두 자동으로 인식하는 유연한 파서
+    function smartParseFirebaseInput(raw) {
+      if (!raw) return null;
+      let text = raw.trim();
+      if (text.includes('{')) {
+        text = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+      }
       try {
-        const parsed = JSON.parse(state.firebaseConfigInput);
-        if (!parsed.apiKey || !parsed.projectId) {
-          showToast('⚠️ 올바른 Firebase 설정 JSON 형식이 아닙니다.');
-          return;
+        return JSON.parse(text);
+      } catch(e1) {
+        try {
+          const jsonLike = text
+            .replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
+            .replace(/'/g, '"');
+          return JSON.parse(jsonLike);
+        } catch(e2) {
+          return null;
         }
-        localStorage.setItem('family_connect_firebase_cfg', JSON.stringify(parsed));
-        state.isDbModalOpen = false;
-        showToast('✨ 클라우드 DB 설정 저장 완료!');
-        setTimeout(() => window.location.reload(), 800);
-      } catch(err) {
-        showToast('⚠️ 입력 형식이 올바르지 않습니다.');
       }
     }
 
-    function handleCopySmartFamilyLink() {
-      const savedCfg = localStorage.getItem('family_connect_firebase_cfg');
-      if (!savedCfg) {
-        showToast('먼저 클라우드 DB 설정을 완료해 주세요!');
-        state.isDbModalOpen = true;
-        render();
+    function handleSaveFirebaseConfig(e) {
+      if (e) e.preventDefault();
+      const parsed = smartParseFirebaseInput(state.firebaseConfigInput);
+      if (!parsed || !parsed.apiKey) {
+        showToast('⚠️ 올바른 Firebase 설정 형식이 아닙니다.');
         return;
       }
+      localStorage.setItem('family_connect_firebase_cfg', JSON.stringify(parsed));
+      state.isDbModalOpen = false;
+      showToast('✨ 클라우드 DB 설정 저장 완료!');
+      setTimeout(() => window.location.reload(), 800);
+    }
+
+    function handleCopySmartFamilyLink() {
+      const savedCfg = localStorage.getItem('family_connect_firebase_cfg') || JSON.stringify(DEFAULT_FIREBASE_CONFIG);
       const smartUrl = `${window.location.origin}${window.location.pathname}#config=${encodeURIComponent(savedCfg)}`;
       const tempInput = document.createElement('textarea');
       tempInput.value = smartUrl;
@@ -466,7 +472,7 @@
         const pinVal = state.memberPins[loginTarget.id] || loginTarget.pin;
         root.innerHTML = `
           <div class="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
-            <div className="bg-slate-800 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-700 space-y-6">
+            <div class="bg-slate-800 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-700 space-y-6">
               <div class="text-center space-y-2">
                 <div class="w-14 h-14 rounded-3xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-2xl mx-auto shadow-lg">🏡</div>
                 <h1 class="text-2xl font-black text-white">우리집 커넥트</h1>
@@ -927,28 +933,16 @@
                     <span class="text-[10px] bg-indigo-600 text-white px-1.5 py-0.5 rounded font-bold">추천</span>
                   </div>
                   <p class="text-[11px] text-indigo-800 leading-snug">
-                    아빠가 아래에 DB 설정을 완료한 후 링크를 복사해 가족 카톡에 보내시면, 엄마와 아이들은 링크 터치 한 번으로 즉시 실시간 동기화됩니다!
+                    아래 버튼을 눌러 링크를 복사해 가족 카톡에 공유하시면, 엄마와 아이들은 링크 터치 한 번으로 즉시 실시간 동기화됩니다!
                   </p>
                   <button onclick="handleCopySmartFamilyLink()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md transition active:scale-95">📱 가족 카톡 자동 연동 링크 복사하기</button>
                 </div>
 
                 <div class="space-y-2.5 text-xs text-slate-600 border-t border-slate-100 pt-3">
-                  <h4 class="font-bold text-slate-800 flex items-center">🔑 1분 만에 끝나는 무료 Firebase DB 설정</h4>
-                  <ol class="list-decimal list-inside space-y-1 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-                    <li><b>console.firebase.google.com</b> 접속 후 구글 로그인</li>
-                    <li><b>프로젝트 추가</b> ➔ 이름 작성 ➔ 생성 (100% 무료)</li>
-                    <li>메인 화면의 <b>&lt;/&gt; (웹 앱)</b> 아이콘 클릭 ➔ 앱 등록</li>
-                    <li>화면에 나오는 <code>const firebaseConfig = &#123; ... &#125;;</code> 코드 전체 복사</li>
-                  </ol>
-
-                  <form onsubmit="handleSaveFirebaseConfig(event)" class="space-y-2 pt-1">
-                    <label class="block text-[11px] font-bold text-slate-700">Firebase firebaseConfig JSON 붙여넣기:</label>
-                    <textarea rows="4" oninput="state.firebaseConfigInput=this.value" placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "...", ... }' class="w-full p-2.5 text-[11px] font-mono bg-slate-900 text-emerald-400 rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">${state.firebaseConfigInput}</textarea>
-                    <div class="flex items-center space-x-2 pt-1">
-                      <button type="button" onclick="state.isDbModalOpen=false; render();" class="flex-1 py-2 rounded-xl border border-slate-300 font-bold text-slate-600 text-xs">닫기</button>
-                      <button type="submit" class="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md">DB 설정 저장하기</button>
-                    </div>
-                  </form>
+                  <h4 class="font-bold text-slate-800 flex items-center">🔑 이미 프로젝트 키가 코드에 내장되어 있습니다!</h4>
+                  <p class="text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                    아버님의 <b>family-8fba4</b> Firebase 설정이 기본 내장되어 있어 별도의 설정 변경 없이 바로 실시간 동기화를 사용하실 수 있습니다.
+                  </p>
                 </div>
               </div>
             </div>
