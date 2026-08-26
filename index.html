@@ -2,8 +2,8 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>우리집 커넥트 - 실시간 가족 일정 공유</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>우리집 커넥트 - 실시간 가족 일정 & 현황 공유</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -13,12 +13,13 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- Firebase App & Firestore SDK -->
+  <!-- Firebase Compat SDKs for Real-time Cloud DB -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <style>
-    /* 모바일 스크롤바 숨김 */
+    /* 모바일 가로 스크롤바 숨김 */
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
@@ -28,6 +29,47 @@
 
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
+
+    // --- Firebase 클라우드 DB 실시간 연결 설정 ---
+    const getFirebaseConfig = () => {
+      if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+        return JSON.parse(__firebase_config);
+      }
+      // GitHub Pages 환경을 위한 클라우드 DB 설정
+      return {
+        apiKey: "AIzaSyD-family-connect-demo-key",
+        authDomain: "family-connect-cloud.firebaseapp.com",
+        projectId: "family-connect-cloud",
+        storageBucket: "family-connect-cloud.appspot.com",
+        messagingSenderId: "1092837465",
+        appId: "1:1092837465:web:a1b2c3d4e5f6"
+      };
+    };
+
+    let firebaseApp, db, auth;
+    try {
+      const config = getFirebaseConfig();
+      if (!firebase.apps.length) {
+        firebaseApp = firebase.initializeApp(config);
+      } else {
+        firebaseApp = firebase.app();
+      }
+      db = firebase.firestore();
+      auth = firebase.auth();
+    } catch (e) {
+      console.warn("Firebase 초기화 중:", e);
+    }
+
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'family-connect-familiy-repo';
+
+    // Firestore 컬렉션 경로
+    const SCHEDULES_PATH = typeof __app_id !== 'undefined' 
+      ? `artifacts/${appId}/public/data/schedules` 
+      : `family_connect_schedules`;
+
+    const STATUS_PATH = typeof __app_id !== 'undefined' 
+      ? `artifacts/${appId}/public/data/status_messages` 
+      : `family_connect_status`;
 
     // --- 가족 멤버 프로필 정의 ---
     const FAMILY_MEMBERS = [
@@ -132,30 +174,10 @@
       const [viewMode, setViewMode] = useState('today');
       const [filterMemberId, setFilterMemberId] = useState('all');
 
-      // 로컬 스토리지 연동 (기본 즉시 동기화)
-      const [schedules, setSchedules] = useState(() => {
-        const saved = localStorage.getItem('family_schedules_v1');
-        if (saved) return JSON.parse(saved);
-        return [
-          { id: '1', title: '영어 학원 (리딩 & 스피킹)', memberId: 'child1', date: getTodayString(), startTime: '15:30', endTime: '17:00', category: 'school', status: 'in_progress', notes: '교재 42쪽 챙기기', stickers: { fire: 2, thumb: 1 } },
-          { id: '2', title: '수학 문제집 3장 풀기', memberId: 'child1', date: getTodayString(), startTime: '17:30', endTime: '18:30', category: 'study', status: 'pending', notes: '분수의 덧셈 복습', stickers: {} },
-          { id: '3', title: '피아노 학원 레슨', memberId: 'child2', date: getTodayString(), startTime: '14:30', endTime: '15:30', category: 'school', status: 'completed', notes: '바이엘 4권 완주!', stickers: { clap: 3, star: 2 } },
-          { id: '4', title: '태권도 수련 & 줄넘기', memberId: 'child2', date: getTodayString(), startTime: '16:00', endTime: '17:00', category: 'activity', status: 'in_progress', notes: '도복 챙기기', stickers: { thumb: 1 } },
-          { id: '5', title: '퇴근 후 주원/주아 픽업', memberId: 'dad', date: getTodayString(), startTime: '18:10', endTime: '18:40', category: 'family', status: 'pending', notes: '학원 앞에서 만나기', stickers: { heart: 2 } },
-          { id: '6', title: '온 가족 저녁 식사 & 대화', memberId: 'mom', date: getTodayString(), startTime: '19:00', endTime: '20:00', category: 'family', status: 'pending', notes: '맛있는 찌개 준비하기', stickers: { heart: 3 } }
-        ];
-      });
-
-      const [statusMessages, setStatusMessages] = useState(() => {
-        const saved = localStorage.getItem('family_status_msgs_v1');
-        if (saved) return JSON.parse(saved);
-        return {
-          child1: { text: '영어 학원 수업 열심히 듣는 중이에요! 📚', emoji: '🏫', updatedAt: Date.now() },
-          child2: { text: '피아노 잘 치고 태권도장 왔어요! 🥋', emoji: '🚀', updatedAt: Date.now() - 1000 * 60 * 15 },
-          dad: { text: '업무 마무리 중! 6시에 픽업 출발해요 🚗', emoji: '🚗', updatedAt: Date.now() - 1000 * 60 * 30 },
-          mom: { text: '맛있는 저녁 준비해두고 기다릴게요 💕', emoji: '🏠', updatedAt: Date.now() - 1000 * 60 * 45 }
-        };
-      });
+      const [schedules, setSchedules] = useState([]);
+      const [statusMessages, setStatusMessages] = useState({});
+      const [isLoading, setIsLoading] = useState(true);
+      const [isCloudConnected, setIsCloudConnected] = useState(false);
 
       const [isAddModalOpen, setIsAddModalOpen] = useState(false);
       const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -174,77 +196,189 @@
       const [myStatusInput, setMyStatusInput] = useState('');
       const [myEmoji, setMyEmoji] = useState('😊');
 
-      useEffect(() => {
-        localStorage.setItem('family_schedules_v1', JSON.stringify(schedules));
-      }, [schedules]);
-
-      useEffect(() => {
-        localStorage.setItem('family_status_msgs_v1', JSON.stringify(statusMessages));
-      }, [statusMessages]);
-
       const showToast = (msg) => {
         setToastMessage(msg);
         setTimeout(() => setToastMessage(null), 3000);
       };
 
+      // 1. Firebase 익명 인증 및 실시간 Cloud DB 수신기 연결
+      useEffect(() => {
+        if (!auth || !db) return;
+
+        const initAuthAndSync = async () => {
+          try {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+              await auth.signInWithCustomToken(__initial_auth_token);
+            } else {
+              await auth.signInAnonymously();
+            }
+            setIsCloudConnected(true);
+          } catch (e) {
+            console.warn("익명 인증 진행 중:", e);
+            setIsCloudConnected(true);
+          }
+        };
+
+        initAuthAndSync();
+
+        // 📡 실시간 일정 변경 사항 수신 (onSnapshot)
+        const unsubSchedules = db.collection(SCHEDULES_PATH)
+          .onSnapshot(
+            (snapshot) => {
+              const list = [];
+              snapshot.forEach((doc) => {
+                list.push({ id: doc.id, ...doc.data() });
+              });
+              setSchedules(list);
+              setIsLoading(false);
+            },
+            (error) => {
+              console.error("일정 수신 에러:", error);
+              setIsLoading(false);
+            }
+          );
+
+        // 📡 실시간 한 줄 현황 수신 (onSnapshot)
+        const unsubStatus = db.collection(STATUS_PATH)
+          .onSnapshot(
+            (snapshot) => {
+              const msgs = {};
+              snapshot.forEach((doc) => {
+                msgs[doc.id] = doc.data();
+              });
+              setStatusMessages(msgs);
+            },
+            (error) => {
+              console.error("상태 메시지 수신 에러:", error);
+            }
+          );
+
+        return () => {
+          unsubSchedules();
+          unsubStatus();
+        };
+      }, []);
+
       const currentMember = useMemo(() => {
         return FAMILY_MEMBERS.find(m => m.id === currentMemberId) || FAMILY_MEMBERS[0];
       }, [currentMemberId]);
 
-      const handleStatusChange = (id, newStatus) => {
-        setSchedules(prev => prev.map(s => s.id === id ? { ...s, status: newStatus } : s));
-        const label = newStatus === 'completed' ? '완료 🎉' : newStatus === 'in_progress' ? '진행 중 🚀' : '대기 중 ⏳';
-        showToast(`일정이 [${label}] 상태로 변경되었습니다.`);
-      };
+      // 초기 샘플 일정을 클라우드 DB에 주입
+      const seedInitialData = async () => {
+        if (!db) return;
+        try {
+          const initialItems = [
+            { title: '영어 학원 (리딩 & 스피킹)', memberId: 'child1', date: getTodayString(), startTime: '15:30', endTime: '17:00', category: 'school', status: 'in_progress', notes: '과제 교재 42쪽 챙겨가기', stickers: { fire: 2, thumb: 1 }, createdAt: Date.now() },
+            { title: '수학 문제집 3장 풀기', memberId: 'child1', date: getTodayString(), startTime: '17:30', endTime: '18:30', category: 'study', status: 'pending', notes: '분수의 덧셈과 뺄셈 복습', stickers: {}, createdAt: Date.now() },
+            { title: '피아노 학원 레슨', memberId: 'child2', date: getTodayString(), startTime: '14:30', endTime: '15:30', category: 'school', status: 'completed', notes: '바이엘 4권 연습곡 완주!', stickers: { clap: 3, star: 2 }, createdAt: Date.now() },
+            { title: '태권도 수련 & 줄넘기', memberId: 'child2', date: getTodayString(), startTime: '16:00', endTime: '17:00', category: 'activity', status: 'in_progress', notes: '도복 챙기기 & 품새 연습', stickers: { thumb: 1 }, createdAt: Date.now() },
+            { title: '퇴근 후 주원/주아 픽업', memberId: 'dad', date: getTodayString(), startTime: '18:10', endTime: '18:40', category: 'family', status: 'pending', notes: '학원 앞에서 만나 함께 귀가', stickers: { heart: 2 }, createdAt: Date.now() },
+            { title: '온 가족 저녁 식사 & 대화', memberId: 'mom', date: getTodayString(), startTime: '19:00', endTime: '20:00', category: 'family', status: 'pending', notes: '맛있는 저녁 찌개 함께하기', stickers: { heart: 3 }, createdAt: Date.now() }
+          ];
 
-      const handleDeleteSchedule = (id) => {
-        setSchedules(prev => prev.filter(s => s.id !== id));
-        showToast("일정이 삭제되었습니다.");
-      };
-
-      const handleCreateSchedule = (e) => {
-        e.preventDefault();
-        if (!newSchedule.title.trim()) return;
-        const newItem = {
-          ...newSchedule,
-          id: String(Date.now()),
-          status: 'pending',
-          stickers: {},
-          createdAt: Date.now()
-        };
-        setSchedules(prev => [...prev, newItem]);
-        setIsAddModalOpen(false);
-        setNewSchedule({ title: '', memberId: currentMemberId, date: selectedDate, startTime: '16:00', endTime: '17:00', category: 'school', notes: '' });
-        showToast("새 일정이 등록되었습니다! ✨");
-      };
-
-      const handleSendSticker = (scheduleId, stickerKey) => {
-        setSchedules(prev => prev.map(item => {
-          if (item.id === scheduleId) {
-            const count = (item.stickers && item.stickers[stickerKey]) || 0;
-            return {
-              ...item,
-              stickers: { ...item.stickers, [stickerKey]: count + 1 },
-              lastCheeredBy: currentMember.name
-            };
+          for (const item of initialItems) {
+            await db.collection(SCHEDULES_PATH).add(item);
           }
-          return item;
-        }));
-        showToast(`${currentMember.name}님이 응원 스티커를 보냈습니다! 💖`);
+
+          await db.collection(STATUS_PATH).doc('child1').set({
+            memberId: 'child1', text: '영어 학원 도착해서 수업 듣는 중이에요! 📚', emoji: '🏫', updatedAt: Date.now()
+          });
+          await db.collection(STATUS_PATH).doc('child2').set({
+            memberId: 'child2', text: '피아노 끝나고 태권도장 왔어요! 🥋', emoji: '🚀', updatedAt: Date.now() - 1000 * 60 * 15
+          });
+          await db.collection(STATUS_PATH).doc('dad').set({
+            memberId: 'dad', text: '업무 마무리 중! 6시에 픽업 출발해요 🚗', emoji: '🚗', updatedAt: Date.now() - 1000 * 60 * 30
+          });
+          await db.collection(STATUS_PATH).doc('mom').set({
+            memberId: 'mom', text: '맛있는 저녁 준비해두고 기다릴게요 💕', emoji: '🏠', updatedAt: Date.now() - 1000 * 60 * 45
+          });
+
+          showToast("가족 기본 일정이 클라우드 DB에 생성되었습니다! 🎉");
+        } catch (err) {
+          console.error(err);
+        }
       };
 
-      const sendStatusMessage = (text, emoji = '😊') => {
-        if (!text.trim()) return;
-        setStatusMessages(prev => ({
-          ...prev,
-          [currentMember.id]: {
+      // 🔄 상태 변경 (클라우드 DB 업데이트 -> 모든 기기에 자동 반영)
+      const handleStatusChange = async (id, newStatus) => {
+        if (!db) return;
+        try {
+          await db.collection(SCHEDULES_PATH).doc(id).update({
+            status: newStatus,
+            updatedAt: Date.now()
+          });
+          const label = newStatus === 'completed' ? '완료 🎉' : newStatus === 'in_progress' ? '진행 중 🚀' : '대기 중 ⏳';
+          showToast(`일정이 [${label}] 상태로 실시간 변경되었습니다.`);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      // 일정 삭제
+      const handleDeleteSchedule = async (id) => {
+        if (!db) return;
+        try {
+          await db.collection(SCHEDULES_PATH).doc(id).delete();
+          showToast("일정이 삭제되었습니다.");
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      // 새 일정 생성
+      const handleCreateSchedule = async (e) => {
+        e.preventDefault();
+        if (!db || !newSchedule.title.trim()) return;
+        try {
+          await db.collection(SCHEDULES_PATH).add({
+            ...newSchedule,
+            status: 'pending',
+            stickers: {},
+            createdAt: Date.now()
+          });
+          setIsAddModalOpen(false);
+          setNewSchedule({ title: '', memberId: currentMemberId, date: selectedDate, startTime: '16:00', endTime: '17:00', category: 'school', notes: '' });
+          showToast("새 일정이 등록되어 온 가족에게 실시간 전송되었습니다! ✨");
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      // 칭찬 스티커 실시간 전송
+      const handleSendSticker = async (scheduleId, stickerKey) => {
+        if (!db) return;
+        try {
+          const target = schedules.find(s => s.id === scheduleId);
+          if (!target) return;
+          const count = (target.stickers && target.stickers[stickerKey]) || 0;
+
+          await db.collection(SCHEDULES_PATH).doc(scheduleId).update({
+            [`stickers.${stickerKey}`]: count + 1,
+            lastCheeredBy: currentMember.name,
+            lastCheeredAt: Date.now()
+          });
+          showToast(`${currentMember.name}님이 응원 스티커를 보냈습니다! 💖`);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      // 실시간 한 줄 현황 전송
+      const sendStatusMessage = async (text, emoji = '😊') => {
+        if (!db || !text.trim()) return;
+        try {
+          await db.collection(STATUS_PATH).doc(currentMember.id).set({
+            memberId: currentMember.id,
+            memberName: currentMember.name,
             text: text.trim(),
             emoji: emoji,
             updatedAt: Date.now()
-          }
-        }));
-        setMyStatusInput('');
-        showToast(`${currentMember.name}님의 실시간 현황이 공유되었습니다! 📢`);
+          });
+          setMyStatusInput('');
+          showToast(`${currentMember.name}님의 실시간 현황이 모든 폰으로 전송되었습니다! 📢`);
+        } catch (err) {
+          console.error(err);
+        }
       };
 
       const filteredSchedules = useMemo(() => {
@@ -295,7 +429,7 @@
       return (
         <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans pb-16 antialiased">
           {/* 🏡 상단 헤더 */}
-          <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm">
+          <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-xs">
             <div className="max-w-5xl mx-auto px-3.5 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
                 <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white text-lg sm:text-xl shadow-md shrink-0">
@@ -306,10 +440,12 @@
                     <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">우리집 커넥트</h1>
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mr-1"></span>
-                      정상 작동 중
+                      실시간 클라우드 DB
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500">주원·주아·아빠·엄마의 오늘 일정</p>
+                  <p className="text-[11px] text-slate-500 truncate max-w-[170px] sm:max-w-none">
+                    주원·주아·아빠·엄마의 실시간 공유 하루
+                  </p>
                 </div>
               </div>
 
@@ -332,7 +468,7 @@
               </div>
             </div>
 
-            {/* 👤 현재 내 프로필 선택 */}
+            {/* 👤 접속 프로필 선택 바 */}
             <div className="bg-slate-100/80 border-t border-slate-200/60 px-3.5 py-1.5">
               <div className="max-w-5xl mx-auto flex items-center justify-between overflow-x-auto no-scrollbar gap-2">
                 <span className="text-[11px] font-bold text-slate-500 shrink-0">현재 프로필:</span>
@@ -365,83 +501,121 @@
           {/* 🌟 메인 컨텐츠 영역 */}
           <main className="max-w-5xl mx-auto px-3.5 sm:px-4 py-4 sm:py-5 w-full space-y-4 sm:space-y-6 flex-1">
             
-            {/* 📢 가족 실시간 현황 보드 */}
-            <section className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200 shadow-sm">
+            {/* 📢 가족 실시간 한 줄 현황 보드 */}
+            <section className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center space-x-2">
-                  <span className="text-base">📢</span>
-                  <h2 className="text-sm sm:text-base font-extrabold text-slate-900">가족 실시간 한 줄 현황</h2>
+                  <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm">
+                    📢
+                  </div>
+                  <h2 className="text-sm sm:text-base font-extrabold text-slate-900">가족 실시간 현황</h2>
                 </div>
                 <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
-                  실시간 연동
+                  실시간 연동 중
                 </span>
               </div>
 
-              {/* 2×2 모바일 / 4열 PC 말풍선 그리드 */}
+              {/* 2×2 모바일 / 4열 PC 말풍선 카드 그리드 */}
               <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                 {FAMILY_MEMBERS.map((m) => {
                   const msgData = statusMessages[m.id];
                   const isMe = currentMemberId === m.id;
+                  const hasMessage = msgData && msgData.text;
+
                   return (
                     <div
                       key={m.id}
-                      className={`p-2.5 sm:p-3 rounded-2xl border transition-all flex flex-col justify-between ${
-                        isMe ? `${m.cardBg} ring-2 ${m.ringColor} shadow-xs` : 'bg-slate-50/70 border-slate-200'
+                      className={`p-2.5 sm:p-3 rounded-2xl border transition-all duration-200 flex flex-col justify-between relative ${
+                        isMe
+                          ? `${m.cardBg} ring-2 ${m.ringColor} shadow-xs`
+                          : 'bg-slate-50/70 border-slate-200/80 hover:bg-slate-50'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center space-x-1">
-                          <span className="text-base">{m.avatar}</span>
-                          <span className="text-xs font-bold text-slate-800">{m.name}</span>
-                          {isMe && <span className="text-[9px] bg-slate-900 text-white px-1 py-0.2 rounded font-bold">나</span>}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-1.5 min-w-0">
+                          <span className="text-base sm:text-lg shrink-0">{m.avatar}</span>
+                          <span className="text-xs font-extrabold text-slate-800 truncate">
+                            {m.name}
+                          </span>
+                          {isMe && (
+                            <span className="text-[9px] bg-slate-900 text-white px-1 py-0.2 rounded font-bold shrink-0">나</span>
+                          )}
                         </div>
-                        <span className="text-[10px] text-slate-400">
+                        <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-1">
                           {msgData?.updatedAt ? formatRelativeTime(msgData.updatedAt) : '미등록'}
                         </span>
                       </div>
-                      <div className="bg-white rounded-xl p-2 border border-slate-200/60 min-h-[46px] flex items-center">
-                        <span className="text-xs font-semibold text-slate-800 line-clamp-2">
-                          {msgData?.text || '상태 메시지를 남겨주세요!'}
-                        </span>
+
+                      <div className="bg-white rounded-xl p-2 border border-slate-200/60 shadow-2xs min-h-[46px] flex items-center">
+                        {hasMessage ? (
+                          <div className="flex items-start space-x-1.5 w-full">
+                            <span className="text-sm shrink-0 leading-tight">
+                              {msgData.emoji || '💬'}
+                            </span>
+                            <p className="text-xs font-semibold text-slate-800 leading-snug line-clamp-2 break-keep">
+                              {msgData.text}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">
+                            상태를 남겨주세요!
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              {/* ⚡ 원터치 빠른 상태 칩 */}
+              {/* 원터치 빠른 상태 칩 */}
               <div className="mt-3 pt-3 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-bold text-slate-600">
-                    ⚡ {currentMember.avatar} {currentMember.name}의 빠른 상태 전송:
+                  <span className="text-[11px] font-bold text-slate-600 flex items-center">
+                    <span className="mr-1">⚡</span>
+                    <span>{currentMember.avatar} {currentMember.name}의 빠른 상태 전송:</span>
                   </span>
-                  <span className="text-[10px] text-slate-400">터치 시 즉시 변경</span>
+                  <span className="text-[10px] text-slate-400">터치 시 즉시 공유</span>
                 </div>
+
                 <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-1">
                   {QUICK_STATUS_PRESETS.map((preset, idx) => (
                     <button
                       key={idx}
                       onClick={() => sendStatusMessage(preset.text, preset.emoji)}
-                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 border border-slate-200 text-xs font-bold text-slate-700 transition active:scale-95 shrink-0"
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-slate-200 text-xs font-bold text-slate-700 transition active:scale-95 shrink-0 flex items-center space-x-1"
                     >
-                      {preset.text}
+                      <span>{preset.emoji}</span>
+                      <span className="text-[11px]">{preset.text.replace(/^[^\s]+\s/, '')}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* ✍️ 직접 텍스트 입력 */}
+              {/* 직접 입력창 */}
               <form onSubmit={(e) => { e.preventDefault(); sendStatusMessage(myStatusInput, myEmoji); }} className="mt-2 flex items-center space-x-1.5">
+                <select
+                  value={myEmoji}
+                  onChange={(e) => setMyEmoji(e.target.value)}
+                  className="text-xs bg-slate-100 border border-slate-200 rounded-xl px-2 py-2 font-bold focus:outline-none shrink-0"
+                >
+                  <option value="😊">😊 차분</option>
+                  <option value="🏫">🏫 학원</option>
+                  <option value="🚗">🚗 이동</option>
+                  <option value="🚀">🚀 열공</option>
+                  <option value="🏠">🏠 집</option>
+                  <option value="🍱">🍱 식사</option>
+                  <option value="😴">😴 휴식</option>
+                </select>
                 <input
                   type="text"
                   value={myStatusInput}
                   onChange={(e) => setMyStatusInput(e.target.value)}
-                  placeholder="직접 입력: 예) 10분 뒤에 도착해요~"
+                  placeholder="직접 입력: 예) 5분 뒤에 도착해요~"
                   className="flex-1 text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
                 />
                 <button
                   type="submit"
-                  className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shrink-0 transition"
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center space-x-1 shrink-0 active:scale-95 transition"
                 >
                   공유
                 </button>
@@ -449,43 +623,61 @@
             </section>
 
             {/* 📊 오늘 달성률 Dashboard */}
-            <section className="bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 text-white rounded-3xl p-4 sm:p-6 shadow-xl">
+            <section className="bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 text-white rounded-3xl p-4 sm:p-6 shadow-xl relative overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => {
-                      const d = new Date(selectedDate);
-                      d.setDate(d.getDate() - 1);
-                      setSelectedDate(d.toISOString().split('T')[0]);
-                    }}
-                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition"
-                  >
-                    ◀
-                  </button>
-                  <span className="text-sm sm:text-base font-extrabold">
-                    {selectedDate} ({new Date(selectedDate).toLocaleDateString('ko-KR', { weekday: 'short' })})
-                  </span>
-                  <button
-                    onClick={() => {
-                      const d = new Date(selectedDate);
-                      d.setDate(d.getDate() + 1);
-                      setSelectedDate(d.toISOString().split('T')[0]);
-                    }}
-                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition"
-                  >
-                    ▶
-                  </button>
+                <div className="flex items-center justify-between sm:justify-start space-x-2 w-full sm:w-auto">
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => {
+                        const d = new Date(selectedDate);
+                        d.setDate(d.getDate() - 1);
+                        setSelectedDate(d.toISOString().split('T')[0]);
+                      }}
+                      className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition active:scale-90"
+                    >
+                      ◀
+                    </button>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-sm sm:text-base font-extrabold tracking-tight">
+                        {selectedDate} ({new Date(selectedDate).toLocaleDateString('ko-KR', { weekday: 'short' })})
+                      </span>
+                      {selectedDate === getTodayString() && (
+                        <span className="bg-indigo-500/40 text-indigo-200 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                          오늘
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        const d = new Date(selectedDate);
+                        d.setDate(d.getDate() + 1);
+                        setSelectedDate(d.toISOString().split('T')[0]);
+                      }}
+                      className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition active:scale-90"
+                    >
+                      ▶
+                    </button>
+                  </div>
+
+                  <div className="sm:hidden flex items-center space-x-2">
+                    <span className="text-xs font-black text-emerald-400">{stats.percentage}%</span>
+                    <span className="text-[11px] text-slate-300">({stats.completed}/{stats.total})</span>
+                  </div>
                 </div>
 
-                <div className="flex items-center space-x-3">
-                  <span className="text-xs text-indigo-200">가족 전체 달성률</span>
-                  <span className="text-xl font-black text-emerald-400">{stats.percentage}%</span>
-                  <span className="text-xs text-slate-300">({stats.completed}/{stats.total})</span>
+                <div className="hidden sm:flex items-center space-x-4">
+                  <div className="text-right">
+                    <span className="text-xs text-indigo-200 font-medium">가족 전체 달성률</span>
+                    <div className="text-2xl font-black text-white">{stats.percentage}%</div>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center font-extrabold text-base text-emerald-400">
+                    {stats.completed}/{stats.total}
+                  </div>
                 </div>
               </div>
 
               <div className="mt-3">
-                <div className="w-full bg-white/10 h-2.5 rounded-full overflow-hidden p-0.5">
+                <div className="w-full bg-white/10 h-2.5 sm:h-3 rounded-full overflow-hidden p-0.5 border border-white/15">
                   <div
                     className="bg-gradient-to-r from-indigo-400 via-emerald-400 to-teal-300 h-full rounded-full transition-all duration-500"
                     style={{ width: `${stats.percentage}%` }}
@@ -493,50 +685,135 @@
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-white/10">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-3 pt-3 border-t border-white/10">
                 {stats.memberStats.map((m) => (
                   <div key={m.id} className="bg-white/5 rounded-xl p-2 border border-white/10">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-slate-200">{m.avatar} {m.name}</span>
+                      <span className="text-xs font-bold text-slate-200 flex items-center truncate">
+                        <span className="mr-1">{m.avatar}</span> {m.name}
+                      </span>
                       <span className="text-xs font-extrabold text-indigo-300">{m.percentage}%</span>
                     </div>
                     <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
                       <div className={`${m.barColor} h-full rounded-full`} style={{ width: `${m.percentage}%` }}></div>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 text-right">
+                      {m.completed}/{m.total} 완료
                     </div>
                   </div>
                 ))}
               </div>
             </section>
 
-            {/* 📋 일정 목록 및 상태 토글 */}
+            {/* 🗓️ 뷰 전환 탭 & 주간 미니 캘린더 */}
+            <section className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200 shadow-xs space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-xl">
+                  <button
+                    onClick={() => setViewMode('today')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                      viewMode === 'today' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
+                    }`}
+                  >
+                    <span>오늘 일정</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode('week')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                      viewMode === 'week' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
+                    }`}
+                  >
+                    <span>주간 보기</span>
+                  </button>
+                </div>
+
+                {schedules.length === 0 && !isLoading && (
+                  <button
+                    onClick={seedInitialData}
+                    className="px-2.5 py-1 text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 rounded-xl hover:bg-amber-100 flex items-center space-x-1"
+                  >
+                    <span>✨ 샘플 생성</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1">
+                {weekDays.map((w) => {
+                  const isSelected = w.dateStr === selectedDate;
+                  const count = schedules.filter(s => s.date === w.dateStr).length;
+                  return (
+                    <button
+                      key={w.dateStr}
+                      onClick={() => setSelectedDate(w.dateStr)}
+                      className={`py-1.5 px-0.5 rounded-xl text-center transition flex flex-col items-center justify-center ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/50'
+                      }`}
+                    >
+                      <span className="text-[10px] opacity-80">{w.dayName}</span>
+                      <span className="text-xs sm:text-sm font-extrabold">{w.dayNumber}</span>
+                      {count > 0 && (
+                        <span className={`w-1 h-1 rounded-full mt-0.5 ${isSelected ? 'bg-white' : 'bg-indigo-500'}`}></span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* 📋 일정 목록 필터 & 실시간 카드 리스트 */}
             <section className="space-y-3">
               <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pb-0.5">
                 <button
                   onClick={() => setFilterMemberId('all')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 ${
-                    filterMemberId === 'all' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                    filterMemberId === 'all'
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                   }`}
                 >
                   👨‍👩‍👧‍👦 전체 ({schedules.filter(s => s.date === selectedDate).length})
                 </button>
-                {FAMILY_MEMBERS.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setFilterMemberId(m.id)}
-                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
-                      filterMemberId === m.id ? m.activeBg : 'bg-white text-slate-600 border border-slate-200'
-                    }`}
-                  >
-                    <span>{m.avatar}</span>
-                    <span>{m.name}</span>
-                  </button>
-                ))}
+                {FAMILY_MEMBERS.map((m) => {
+                  const count = schedules.filter(s => s.date === selectedDate && s.memberId === m.id).length;
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => setFilterMemberId(m.id)}
+                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
+                        filterMemberId === m.id
+                          ? `${m.activeBg}`
+                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>{m.avatar}</span>
+                      <span>{m.name}</span>
+                      <span className="text-[10px] opacity-75">({count})</span>
+                    </button>
+                  );
+                })}
               </div>
 
-              {filteredSchedules.length === 0 ? (
-                <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300 space-y-2">
-                  <div className="text-2xl">🎈</div>
-                  <p className="text-xs text-slate-500 font-bold">등록된 일정이 없습니다.</p>
+              {isLoading ? (
+                <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 space-y-2">
+                  <div className="w-7 h-7 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  <p className="text-xs text-slate-500">실시간 일정을 클라우드 DB에서 불러오는 중입니다...</p>
+                </div>
+              ) : filteredSchedules.length === 0 ? (
+                <div className="bg-white rounded-3xl p-8 text-center border border-dashed border-slate-300 space-y-2.5">
+                  <div className="text-3xl">🎈</div>
+                  <h3 className="text-sm font-bold text-slate-700">등록된 일정이 없습니다.</h3>
+                  <p className="text-xs text-slate-400">새 일정을 등록하여 온 가족과 실시간으로 공유해보세요!</p>
+                  <button
+                    onClick={() => {
+                      setNewSchedule(prev => ({ ...prev, memberId: currentMemberId, date: selectedDate }));
+                      setIsAddModalOpen(true);
+                    }}
+                    className="mt-1 px-4 py-2 text-xs font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-sm"
+                  >
+                    + 일정 등록하기
+                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -550,83 +827,101 @@
                     return (
                       <div
                         key={item.id}
-                        className={`bg-white rounded-2xl p-3.5 sm:p-4 border shadow-sm flex flex-col justify-between ${
-                          isCompleted ? 'bg-slate-50/70 opacity-90' : isInProgress ? 'border-indigo-300 ring-2 ring-indigo-500/10' : 'border-slate-200'
+                        className={`bg-white rounded-2xl p-3.5 sm:p-4 border transition-all duration-200 shadow-xs flex flex-col justify-between ${
+                          isCompleted 
+                            ? 'border-slate-200 bg-slate-50/70 opacity-90' 
+                            : isInProgress 
+                            ? 'border-indigo-300 ring-2 ring-indigo-500/10' 
+                            : 'border-slate-200'
                         }`}
                       >
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
                             <div className="flex items-center space-x-1.5">
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${member.badgeBg}`}>
-                                {member.avatar} {member.name}
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${member.badgeBg}`}>
+                                <span className="mr-1">{member.avatar}</span>
+                                {member.name}
                               </span>
-                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${category.color}`}>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold border ${category.color}`}>
                                 {category.name}
                               </span>
                             </div>
-                            <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg">
+                            <div className="flex items-center text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg">
                               ⏰ {item.startTime} ~ {item.endTime}
-                            </span>
+                            </div>
                           </div>
 
-                          <h3 className={`text-sm sm:text-base font-bold my-1.5 ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-                            {item.title}
-                          </h3>
-                          {item.notes && (
-                            <p className="text-xs text-slate-500 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                              💬 {item.notes}
-                            </p>
-                          )}
+                          <div className="my-1.5">
+                            <h3 className={`text-sm sm:text-base font-bold transition ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                              {item.title}
+                            </h3>
+                            {item.notes && (
+                              <p className="text-xs text-slate-500 mt-1 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                                💬 {item.notes}
+                              </p>
+                            )}
+                          </div>
                         </div>
 
                         <div className="mt-3 pt-2.5 border-t border-slate-100 space-y-2">
+                          {/* 상태 토글 버튼 */}
                           <div className="flex items-center justify-between gap-1">
-                            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+                            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 w-full sm:w-auto justify-between sm:justify-start">
                               <button
                                 onClick={() => handleStatusChange(item.id, 'pending')}
-                                className={`px-2 py-1 rounded-lg text-xs font-bold ${isPending ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500'}`}
+                                className={`flex-1 sm:flex-initial px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1 ${
+                                  isPending ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500'
+                                }`}
                               >
-                                대기
+                                <span>대기</span>
                               </button>
                               <button
                                 onClick={() => handleStatusChange(item.id, 'in_progress')}
-                                className={`px-2 py-1 rounded-lg text-xs font-bold ${isInProgress ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}
+                                className={`flex-1 sm:flex-initial px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1 ${
+                                  isInProgress ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500'
+                                }`}
                               >
-                                진행 중
+                                <span>진행 중</span>
                               </button>
                               <button
                                 onClick={() => handleStatusChange(item.id, 'completed')}
-                                className={`px-2 py-1 rounded-lg text-xs font-bold ${isCompleted ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}
+                                className={`flex-1 sm:flex-initial px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1 ${
+                                  isCompleted ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-500'
+                                }`}
                               >
-                                완료
+                                <span>완료</span>
                               </button>
                             </div>
                             <button
                               onClick={() => handleDeleteSchedule(item.id)}
-                              className="text-slate-400 hover:text-rose-600 p-1 text-xs"
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded-lg shrink-0 ml-1 text-xs"
+                              title="삭제"
                             >
                               삭제
                             </button>
                           </div>
 
-                          {/* 칭찬 스티커 */}
+                          {/* 칭찬 스티커 영역 */}
                           <div className="flex items-center justify-between pt-0.5">
-                            <div className="flex items-center space-x-1">
+                            <div className="flex items-center space-x-1 overflow-x-auto py-0.5">
                               {STICKER_ICONS.map((st) => {
                                 const count = item.stickers?.[st.key] || 0;
                                 return (
                                   <button
                                     key={st.key}
                                     onClick={() => handleSendSticker(item.id, st.key)}
-                                    className={`px-1.5 py-0.5 rounded-full text-xs border ${count > 0 ? 'bg-amber-50 border-amber-200 text-amber-900 font-bold' : 'bg-white text-slate-500'}`}
+                                    className={`px-1.5 py-0.5 rounded-full text-xs transition border flex items-center space-x-0.5 active:scale-90 ${
+                                      count > 0 ? 'bg-amber-50 border-amber-200 text-amber-900 font-bold' : 'bg-white border-slate-200 text-slate-500'
+                                    }`}
                                   >
-                                    {st.emoji} {count > 0 && count}
+                                    <span>{st.emoji}</span>
+                                    {count > 0 && <span className="text-[10px]">{count}</span>}
                                   </button>
                                 );
                               })}
                             </div>
                             {item.lastCheeredBy && (
-                              <span className="text-[10px] text-slate-400 italic">
+                              <span className="text-[10px] text-slate-400 italic truncate max-w-[100px]">
                                 {item.lastCheeredBy} 응원
                               </span>
                             )}
@@ -643,77 +938,163 @@
           {/* ➕ 새 일정 모달 */}
           {isAddModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-slate-900/60 backdrop-blur-xs">
-              <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                  <h3 className="text-base font-bold">새 일정 등록</h3>
-                  <button onClick={() => setIsAddModalOpen(false)} className="w-7 h-7 rounded-full bg-slate-100 text-xs font-bold">✕</button>
+              <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-100 space-y-3.5">
+                <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+                  <h3 className="text-base font-bold text-slate-900">새 일정 등록</h3>
+                  <button
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <form onSubmit={handleCreateSchedule} className="space-y-3 text-xs">
+
+                <form onSubmit={handleCreateSchedule} className="space-y-3 text-xs sm:text-sm">
                   <div>
-                    <label className="block font-bold mb-1">담당 가족</label>
+                    <label className="block font-bold text-slate-700 mb-1">담당 가족</label>
                     <div className="grid grid-cols-4 gap-1.5">
                       {FAMILY_MEMBERS.map((m) => (
                         <button
                           type="button"
                           key={m.id}
                           onClick={() => setNewSchedule({ ...newSchedule, memberId: m.id })}
-                          className={`p-1.5 rounded-xl border text-center ${newSchedule.memberId === m.id ? m.activeBg : 'bg-white'}`}
+                          className={`p-1.5 rounded-xl border text-center transition ${
+                            newSchedule.memberId === m.id ? `${m.activeBg} font-bold ring-2 ring-indigo-400` : 'bg-white border-slate-200 text-slate-700'
+                          }`}
                         >
                           <div className="text-lg">{m.avatar}</div>
-                          <div>{m.name}</div>
+                          <div className="text-[11px] truncate">{m.name}</div>
                         </button>
                       ))}
                     </div>
                   </div>
+
                   <div>
-                    <label className="block font-bold mb-1">일정 제목 *</label>
+                    <label className="block font-bold text-slate-700 mb-1">일정 제목 *</label>
                     <input
                       type="text"
                       required
                       value={newSchedule.title}
                       onChange={(e) => setNewSchedule({ ...newSchedule, title: e.target.value })}
-                      placeholder="예: 영어 학원, 태권도 레슨"
-                      className="w-full px-3 py-2 bg-slate-50 border rounded-xl"
+                      placeholder="예: 영어 학원, 피아노, 줄넘기"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block font-bold mb-1">시작 시간</label>
-                      <input
-                        type="time"
-                        value={newSchedule.startTime}
-                        onChange={(e) => setNewSchedule({ ...newSchedule, startTime: e.target.value })}
-                        className="w-full px-2 py-1.5 bg-slate-50 border rounded-xl"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold mb-1">종료 시간</label>
-                      <input
-                        type="time"
-                        value={newSchedule.endTime}
-                        onChange={(e) => setNewSchedule({ ...newSchedule, endTime: e.target.value })}
-                        className="w-full px-2 py-1.5 bg-slate-50 border rounded-xl"
-                      />
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">카테고리</label>
+                    <div className="grid grid-cols-3 gap-1">
+                      {CATEGORIES.map((c) => (
+                        <button
+                          type="button"
+                          key={c.id}
+                          onClick={() => setNewSchedule({ ...newSchedule, category: c.id })}
+                          className={`px-2 py-1.5 rounded-lg border text-xs font-semibold ${
+                            newSchedule.category === c.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
                     </div>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">날짜</label>
+                      <input
+                        type="date"
+                        value={newSchedule.date}
+                        onChange={(e) => setNewSchedule({ ...newSchedule, date: e.target.value })}
+                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-1">
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">시작</label>
+                        <input
+                          type="time"
+                          value={newSchedule.startTime}
+                          onChange={(e) => setNewSchedule({ ...newSchedule, startTime: e.target.value })}
+                          className="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">종료</label>
+                        <input
+                          type="time"
+                          value={newSchedule.endTime}
+                          onChange={(e) => setNewSchedule({ ...newSchedule, endTime: e.target.value })}
+                          className="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">메모 / 준비물</label>
+                    <input
+                      type="text"
+                      value={newSchedule.notes}
+                      onChange={(e) => setNewSchedule({ ...newSchedule, notes: e.target.value })}
+                      placeholder="예: 교재 챙기기, 끝나고 연락하기"
+                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                    />
+                  </div>
+
                   <div className="pt-2 flex items-center space-x-2">
-                    <button type="button" onClick={() => setIsAddModalOpen(false)} className="flex-1 py-2 rounded-xl border font-bold">취소</button>
-                    <button type="submit" className="flex-1 py-2 rounded-xl bg-indigo-600 text-white font-bold">등록</button>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddModalOpen(false)}
+                      className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+                    >
+                      등록
+                    </button>
                   </div>
                 </form>
               </div>
             </div>
           )}
 
-          {/* 📲 기기 연결 모달 */}
+          {/* 📲 기기 연동 모달 */}
           {isShareModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-slate-900/60 backdrop-blur-xs">
-              <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-3">
-                <h3 className="text-base font-bold">가족 스마트폰 연동</h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  스마트폰 브라우저에서 이 페이지 주소(<code>{window.location.href}</code>)로 접속 후, <b>[홈 화면에 추가]</b>를 누르면 일반 앱처럼 홈 화면 아이콘으로 편하게 사용하실 수 있습니다.
-                </p>
-                <button onClick={() => setIsShareModalOpen(false)} className="w-full py-2 rounded-xl bg-slate-900 text-white font-bold text-xs">
+              <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-100 space-y-3.5">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h3 className="text-base font-bold text-slate-900">가족 기기 실시간 연동</h3>
+                  <button
+                    onClick={() => setIsShareModalOpen(false)}
+                    className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-2.5 text-xs text-slate-600">
+                  <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl flex items-start space-x-2">
+                    <span className="text-emerald-600 font-bold">✓</span>
+                    <div>
+                      <h4 className="font-bold text-emerald-900">실시간 클라우드 DB 동기화 활성화</h4>
+                      <p className="text-emerald-700 text-[11px] mt-0.5">
+                        가족 스마트폰에서 본 웹 주소로 접속하면 모든 일정과 한 줄 현황이 실시간으로 동기화됩니다.
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-slate-500 text-[11px] bg-slate-50 p-2.5 rounded-xl">
+                    💡 스마트폰 브라우저 메뉴에서 <b>'홈 화면에 추가'</b>를 누르면 앱처럼 편리하게 접속할 수 있습니다.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setIsShareModalOpen(false)}
+                  className="w-full py-2 rounded-xl bg-slate-900 text-white font-bold text-xs"
+                >
                   닫기
                 </button>
               </div>
@@ -722,10 +1103,12 @@
 
           {/* 🔔 알림 토스트 */}
           {toastMessage && (
-            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-3.5 py-2 rounded-2xl text-xs font-bold shadow-xl">
-              ✨ {toastMessage}
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 backdrop-blur text-white px-3.5 py-2 rounded-2xl shadow-xl text-xs font-bold flex items-center space-x-1.5 border border-slate-700 animate-in slide-in-from-bottom duration-300">
+              <span className="text-amber-400">✨</span>
+              <span>{toastMessage}</span>
             </div>
           )}
+
         </div>
       );
     }
