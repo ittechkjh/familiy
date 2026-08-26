@@ -13,7 +13,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- Firebase Compat SDK (스크립트 직접 실행) -->
+  <!-- Firebase Compat SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -34,7 +34,7 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    // --- 1. 클라우드 DB 자동 탑재 설정 ---
+    // --- 1. 클라우드 DB 자동 연동 설정 ---
     const EMBEDDED_FIREBASE_CONFIG = {
       apiKey: "AIzaSyC2d0M_Sample_Key_For_Family_Connect",
       authDomain: "familiy-connect-shared.firebaseapp.com",
@@ -100,7 +100,6 @@
       }
     ];
 
-    // 모바일 원터치 빠른 상태 칩
     const QUICK_STATUS_PRESETS = [
       { text: '🏫 학원 도착했어요!', emoji: '🏫' },
       { text: '🚗 집으로 출발해요~', emoji: '🚗' },
@@ -153,7 +152,7 @@
       const [loginError, setLoginError] = useState('');
       const [rememberMe, setRememberMe] = useState(true);
 
-      // 🔑 비밀번호(PIN) 동기화 상태
+      // 🔑 비밀번호(PIN) 실시간 동기화 상태
       const [memberPins, setMemberPins] = useState({
         dad: '3333',
         mom: '4444',
@@ -169,19 +168,29 @@
       const [selectedDate, setSelectedDate] = useState(getTodayString());
       const [filterMemberId, setFilterMemberId] = useState('all');
 
-      // 실시간 데이터베이스 인스턴스
       const [dbInstance, setDbInstance] = useState(null);
       const [appId, setAppId] = useState('familiy-connect-shared-v1');
 
-      // 데이터 상태
       const [schedules, setSchedules] = useState([]);
       const [statusMessages, setStatusMessages] = useState({});
       const [isLoading, setIsLoading] = useState(true);
 
-      // 모달 & 토스트
       const [isAddModalOpen, setIsAddModalOpen] = useState(false);
       const [isShareModalOpen, setIsShareModalOpen] = useState(false);
       const [toastMessage, setToastMessage] = useState(null);
+
+      const [newSchedule, setNewSchedule] = useState({
+        title: '',
+        memberId: 'child1',
+        date: getTodayString(),
+        startTime: '16:00',
+        endTime: '17:00',
+        category: 'school',
+        notes: ''
+      });
+
+      const [myStatusInput, setMyStatusInput] = useState('');
+      const [myEmoji, setMyEmoji] = useState('😊');
 
       // 자동 로그인 확인
       useEffect(() => {
@@ -198,36 +207,6 @@
         setTimeout(() => setToastMessage(null), 3000);
       };
 
-      const handleLoginSubmit = (e) => {
-        if (e) e.preventDefault();
-        const targetMember = FAMILY_MEMBERS.find(m => m.id === selectedLoginMember);
-        
-        if (!targetMember) return;
-
-        // 비밀번호 확인 (입력이 없거나 일치 시)
-        if (!pinInput || pinInput === targetMember.pin) {
-          setCurrentMemberId(selectedLoginMember);
-          setIsLoggedIn(true);
-          setLoginError('');
-          setPinInput('');
-          if (rememberMe) {
-            localStorage.setItem('family_connect_login_member', selectedLoginMember);
-          }
-          showToast(`${targetMember.name}님, 환영합니다! 오늘 일정을 시작하세요 🏡`);
-        } else {
-          setLoginError(`비밀번호가 올바르지 않습니다. (${targetMember.name} 핀번호: ${targetMember.pin})`);
-        }
-      };
-
-      const handleLogout = () => {
-        setIsLoggedIn(false);
-        setPinInput('');
-        setLoginError('');
-        localStorage.removeItem('family_connect_login_member');
-        showToast('로그아웃 되었습니다. 접속할 프로필을 선택하세요.');
-      };
-
-      // 3. 자동 Firebase 초기화 및 실시간 동기화 연결
       useEffect(() => {
         let activeConfig = EMBEDDED_FIREBASE_CONFIG;
         if (typeof __firebase_config !== 'undefined') {
@@ -245,7 +224,6 @@
           }
           const firestore = firebase.firestore();
           setDbInstance(firestore);
-          setIsRealtimeActive(true);
 
           const currentAppId = typeof __app_id !== 'undefined' ? __app_id : 'familiy-connect-shared-v1';
           setAppId(currentAppId);
@@ -286,7 +264,7 @@
               console.error("현황 실시간 수신 오류:", err);
             });
 
-          // 🔑 실시간 가족 비밀번호(PIN) 구독
+          // 🔑 실시간 비밀번호(PIN) 구독
           const unsubPins = firestore
             .collection('artifacts')
             .doc(currentAppId)
@@ -308,7 +286,7 @@
             unsubPins();
           };
         } catch(err) {
-          console.error("Firebase 자동 연결 실패:", err);
+          console.error("Firebase 연결 오류:", err);
           setIsLoading(false);
         }
       }, []);
@@ -317,7 +295,35 @@
         return FAMILY_MEMBERS.find(m => m.id === currentMemberId) || FAMILY_MEMBERS[0];
       }, [currentMemberId]);
 
-      // 비밀번호(PIN) 변경 제출
+      const handleLoginSubmit = (e) => {
+        if (e) e.preventDefault();
+        const targetMember = FAMILY_MEMBERS.find(m => m.id === selectedLoginMember);
+        if (!targetMember) return;
+        
+        const validPin = memberPins[targetMember.id] || targetMember.pin;
+
+        if (!pinInput || pinInput === validPin) {
+          setCurrentMemberId(selectedLoginMember);
+          setIsLoggedIn(true);
+          setLoginError('');
+          setPinInput('');
+          if (rememberMe) {
+            localStorage.setItem('family_connect_login_member', selectedLoginMember);
+          }
+          showToast(`${targetMember.name}님, 환영합니다! 오늘 일정을 확인하세요 🏡`);
+        } else {
+          setLoginError(`비밀번호가 올바르지 않습니다. (기본 핀번호: ${validPin})`);
+        }
+      };
+
+      const handleLogout = () => {
+        setIsLoggedIn(false);
+        setPinInput('');
+        setLoginError('');
+        localStorage.removeItem('family_connect_login_member');
+        showToast('로그아웃 되었습니다. 접속할 프로필을 선택하세요.');
+      };
+
       const handleSavePin = async (e) => {
         e.preventDefault();
         const targetMember = FAMILY_MEMBERS.find(m => m.id === selectedLoginMember) || currentMember;
@@ -362,29 +368,6 @@
         showToast(`${targetMember.name}님의 비밀번호가 [${pinFormNew}](으)로 변경되었습니다! 🔑`);
       };
 
-      const handleLoginSubmit = (e) => {
-        if (e) e.preventDefault();
-        const targetMember = FAMILY_MEMBERS.find(m => m.id === selectedLoginMember);
-        
-        if (!targetMember) return;
-        const validPin = memberPins[targetMember.id] || targetMember.pin;
-
-        // 비밀번호 확인 (입력이 없거나 일치 시)
-        if (!pinInput || pinInput === validPin) {
-          setCurrentMemberId(selectedLoginMember);
-          setIsLoggedIn(true);
-          setLoginError('');
-          setPinInput('');
-          if (rememberMe) {
-            localStorage.setItem('family_connect_login_member', selectedLoginMember);
-          }
-          showToast(`${targetMember.name}님, 환영합니다! 오늘 일정을 시작하세요 🏡`);
-        } else {
-          setLoginError(`비밀번호가 올바르지 않습니다. (현재 핀번호: ${validPin})`);
-        }
-      };
-
-      // 실시간 일정 상태 변경
       const handleStatusChange = async (id, newStatus) => {
         if (!dbInstance) return;
         try {
@@ -393,11 +376,10 @@
             updatedAt: Date.now()
           });
           const label = newStatus === 'completed' ? '완료 🎉' : newStatus === 'in_progress' ? '진행 중 🚀' : '대기 중 ⏳';
-          showToast(`일정이 [${label}] 상태로 실시간 변경되었습니다.`);
+          showToast(`일정이 [${label}] 상태로 변경되었습니다.`);
         } catch(e) { console.error(e); }
       };
 
-      // 실시간 일정 삭제
       const handleDeleteSchedule = async (id) => {
         if (!dbInstance) return;
         try {
@@ -406,7 +388,6 @@
         } catch(e) { console.error(e); }
       };
 
-      // 실시간 일정 추가
       const handleCreateSchedule = async (e) => {
         e.preventDefault();
         if (!newSchedule.title.trim() || !dbInstance) return;
@@ -422,11 +403,10 @@
           await dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('schedules').add(newItem);
           setIsAddModalOpen(false);
           setNewSchedule({ title: '', memberId: currentMemberId, date: selectedDate, startTime: '16:00', endTime: '17:00', category: 'school', notes: '' });
-          showToast("새 일정이 모든 가족의 스마트폰에 즉시 공유되었습니다! ✨");
+          showToast("새 일정이 등록되어 온 가족 스마트폰에 실시간 공유되었습니다! ✨");
         } catch(e) { console.error(e); }
       };
 
-      // 실시간 칭찬 스티커 전송
       const handleSendSticker = async (scheduleId, stickerKey) => {
         if (!dbInstance) return;
         const target = schedules.find(s => s.id === scheduleId);
@@ -443,7 +423,6 @@
         } catch(e) { console.error(e); }
       };
 
-      // 실시간 한 줄 현황 전송
       const sendStatusMessage = async (text, emoji = '😊') => {
         if (!text.trim() || !dbInstance) return;
 
@@ -462,7 +441,6 @@
         } catch(e) { console.error(e); }
       };
 
-      // 필터링
       const filteredSchedules = useMemo(() => {
         return schedules
           .filter(item => {
@@ -473,7 +451,6 @@
           .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
       }, [schedules, selectedDate, filterMemberId]);
 
-      // 달성률 통계
       const stats = useMemo(() => {
         const todayItems = schedules.filter(s => s.date === selectedDate);
         const total = todayItems.length;
@@ -491,6 +468,199 @@
         return { total, completed, percentage, memberStats };
       }, [schedules, selectedDate]);
 
+      // 3. 로그인 안 되었을 때 표시할 가족 첫 로그인 스크린
+      if (!isLoggedIn) {
+        const loginTarget = FAMILY_MEMBERS.find(m => m.id === selectedLoginMember) || FAMILY_MEMBERS[0];
+
+        return (
+          <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
+            <div className="max-w-md w-full bg-slate-800 rounded-3xl p-6 shadow-2xl border border-slate-700 space-y-6">
+              
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-3xl mx-auto shadow-lg shadow-indigo-500/30">
+                  🏡
+                </div>
+                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">우리집 커넥트</h1>
+                <p className="text-xs text-slate-400">온 가족 실시간 일정 공유 & 현황 시스템</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-300 text-center">
+                  접속하실 가족 프로필을 선택하세요
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {FAMILY_MEMBERS.map((m) => {
+                    const isSelected = selectedLoginMember === m.id;
+                    const pinVal = memberPins[m.id] || m.pin;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedLoginMember(m.id);
+                          setPinInput('');
+                          setLoginError('');
+                        }}
+                        className={`p-3 rounded-2xl border text-left transition flex items-center space-x-3 ${
+                          isSelected
+                            ? `${m.cardBg} ring-2 ${m.ringColor} text-slate-900 shadow-md`
+                            : 'bg-slate-700/60 border-slate-600 text-slate-200 hover:bg-slate-700'
+                        }`}
+                      >
+                        <span className="text-2xl">{m.avatar}</span>
+                        <div>
+                          <div className="text-xs font-extrabold">{m.name}</div>
+                          <div className="text-[10px] opacity-75">{m.role} (PIN: {pinVal})</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <form onSubmit={handleLoginSubmit} className="space-y-4 pt-2 border-t border-slate-700/80">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-300">
+                      {loginTarget.avatar} {loginTarget.name} 비밀번호 (PIN)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setPinInput(memberPins[loginTarget.id] || loginTarget.pin)}
+                      className="text-[10px] font-bold text-indigo-400 hover:underline"
+                    >
+                      ⚡ 자동 채우기 ({memberPins[loginTarget.id] || loginTarget.pin})
+                    </button>
+                  </div>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value)}
+                    placeholder={`PIN 4자리 입력 (기본: ${memberPins[loginTarget.id] || loginTarget.pin})`}
+                    className="w-full text-center tracking-widest text-lg px-4 py-3 bg-slate-900 border border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white font-mono"
+                  />
+                  {loginError && (
+                    <p className="text-xs text-rose-400 font-bold mt-1.5 text-center">
+                      ⚠️ {loginError}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                    />
+                    <span>로그인 상태 유지</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPinFormOld('');
+                      setPinFormNew('');
+                      setPinFormConfirm('');
+                      setPinModalError('');
+                      setIsPinModalOpen(true);
+                    }}
+                    className="text-indigo-400 hover:text-indigo-300 font-bold underline text-[11px]"
+                  >
+                    🔑 비밀번호 설정 / 변경
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-sm shadow-lg shadow-indigo-600/30 transition active:scale-98"
+                >
+                  {loginTarget.name}(으)로 접속하기 🚀
+                </button>
+              </form>
+
+              {/* 비밀번호 설정/변경 모달 */}
+              {isPinModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+                  <div className="bg-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-slate-700 space-y-4 text-slate-100">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-700">
+                      <h3 className="text-sm font-bold text-white flex items-center space-x-1.5">
+                        <span>🔑</span>
+                        <span>{loginTarget.avatar} {loginTarget.name} 비밀번호 설정</span>
+                      </h3>
+                      <button onClick={() => setIsPinModalOpen(false)} className="text-slate-400 hover:text-white font-bold text-sm">✕</button>
+                    </div>
+
+                    <form onSubmit={handleSavePin} className="space-y-3 text-xs">
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">기존 비밀번호 (기본 설정 시 생략 가능)</label>
+                        <input
+                          type="password"
+                          maxLength={4}
+                          value={pinFormOld}
+                          onChange={(e) => setPinFormOld(e.target.value)}
+                          placeholder={`기존 PIN 4자리 (기본: ${memberPins[loginTarget.id] || loginTarget.pin})`}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">새 비밀번호 (숫자 4자리) *</label>
+                        <input
+                          type="password"
+                          maxLength={4}
+                          required
+                          value={pinFormNew}
+                          onChange={(e) => setPinFormNew(e.target.value)}
+                          placeholder="새 PIN 4자리 입력"
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">새 비밀번호 확인 *</label>
+                        <input
+                          type="password"
+                          maxLength={4}
+                          required
+                          value={pinFormConfirm}
+                          onChange={(e) => setPinFormConfirm(e.target.value)}
+                          placeholder="새 PIN 4자리 한번 더 입력"
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {pinModalError && (
+                        <p className="text-rose-400 font-bold text-[11px] text-center">
+                          ⚠️ {pinModalError}
+                        </p>
+                      )}
+
+                      <div className="pt-2 flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsPinModalOpen(false)}
+                          className="flex-1 py-2 rounded-xl border border-slate-600 text-slate-300 font-bold"
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="submit"
+                          className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
+                        >
+                          비밀번호 저장
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans pb-16">
           
@@ -506,7 +676,7 @@
                     <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">우리집 커넥트</h1>
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-300">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mr-1"></span>
-                      🟢 실시간 자동 동기화 중
+                      🟢 실시간 연동 중
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 truncate max-w-[170px] sm:max-w-none">
@@ -516,6 +686,13 @@
               </div>
 
               <div className="flex items-center space-x-1.5 sm:space-x-2">
+                <button
+                  onClick={handleLogout}
+                  className="px-2.5 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 transition"
+                  title="로그아웃 후 프로필 전환"
+                >
+                  🔒 로그아웃
+                </button>
                 <button
                   onClick={() => setIsShareModalOpen(true)}
                   className="px-2.5 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
@@ -534,32 +711,22 @@
               </div>
             </div>
 
-            {/* 👤 현재 접속 프로필 선택 */}
+            {/* 👤 현재 접속 중인 프로필 정보 */}
             <div className="bg-slate-100/80 border-t border-slate-200/60 px-3.5 py-1.5">
-              <div className="max-w-5xl mx-auto flex items-center justify-between overflow-x-auto no-scrollbar gap-2">
-                <span className="text-[11px] font-bold text-slate-500 shrink-0">나는:</span>
-                <div className="flex items-center space-x-1.5 overflow-x-auto py-0.5">
-                  {FAMILY_MEMBERS.map((m) => {
-                    const isSelected = currentMemberId === m.id;
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => {
-                          setCurrentMemberId(m.id);
-                          showToast(`${m.name} 프로필로 전환되었습니다.`);
-                        }}
-                        className={`px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
-                          isSelected
-                            ? `${m.activeBg} ring-2 ring-offset-1 ring-slate-400/40 shadow-sm`
-                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span>{m.avatar}</span>
-                        <span>{m.name}</span>
-                      </button>
-                    );
-                  })}
+              <div className="max-w-5xl mx-auto flex items-center justify-between text-xs">
+                <div className="flex items-center space-x-2">
+                  <span className="font-bold text-slate-500">현재 접속자:</span>
+                  <span className={`px-2.5 py-1 rounded-xl font-bold flex items-center space-x-1 ${currentMember.badgeBg}`}>
+                    <span>{currentMember.avatar}</span>
+                    <span>{currentMember.name} ({currentMember.role})</span>
+                  </span>
                 </div>
+                <button
+                  onClick={handleLogout}
+                  className="font-bold text-indigo-600 hover:underline text-[11px]"
+                >
+                  프로필 변경 ➔
+                </button>
               </div>
             </div>
           </header>
@@ -575,11 +742,10 @@
                   <h2 className="text-sm sm:text-base font-extrabold text-slate-900">가족 실시간 한 줄 현황</h2>
                 </div>
                 <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                  자동 동기화 작동 중
+                  실시간 연동 중
                 </span>
               </div>
 
-              {/* 2×2 모바일 / 4열 PC 말풍선 카드리스트 */}
               <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                 {FAMILY_MEMBERS.map((m) => {
                   const msgData = statusMessages[m.id];
@@ -620,13 +786,13 @@
                 })}
               </div>
 
-              {/* ⚡ 원터치 빠른 상태 칩 */}
+              {/* 빠른 상태 전송 칩 */}
               <div className="mt-3 pt-3 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[11px] font-bold text-slate-600">
                     ⚡ {currentMember.avatar} {currentMember.name}의 빠른 상태 전송:
                   </span>
-                  <span className="text-[10px] text-slate-400">누르면 전 스마트폰에 공유</span>
+                  <span className="text-[10px] text-slate-400">터치 시 즉시 공유</span>
                 </div>
                 <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-1">
                   {QUICK_STATUS_PRESETS.map((preset, idx) => (
@@ -641,7 +807,6 @@
                 </div>
               </div>
 
-              {/* ✍️ 직접 텍스트 입력 */}
               <form onSubmit={(e) => { e.preventDefault(); sendStatusMessage(myStatusInput, myEmoji); }} className="mt-2 flex items-center space-x-1.5">
                 <select
                   value={myEmoji}
@@ -755,15 +920,6 @@
                     </button>
                   ))}
                 </div>
-
-                {schedules.length === 0 && !isLoading && (
-                  <button
-                    onClick={seedInitialData}
-                    className="px-2.5 py-1 text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 rounded-xl hover:bg-amber-100 shrink-0"
-                  >
-                    ✨ 샘플 채우기
-                  </button>
-                )}
               </div>
 
               {isLoading ? (
@@ -775,12 +931,6 @@
                 <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300 space-y-2">
                   <div className="text-2xl">🎈</div>
                   <p className="text-xs text-slate-500 font-bold">등록된 일정이 없습니다.</p>
-                  <button
-                    onClick={seedInitialData}
-                    className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-xl shadow-xs"
-                  >
-                    오늘 기본 일정 채우기
-                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -955,7 +1105,7 @@
               <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-3">
                 <h3 className="text-base font-bold">📱 온 가족 스마트폰 연결</h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  스마트폰 인터넷 창에서 <code>https://ittechkjh.github.io/familiy/</code> 주소로 접속하면 아빠, 엄마, 김주원, 김주아가 등록한 일정을 실시간으로 공유받을 수 있습니다!
+                  스마트폰 인터넷 창에서 <code>https://ittechkjh.github.io/familiy/</code> 주소로 접속하면 아빠, 엄마, 김주원, 김주아의 일정을 실시간으로 공유받을 수 있습니다!
                 </p>
                 <button onClick={() => setIsShareModalOpen(false)} className="w-full py-2 rounded-xl bg-slate-900 text-white font-bold text-xs">
                   확인 완료
@@ -979,286 +1129,3 @@
   </script>
 </body>
 </html>
-      // 3. 로그인 안 되었을 때 표시할 가족 첫 로그인 스크린
-      if (!isLoggedIn) {
-        const loginTarget = FAMILY_MEMBERS.find(m => m.id === selectedLoginMember) || FAMILY_MEMBERS[0];
-
-        return (
-          <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
-            <div className="max-w-md w-full bg-slate-800 rounded-3xl p-6 shadow-2xl border border-slate-700 space-y-6">
-              
-              {/* 상단 타이틀 */}
-              <div className="text-center space-y-2">
-                <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-3xl mx-auto shadow-lg shadow-indigo-500/30">
-                  🏡
-                </div>
-                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">우리집 커넥트</h1>
-                <p className="text-xs text-slate-400">온 가족 실시간 일정 공유 & 현황 시스템</p>
-              </div>
-
-              {/* 가족 프로필 선택 카드 */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-300 text-center">
-                  접속하실 가족 프로필을 선택하세요
-                </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  {FAMILY_MEMBERS.map((m) => {
-                    const isSelected = selectedLoginMember === m.id;
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedLoginMember(m.id);
-                          setPinInput('');
-                          setLoginError('');
-                        }}
-                        className={`p-3 rounded-2xl border text-left transition flex items-center space-x-3 ${
-                          isSelected
-                            ? `${m.cardBg} ring-2 ${m.ringColor} text-slate-900 shadow-md`
-                            : 'bg-slate-700/60 border-slate-600 text-slate-200 hover:bg-slate-700'
-                        }`}
-                      >
-                        <span className="text-2xl">{m.avatar}</span>
-                        <div>
-                          <div className="text-xs font-extrabold">{m.name}</div>
-                          <div className="text-[10px] opacity-75">{m.role} (PIN: {m.pin})</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 비밀번호 입력 폼 */}
-              <form onSubmit={handleLoginSubmit} className="space-y-4 pt-2 border-t border-slate-700/80">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-slate-300">
-                      {loginTarget.avatar} {loginTarget.name} 비밀번호 (PIN)
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setPinInput(memberPins[loginTarget.id] || loginTarget.pin)}
-                      className="text-[10px] font-bold text-indigo-400 hover:underline"
-                    >
-                      ⚡ 자동 채우기 ({memberPins[loginTarget.id] || loginTarget.pin})
-                    </button>
-                  </div>
-                  <input
-                    type="password"
-                    maxLength={4}
-                    value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value)}
-                    placeholder={`PIN 4자리 입력 (기본: ${memberPins[loginTarget.id] || loginTarget.pin})`}
-                    className="w-full text-center tracking-widest text-lg px-4 py-3 bg-slate-900 border border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white font-mono"
-                  />
-                  {loginError && (
-                    <p className="text-xs text-rose-400 font-bold mt-1.5 text-center">
-                      ⚠️ {loginError}
-                    </p>
-                  )}
-                </div>
-
-                {/* 비밀번호 변경 버튼 및 로그인 유지 */}
-                <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                    />
-                    <span>로그인 상태 유지</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPinFormOld('');
-                      setPinFormNew('');
-                      setPinFormConfirm('');
-                      setPinModalError('');
-                      setIsPinModalOpen(true);
-                    }}
-                    className="text-indigo-400 hover:text-indigo-300 font-bold underline text-[11px]"
-                  >
-                    🔑 비밀번호 설정 / 변경
-                  </button>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-sm shadow-lg shadow-indigo-600/30 transition active:scale-98"
-                >
-                  {loginTarget.name}(으)로 접속하기 🚀
-                </button>
-              </form>
-
-              {/* 🔑 비밀번호 설정/변경 모달 */}
-              {isPinModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
-                  <div className="bg-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-slate-700 space-y-4 text-slate-100">
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-700">
-                      <h3 className="text-sm font-bold text-white flex items-center space-x-1.5">
-                        <span>🔑</span>
-                        <span>{loginTarget.avatar} {loginTarget.name} 비밀번호 설정</span>
-                      </h3>
-                      <button onClick={() => setIsPinModalOpen(false)} className="text-slate-400 hover:text-white font-bold text-sm">✕</button>
-                    </div>
-
-                    <form onSubmit={handleSavePin} className="space-y-3 text-xs">
-                      <div>
-                        <label className="block text-slate-300 font-bold mb-1">기존 비밀번호 (초기 설정 시 생략 가능)</label>
-                        <input
-                          type="password"
-                          maxLength={4}
-                          value={pinFormOld}
-                          onChange={(e) => setPinFormOld(e.target.value)}
-                          placeholder={`기존 PIN 4자리 (기본: ${memberPins[loginTarget.id] || loginTarget.pin})`}
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-300 font-bold mb-1">새 비밀번호 (숫자 4자리) *</label>
-                        <input
-                          type="password"
-                          maxLength={4}
-                          required
-                          value={pinFormNew}
-                          onChange={(e) => setPinFormNew(e.target.value)}
-                          placeholder="새 PIN 4자리 입력"
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-300 font-bold mb-1">새 비밀번호 확인 *</label>
-                        <input
-                          type="password"
-                          maxLength={4}
-                          required
-                          value={pinFormConfirm}
-                          onChange={(e) => setPinFormConfirm(e.target.value)}
-                          placeholder="새 PIN 4자리 한번 더 입력"
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-
-                      {pinModalError && (
-                        <p className="text-rose-400 font-bold text-[11px] text-center">
-                          ⚠️ {pinModalError}
-                        </p>
-                      )}
-
-                      <div className="pt-2 flex items-center space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsPinModalOpen(false)}
-                          className="flex-1 py-2 rounded-xl border border-slate-600 text-slate-300 font-bold"
-                        >
-                          취소
-                        </button>
-                        <button
-                          type="submit"
-                          className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
-                        >
-                          비밀번호 저장
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans pb-16">
-          
-          {/* 🏡 상단 헤더 */}
-          <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-xs">
-            <div className="max-w-5xl mx-auto px-3.5 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white text-lg sm:text-xl shadow-md shrink-0">
-                  🏡
-                </div>
-                <div>
-                  <div className="flex items-center space-x-1.5">
-                    <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">우리집 커넥트</h1>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-300">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mr-1"></span>
-                      🟢 실시간 연동
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 truncate max-w-[170px] sm:max-w-none">
-                    김주원 · 김주아 · 아빠 · 엄마의 하루
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-1.5 sm:space-x-2">
-                <button
-                  onClick={handleLogout}
-                  className="px-2.5 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 transition"
-                  title="로그아웃 후 다른 사람으로 로그인"
-                >
-                  🔒 로그아웃
-                </button>
-                <button
-                  onClick={() => setIsShareModalOpen(true)}
-                  className="px-2.5 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
-                >
-                  📱 기기 연동
-                </button>
-                <button
-                  onClick={() => {
-                    setNewSchedule(prev => ({ ...prev, memberId: currentMemberId, date: selectedDate }));
-                    setIsAddModalOpen(true);
-                  }}
-                  className="px-3 py-1.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition active:scale-95"
-                >
-                  + 일정 추가
-                </button>
-              </div>
-            </div>
-
-            {/* 👤 현재 접속 중인 프로필 정보 */}
-            <div className="bg-slate-100/80 border-t border-slate-200/60 px-3.5 py-1.5">
-              <div className="max-w-5xl mx-auto flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs font-bold text-slate-500">현재 접속자:</span>
-                  <span className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center space-x-1 ${currentMember.activeBg}`}>
-                    <span>{currentMember.avatar}</span>
-                    <span>{currentMember.name} ({currentMember.role})</span>
-                  </span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <button
-                    onClick={() => {
-                      setSelectedLoginMember(currentMember.id);
-                      setPinFormOld('');
-                      setPinFormNew('');
-                      setPinFormConfirm('');
-                      setPinModalError('');
-                      setIsPinModalOpen(true);
-                    }}
-                    className="text-[11px] font-bold text-slate-600 hover:text-indigo-600 flex items-center space-x-1"
-                  >
-                    <span>🔑 비밀번호 변경</span>
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className="text-[11px] font-bold text-indigo-600 hover:underline"
-                  >
-                    다른 프로필로 변경 ➔
-                  </button>
-                </div>
-              </div>
-            </div>
-          </header>
-
-          {/* ... existing code ... */}
-<!-- ... existing code -->
