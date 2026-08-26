@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>우리집 커넥트 - 온 가족 실시간 공유</title>
 
+  <!-- PWA & 스마트폰 앱 메타 태그 (홈 화면 추가 시 웹앱 전환) -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="우리집 커넥트" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="apple-touch-icon" href="https://placehold.co/192x192/4f46e5/ffffff?text=🏡" />
+  <link rel="manifest" href='data:application/manifest+json,{"name":"우리집 커넥트","short_name":"우리집","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#4f46e5","icons":[{"src":"https://placehold.co/192x192/4f46e5/ffffff?text=🏡","sizes":"192x192","type":"image/png"}]}' />
+
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
 
@@ -138,7 +147,7 @@
                 🏡
               </div>
               <h1 className="text-2xl font-black tracking-tight text-white">우리집 커넥트</h1>
-              <p className="text-xs text-slate-400">주원·주아 맞춤 할 일 & 실시간 공유</p>
+              <p className="text-xs text-slate-400">주원·주아 맞춤 할 일 & 실시간 공유 웹앱</p>
             </div>
 
             <div>
@@ -157,10 +166,10 @@
                           : 'bg-slate-700/60 border-slate-600 text-slate-200 hover:bg-slate-700'
                       }`}
                     >
-                      <span className="text-2xl">{m.avatar}</span>
-                      <div>
-                        <div className="text-sm font-extrabold">{m.name}</div>
-                        <div className="text-[11px] opacity-75">{m.role}</div>
+                      <span className="text-2xl shrink-0">{m.avatar}</span>
+                      <div className="min-w-0">
+                        <div className="font-extrabold text-sm truncate">{m.name}</div>
+                        <div className="text-[10px] opacity-75">{m.role}</div>
                       </div>
                     </button>
                   );
@@ -170,53 +179,45 @@
 
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-300">
-                    {loginTarget.avatar} {loginTarget.name} 비밀번호 (PIN)
-                  </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-400">{loginTarget.name} 비밀번호 (PIN)</label>
                   <button
                     type="button"
-                    onClick={() => setPinInput(memberPins[loginTarget.id] || loginTarget.defaultPin)}
-                    className="text-[11px] font-bold text-indigo-400 hover:underline"
+                    onClick={() => setIsPinModalOpen(true)}
+                    className="text-[11px] text-indigo-400 hover:underline font-bold"
                   >
-                    ⚡ 비밀번호 채우기
+                    🔑 비밀번호 변경
                   </button>
                 </div>
                 <input
                   type="password"
                   maxLength={4}
+                  required
                   value={pinInput}
                   onChange={(e) => setPinInput(e.target.value)}
-                  placeholder={`PIN 4자리 입력 (기본: ${memberPins[loginTarget.id] || loginTarget.defaultPin})`}
-                  className="w-full text-center tracking-widest text-lg px-4 py-3 bg-slate-900 border border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white font-mono"
+                  placeholder="숫자 4자리 입력"
+                  className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-2xl text-center text-lg tracking-widest text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                {loginError && <p className="text-xs text-rose-400 font-bold mt-1 text-center">⚠️ {loginError}</p>}
+                {loginError && <p className="text-xs text-rose-400 font-bold mt-1 text-center">{loginError}</p>}
               </div>
 
               <div className="flex items-center justify-between text-xs text-slate-400">
-                <label className="flex items-center space-x-1.5 cursor-pointer">
+                <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded text-indigo-500 bg-slate-900 border-slate-700"
                   />
-                  <span>로그인 상태 유지</span>
+                  <span>이 기기에서 자동 기억</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setIsPinModalOpen(true)}
-                  className="text-indigo-400 hover:text-indigo-300 font-bold underline text-[11px]"
-                >
-                  🔑 비밀번호 설정/변경
-                </button>
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition active:scale-95"
+                className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-sm shadow-lg shadow-indigo-600/30 transition active:scale-98"
               >
-                {loginTarget.name}(으)로 접속하기 🚀
+                {loginTarget.name} 프로필로 접속하기 ➔
               </button>
             </form>
           </div>
@@ -224,7 +225,11 @@
       );
     }
 
-    function StatusBoard({ currentMember, currentMemberId, statusMessages, sendStatusMessage, myEmoji, setMyEmoji, myStatusInput, setMyStatusInput }) {
+    function StatusBoard({ currentMember, currentMemberId, statusMessages, sendStatusMessage, myEmoji, setMyEmoji, myStatusInput, setMyStatusInput, statusPresets, handleAddStatusPreset, handleDeleteStatusPreset }) {
+      const [isManageOpen, setIsManageOpen] = useState(false);
+      const [newPresetText, setNewPresetText] = useState('');
+      const [newPresetEmoji, setNewPresetEmoji] = useState('🏫');
+
       return (
         <section className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200 shadow-sm space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
@@ -276,18 +281,82 @@
             })}
           </div>
 
-          {/* 원터치 프리셋 버튼 */}
+          {/* 원터치 프리셋 버튼 및 관리 */}
           <div className="mt-3 pt-3 border-t border-slate-100">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] font-bold text-slate-600 flex items-center">
                 ⚡ {currentMember.avatar} {currentMember.name}의 빠른 상태 전송:
               </span>
-              <span className="text-[10px] text-slate-400">터치 시 즉시 공유</span>
+              <button
+                type="button"
+                onClick={() => setIsManageOpen(!isManageOpen)}
+                className="text-[11px] font-bold text-indigo-600 hover:underline"
+              >
+                {isManageOpen ? '닫기 ▲' : '⚙️ 빠른 문구 관리/추가 ▶'}
+              </button>
             </div>
+
+            {/* 빠른 상태 문구 추가/삭제 UI */}
+            {isManageOpen && (
+              <div className="mb-2 p-2.5 bg-indigo-50/80 rounded-xl border border-indigo-200 space-y-2">
+                <div className="flex items-center space-x-1.5">
+                  <select
+                    value={newPresetEmoji}
+                    onChange={(e) => setNewPresetEmoji(e.target.value)}
+                    className="text-xs bg-white border border-slate-200 rounded-lg p-1.5 font-bold shrink-0"
+                  >
+                    <option value="🏫">🏫 학원</option>
+                    <option value="🚗">🚗 이동</option>
+                    <option value="🚀">🚀 열공</option>
+                    <option value="🏠">🏠 집</option>
+                    <option value="🍱">🍱 식사</option>
+                    <option value="😴">😴 휴식</option>
+                    <option value="⚽">⚽ 운동</option>
+                    <option value="🎨">🎨 취미</option>
+                    <option value="🛒">🛒 마트</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={newPresetText}
+                    onChange={(e) => setNewPresetText(e.target.value)}
+                    placeholder="새 문구 추가 (예: ⚽ 축구 교실 가고 있어요!)"
+                    className="flex-1 px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newPresetText.trim()) {
+                        handleAddStatusPreset(newPresetText.trim(), newPresetEmoji);
+                        setNewPresetText('');
+                      }
+                    }}
+                    className="px-3 py-1 bg-indigo-600 text-white font-bold text-xs rounded-lg shrink-0"
+                  >
+                    + 추가
+                  </button>
+                </div>
+                <div className="max-h-28 overflow-y-auto space-y-1 no-scrollbar">
+                  {statusPresets.map((preset) => (
+                    <div key={preset.id || preset.text} className="flex items-center justify-between text-[11px] bg-white p-1.5 rounded-lg border border-slate-200">
+                      <span className="font-bold text-slate-800">{preset.emoji} {preset.text}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteStatusPreset(preset)}
+                        className="text-rose-500 font-bold px-1.5 py-0.5 hover:bg-rose-50 rounded"
+                        title="삭제"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-1">
-              {QUICK_STATUS_PRESETS.map((preset, idx) => (
+              {statusPresets.map((preset, idx) => (
                 <button
-                  key={idx}
+                  key={preset.id || idx}
                   type="button"
                   onClick={() => sendStatusMessage(preset.text, preset.emoji)}
                   className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 text-xs font-bold text-slate-700 transition active:scale-95 shrink-0 flex items-center space-x-1"
@@ -984,6 +1053,11 @@
       const [myStatusInput, setMyStatusInput] = useState('');
       const [myEmoji, setMyEmoji] = useState('😊');
 
+      const [statusPresets, setStatusPresets] = useState(() => {
+        const saved = localStorage.getItem('family_status_presets');
+        return saved ? JSON.parse(saved) : QUICK_STATUS_PRESETS.map((p, idx) => ({ id: `default_sp_${idx}`, ...p }));
+      });
+
       const [isAddModalOpen, setIsAddModalOpen] = useState(false);
       const [isAddTodoModalOpen, setIsAddTodoModalOpen] = useState(false);
       const [editingTodo, setEditingTodo] = useState(null);
@@ -1028,6 +1102,10 @@
       }, [todoPresets]);
 
       useEffect(() => {
+        localStorage.setItem('family_status_presets', JSON.stringify(statusPresets));
+      }, [statusPresets]);
+
+      useEffect(() => {
         const initFirebase = async () => {
           try {
             if (!firebase.apps.length) {
@@ -1061,6 +1139,16 @@
               }
             });
 
+            db.collection('status_presets').onSnapshot((snapshot) => {
+              const list = [];
+              snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+              if (list.length > 0) {
+                setStatusPresets(list);
+              } else {
+                setStatusPresets(QUICK_STATUS_PRESETS.map((p, idx) => ({ id: `default_sp_${idx}`, ...p })));
+              }
+            });
+
             db.collection('todo_presets').onSnapshot((snapshot) => {
               const list = [];
               snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
@@ -1087,7 +1175,7 @@
               const msgs = {};
               snapshot.forEach((doc) => { msgs[doc.id] = doc.data(); });
               setStatusMessages(msgs);
-            });
+            }, (err) => console.warn("status messages snapshot error:", err));
 
             db.collection('family_pins').onSnapshot((snapshot) => {
               const pins = {};
@@ -1110,6 +1198,29 @@
           setIsLoggedIn(true);
         }
       }, []);
+
+      const handleAddStatusPreset = async (text, emoji) => {
+        if (!text.trim()) return;
+        const newObj = { text: text.trim(), emoji: emoji || '💬', createdAt: Date.now() };
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('status_presets').add(newObj);
+          } else {
+            setStatusPresets(prev => [...prev, { id: 'sp_' + Date.now(), ...newObj }]);
+          }
+          showToast("새 빠른 상태 문구가 추가되었습니다! ✨");
+        } catch (err) { console.error(err); }
+      };
+
+      const handleDeleteStatusPreset = async (presetItem) => {
+        try {
+          if (dbRef.current && presetItem.id && !presetItem.id.startsWith('default_sp_')) {
+            await dbRef.current.collection('status_presets').doc(presetItem.id).delete();
+          }
+          setStatusPresets(prev => prev.filter(p => (p.id ? p.id !== presetItem.id : p.text !== presetItem.text)));
+          showToast("빠른 상태 문구가 삭제되었습니다. 🗑️");
+        } catch (err) { console.error(err); }
+      };
 
       const currentMember = useMemo(() => {
         return FAMILY_MEMBERS.find(m => m.id === currentMemberId) || FAMILY_MEMBERS[0];
@@ -1373,13 +1484,34 @@
       };
 
       const sendStatusMessage = async (text, emoji = '😊') => {
-        if (!text.trim()) return;
+        if (!text || !text.trim()) {
+          showToast("⚠️ 공유할 한 줄 현황을 입력해주세요!");
+          return;
+        }
+
+        const cleanText = text.replace(/^[^\w가-힣a-zA-Z0-9~!?.\s]+/, '').trim() || text.trim();
+        const msgObj = { 
+          memberId: currentMember.id, 
+          memberName: currentMember.name, 
+          text: cleanText, 
+          emoji: emoji || '💬', 
+          updatedAt: Date.now() 
+        };
+
+        // 1. 화면 즉시 반영 (오프라인 / 로컬 브라우저 / 네트워크 지연 시에도 즉시 UI 반영)
+        setStatusMessages(prev => ({ ...prev, [currentMember.id]: msgObj }));
+        setMyStatusInput('');
+
+        // 2. Firebase 클라우드 실시간 동기화
         try {
-          const msgObj = { memberId: currentMember.id, memberName: currentMember.name, text: text.trim(), emoji, updatedAt: Date.now() };
-          if (dbRef.current) await dbRef.collection('status_messages').doc(currentMember.id).set(msgObj);
-          setMyStatusInput('');
-          showToast(`${currentMember.name}님의 현황이 공유되었습니다! 📢`);
-        } catch (err) { console.error(err); }
+          if (dbRef.current) {
+            await dbRef.current.collection('status_messages').doc(currentMember.id).set(msgObj);
+          }
+          showToast(`${currentMember.name}님의 현황이 실시간 공유되었습니다! 📢`);
+        } catch (err) {
+          console.error("Status update error:", err);
+          showToast(`${currentMember.name}님의 현황이 반영되었습니다! 📢`);
+        }
       };
 
       // 계산된 데이터
@@ -1550,6 +1682,7 @@
                 currentMember={currentMember} currentMemberId={currentMemberId}
                 statusMessages={statusMessages} sendStatusMessage={sendStatusMessage}
                 myEmoji={myEmoji} setMyEmoji={setMyEmoji} myStatusInput={myStatusInput} setMyStatusInput={setMyStatusInput}
+                statusPresets={statusPresets} handleAddStatusPreset={handleAddStatusPreset} handleDeleteStatusPreset={handleDeleteStatusPreset}
               />
             )}
 
