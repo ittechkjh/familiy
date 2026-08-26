@@ -144,7 +144,8 @@
       return new Date(timestamp).toLocaleDateString([], { month: 'numeric', day: 'numeric' });
     };
 
-    //    function App() {
+    function App() {
+      // 🔒 로그인 관련 상태
       const [currentMemberId, setCurrentMemberId] = useState('child1');
       const [isLoggedIn, setIsLoggedIn] = useState(false);
       const [selectedLoginMember, setSelectedLoginMember] = useState('child1');
@@ -221,7 +222,7 @@
         setTimeout(() => setToastMessage(null), 3000);
       };
 
-      //      // 🔑 Firebase 인증 후 실시간 Firestore 구독 (원칙 준수: Auth 완료 후 Query)
+      // 🔑 Firebase 인증 후 실시간 Firestore 구독
       useEffect(() => {
         let activeConfig = DEFAULT_FIREBASE_CONFIG;
         if (typeof __firebase_config !== 'undefined') {
@@ -243,7 +244,7 @@
           const currentAppId = typeof __app_id !== 'undefined' ? __app_id : 'familiy-connect-shared-v1';
           setAppId(currentAppId);
 
-          // 1. 익명 로그인 실행 후 snapshot 구독
+          // 익명 로그인 실행 후 snapshot 구독
           const initAuthAndSubscribe = async () => {
             try {
               if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -254,7 +255,7 @@
               setSyncStatus('실시간 동기화 완료');
               setIsConnected(true);
 
-              // 2. 실시간 일정 구독
+              // 1. 실시간 일정 구독
               const unsubSchedules = firestore
                 .collection('artifacts')
                 .doc(currentAppId)
@@ -275,7 +276,7 @@
                   setIsLoading(false);
                 });
 
-              // 3. 실시간 현황 구독
+              // 2. 실시간 현황 구독
               const unsubStatus = firestore
                 .collection('artifacts')
                 .doc(currentAppId)
@@ -292,7 +293,7 @@
                   console.error("현황 실시간 수신 오류:", err);
                 });
 
-              // 4. 실시간 PIN 비밀번호 구독
+              // 3. 실시간 PIN 비밀번호 구독
               const unsubPins = firestore
                 .collection('artifacts')
                 .doc(currentAppId)
@@ -332,7 +333,7 @@
         return FAMILY_MEMBERS.find(m => m.id === currentMemberId) || FAMILY_MEMBERS[0];
       }, [currentMemberId]);
 
-      //      const handleLoginSubmit = (e) => {
+      const handleLoginSubmit = (e) => {
         if (e) e.preventDefault();
         const targetMember = FAMILY_MEMBERS.find(m => m.id === selectedLoginMember);
         if (!targetMember) return;
@@ -405,7 +406,7 @@
         showToast(`${targetMember.name}님의 비밀번호가 [${pinFormNew}](으)로 변경되었습니다! 🔑`);
       };
 
-      //      // 일정 생성 1단계: 확인 모달 열기 (중복 방지)
+      // 일정 생성 1단계: 확인 모달 열기 (중복 방지)
       const handleOpenConfirmModal = (e) => {
         e.preventDefault();
         if (!newSchedule.title.trim()) {
@@ -524,20 +525,18 @@
         showToast(`${currentMember.name}님의 실시간 현황이 공유되었습니다! 📢`);
       };
 
-      //      // 월간 달력 날짜 계산
+      // 월간 달력 날짜 계산
       const monthCalendarDays = useMemo(() => {
         const { year, month } = calendarMonth;
         const firstDay = new Date(year, month - 1, 1);
         const lastDay = new Date(year, month, 0);
-        const firstDayWeekday = firstDay.getDay(); // 0: 일요일
+        const firstDayWeekday = firstDay.getDay();
         const daysInMonth = lastDay.getDate();
 
         const days = [];
-        // 이전 달 빈칸
         for (let i = 0; i < firstDayWeekday; i++) {
           days.push({ day: null, dateStr: null });
         }
-        // 이번 달 날짜
         for (let d = 1; d <= daysInMonth; d++) {
           const mStr = String(month).padStart(2, '0');
           const dStr = String(d).padStart(2, '0');
@@ -592,7 +591,9 @@
         return { total, completed, percentage, memberStats };
       }, [schedules, selectedDate]);
 
-      //      // 3. 로그인 첫 화면
+      // -------------------------------------------------------------
+      // 🔑 1. 로그인 안 되었을 때 표시할 첫 로그인 스크린
+      // -------------------------------------------------------------
       if (!isLoggedIn) {
         const loginTarget = FAMILY_MEMBERS.find(m => m.id === selectedLoginMember) || FAMILY_MEMBERS[0];
 
@@ -608,6 +609,7 @@
                 <p className="text-xs text-slate-400">온 가족 실시간 일정 & 달력 공유 시스템</p>
               </div>
 
+              {/* 프로필 선택 */}
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-slate-300 text-center">
                   접속하실 가족 프로필을 선택하세요
@@ -642,6 +644,7 @@
                 </div>
               </div>
 
+              {/* PIN 번호 입력 폼 */}
               <form onSubmit={handleLoginSubmit} className="space-y-4 pt-2 border-t border-slate-700/80">
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -785,7 +788,10 @@
         );
       }
 
-      //      return (
+      // -------------------------------------------------------------
+      // 🚀 2. 로그인 성공 후 메인 공유 웹앱 화면
+      // -------------------------------------------------------------
+      return (
         <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans pb-16">
           
           {/* 🏡 상단 헤더 */}
@@ -949,7 +955,6 @@
               </form>
             </section>
 
-            {/* */}
             {/* 🗓️ 일정 보기 선택 (오늘 타임라인 / 주간 보기 / 월간 달력) */}
             <section className="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
@@ -1148,7 +1153,6 @@
               </div>
             </section>
 
-            {/* */}
             {/* 📋 일정 목록 및 상태 토글 */}
             <section className="space-y-3">
               <div className="flex items-center justify-between">
@@ -1288,7 +1292,6 @@
             </section>
           </main>
 
-          {/* */}
           {/* ➕ 1단계: 새 일정 입력 모달 */}
           {isAddModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-slate-900/60 backdrop-blur-xs">
@@ -1447,7 +1450,7 @@
       );
     }
 
-    //    const root = ReactDOM.createRoot(document.getElementById('root'));
+    const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
 </body>
