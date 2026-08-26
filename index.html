@@ -8,12 +8,7 @@
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- React 18 & Babel Standalone -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <!-- Firebase Compat SDK -->
+  <!-- Firebase Compat SDKs (CDN) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -28,13 +23,11 @@
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900 selection:bg-indigo-100 min-h-screen">
+<body class="bg-slate-50 text-slate-900 min-h-screen">
   <div id="root"></div>
 
-  <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
-
-    // --- 1. 클라우드 DB 연동 키 설정 ---
+  <script>
+    // --- 1. 기본 글로벌 설정 및 변수 ---
     const DEFAULT_FIREBASE_CONFIG = {
       apiKey: "AIzaSyC2d0M_Sample_Key_For_Family_Connect",
       authDomain: "familiy-connect-shared.firebaseapp.com",
@@ -44,7 +37,6 @@
       appId: "1:987654321012:web:a1b2c3d4e5f6g7h8"
     };
 
-    // --- 2. 가족 프로필 정의 ---
     const FAMILY_MEMBERS = [
       {
         id: 'dad',
@@ -56,7 +48,6 @@
         activeBg: 'bg-blue-600 text-white shadow-blue-200',
         cardBg: 'bg-gradient-to-br from-blue-50/90 to-indigo-50/50 border-blue-200/80',
         barColor: 'bg-blue-500',
-        borderColor: 'border-blue-400',
         ringColor: 'ring-blue-400'
       },
       {
@@ -69,7 +60,6 @@
         activeBg: 'bg-rose-500 text-white shadow-rose-200',
         cardBg: 'bg-gradient-to-br from-rose-50/90 to-pink-50/50 border-rose-200/80',
         barColor: 'bg-rose-500',
-        borderColor: 'border-rose-400',
         ringColor: 'ring-rose-400'
       },
       {
@@ -82,7 +72,6 @@
         activeBg: 'bg-emerald-600 text-white shadow-emerald-200',
         cardBg: 'bg-gradient-to-br from-emerald-50/90 to-teal-50/50 border-emerald-200/80',
         barColor: 'bg-emerald-500',
-        borderColor: 'border-emerald-400',
         ringColor: 'ring-emerald-400'
       },
       {
@@ -95,7 +84,6 @@
         activeBg: 'bg-amber-500 text-white shadow-amber-200',
         cardBg: 'bg-gradient-to-br from-amber-50/90 to-orange-50/50 border-amber-200/80',
         barColor: 'bg-amber-500',
-        borderColor: 'border-amber-400',
         ringColor: 'ring-amber-400'
       }
     ];
@@ -126,15 +114,15 @@
       { key: 'fire', emoji: '🔥', label: '파이팅' }
     ];
 
-    const getTodayString = () => {
+    function getTodayString() {
       const d = new Date();
       const year = d.getFullYear();
       const month = String(d.getMonth() + 1).padStart(2, '0');
       const day = String(d.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
-    };
+    }
 
-    const formatRelativeTime = (timestamp) => {
+    function formatRelativeTime(timestamp) {
       if (!timestamp) return '미등록';
       const diffMinutes = Math.floor((Date.now() - timestamp) / 60000);
       if (diffMinutes < 1) return '방금 전';
@@ -142,53 +130,37 @@
       const diffHours = Math.floor(diffMinutes / 60);
       if (diffHours < 24) return `${diffHours}시간 전`;
       return new Date(timestamp).toLocaleDateString([], { month: 'numeric', day: 'numeric' });
-    };
+    }
 
-    function App() {
-      // 🔒 로그인 관련 상태
-      const [currentMemberId, setCurrentMemberId] = useState('child1');
-      const [isLoggedIn, setIsLoggedIn] = useState(false);
-      const [selectedLoginMember, setSelectedLoginMember] = useState('child1');
-      const [pinInput, setPinInput] = useState('');
-      const [loginError, setLoginError] = useState('');
-      const [rememberMe, setRememberMe] = useState(true);
-
-      // 비밀번호(PIN) 실시간 상태
-      const [memberPins, setMemberPins] = useState({
-        dad: '3333',
-        mom: '4444',
-        child1: '1111',
-        child2: '2222'
-      });
-      const [isPinModalOpen, setIsPinModalOpen] = useState(false);
-      const [pinFormOld, setPinFormOld] = useState('');
-      const [pinFormNew, setPinFormNew] = useState('');
-      const [pinFormConfirm, setPinFormConfirm] = useState('');
-      const [pinModalError, setPinModalError] = useState('');
-
-      const [selectedDate, setSelectedDate] = useState(getTodayString());
-      const [viewMode, setViewMode] = useState('today'); // 'today' | 'week' | 'month'
-      const [filterMemberId, setFilterMemberId] = useState('all');
-
-      // Firestore & 연결 상태
-      const [dbInstance, setDbInstance] = useState(null);
-      const [authInstance, setAuthInstance] = useState(null);
-      const [appId, setAppId] = useState('familiy-connect-shared-v1');
-      const [syncStatus, setSyncStatus] = useState('연결 중...');
-      const [isConnected, setIsConnected] = useState(false);
-
-      const [schedules, setSchedules] = useState([]);
-      const [statusMessages, setStatusMessages] = useState({});
-      const [isLoading, setIsLoading] = useState(true);
-
-      // 모달 & 중복 등록 방지
-      const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-      const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false); // 등록 확인 모달
-      const [isSubmitting, setIsSubmitting] = useState(false); // 중복 클릭 방지
-      const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-      const [toastMessage, setToastMessage] = useState(null);
-
-      const [newSchedule, setNewSchedule] = useState({
+    // --- 2. 애플리케이션 상태 객체 ---
+    let state = {
+      isLoggedIn: false,
+      currentMemberId: localStorage.getItem('family_connect_login_member') || 'child1',
+      selectedLoginMember: 'child1',
+      pinInput: '',
+      loginError: '',
+      rememberMe: true,
+      memberPins: { dad: '3333', mom: '4444', child1: '1111', child2: '2222' },
+      isPinModalOpen: false,
+      pinFormOld: '',
+      pinFormNew: '',
+      pinFormConfirm: '',
+      pinModalError: '',
+      selectedDate: getTodayString(),
+      viewMode: 'today', // 'today' | 'week' | 'month'
+      filterMemberId: 'all',
+      calendarMonth: { year: new Date().getFullYear(), month: new Date().getMonth() + 1 },
+      schedules: [],
+      statusMessages: {},
+      syncStatus: '연결 중...',
+      isConnected: false,
+      isDbModalOpen: false,
+      firebaseConfigInput: '',
+      isAddModalOpen: false,
+      isConfirmModalOpen: false,
+      isSubmitting: false,
+      toastMessage: null,
+      newSchedule: {
         title: '',
         memberId: 'child1',
         date: getTodayString(),
@@ -196,1262 +168,805 @@
         endTime: '17:00',
         category: 'school',
         notes: ''
-      });
+      },
+      myStatusInput: '',
+      myEmoji: '😊'
+    };
 
-      const [myStatusInput, setMyStatusInput] = useState('');
-      const [myEmoji, setMyEmoji] = useState('😊');
+    let dbInstance = null;
+    let appId = 'familiy-connect-shared-v1';
 
-      // 달력 관련 (월 이동)
-      const [calendarMonth, setCalendarMonth] = useState(() => {
-        const d = new Date();
-        return { year: d.getFullYear(), month: d.getMonth() + 1 };
-      });
+    if (localStorage.getItem('family_connect_login_member')) {
+      state.isLoggedIn = true;
+    }
 
-      // 로그인 상태 복원
-      useEffect(() => {
-        const savedMember = localStorage.getItem('family_connect_login_member');
-        if (savedMember) {
-          setCurrentMemberId(savedMember);
-          setSelectedLoginMember(savedMember);
-          setIsLoggedIn(true);
-        }
-      }, []);
+    function showToast(msg) {
+      state.toastMessage = msg;
+      render();
+      setTimeout(() => {
+        state.toastMessage = null;
+        render();
+      }, 3000);
+    }
 
-      const showToast = (msg) => {
-        setToastMessage(msg);
-        setTimeout(() => setToastMessage(null), 3000);
-      };
+    function initFirebase() {
+      let activeConfig = DEFAULT_FIREBASE_CONFIG;
 
-      // 🔑 Firebase 인증 후 실시간 Firestore 구독
-      useEffect(() => {
-        let activeConfig = DEFAULT_FIREBASE_CONFIG;
-        if (typeof __firebase_config !== 'undefined') {
-          try {
-            const parsed = JSON.parse(__firebase_config);
-            if (parsed && parsed.apiKey) activeConfig = parsed;
-          } catch(e){}
-        }
-
+      if (window.location.hash && window.location.hash.includes('config=')) {
         try {
-          if (!firebase.apps.length) {
-            firebase.initializeApp(activeConfig);
+          const rawCfg = window.location.hash.split('config=')[1];
+          const parsed = JSON.parse(decodeURIComponent(rawCfg));
+          if (parsed && parsed.apiKey && !parsed.apiKey.includes('Sample')) {
+            localStorage.setItem('family_connect_firebase_cfg', JSON.stringify(parsed));
+            activeConfig = parsed;
           }
-          const firestore = firebase.firestore();
-          const auth = firebase.auth();
-          setDbInstance(firestore);
-          setAuthInstance(auth);
-
-          const currentAppId = typeof __app_id !== 'undefined' ? __app_id : 'familiy-connect-shared-v1';
-          setAppId(currentAppId);
-
-          // 익명 로그인 실행 후 snapshot 구독
-          const initAuthAndSubscribe = async () => {
-            try {
-              if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await auth.signInWithCustomToken(__initial_auth_token);
-              } else {
-                await auth.signInAnonymously();
-              }
-              setSyncStatus('실시간 동기화 완료');
-              setIsConnected(true);
-
-              // 1. 실시간 일정 구독
-              const unsubSchedules = firestore
-                .collection('artifacts')
-                .doc(currentAppId)
-                .collection('public')
-                .doc('data')
-                .collection('schedules')
-                .onSnapshot((snapshot) => {
-                  const list = [];
-                  snapshot.forEach((doc) => {
-                    list.push({ id: doc.id, ...doc.data() });
-                  });
-                  setSchedules(list);
-                  setIsLoading(false);
-                }, (err) => {
-                  console.error("일정 실시간 수신 오류:", err);
-                  setSyncStatus('오프라인 저장 모드');
-                  setIsConnected(false);
-                  setIsLoading(false);
-                });
-
-              // 2. 실시간 현황 구독
-              const unsubStatus = firestore
-                .collection('artifacts')
-                .doc(currentAppId)
-                .collection('public')
-                .doc('data')
-                .collection('status_messages')
-                .onSnapshot((snapshot) => {
-                  const msgs = {};
-                  snapshot.forEach((doc) => {
-                    msgs[doc.id] = doc.data();
-                  });
-                  setStatusMessages(msgs);
-                }, (err) => {
-                  console.error("현황 실시간 수신 오류:", err);
-                });
-
-              // 3. 실시간 PIN 비밀번호 구독
-              const unsubPins = firestore
-                .collection('artifacts')
-                .doc(currentAppId)
-                .collection('public')
-                .doc('data')
-                .collection('pins')
-                .doc('settings')
-                .onSnapshot((docSnap) => {
-                  if (docSnap.exists) {
-                    setMemberPins(prev => ({ ...prev, ...docSnap.data() }));
-                  }
-                }, (err) => {
-                  console.error("PIN 수신 오류:", err);
-                });
-
-              return () => {
-                unsubSchedules();
-                unsubStatus();
-                unsubPins();
-              };
-            } catch(authErr) {
-              console.error("인증 처리 실패:", authErr);
-              setSyncStatus('오프라인 로컬 모드');
-              setIsConnected(false);
-              setIsLoading(false);
+        } catch(e) {}
+      } else {
+        const savedCfg = localStorage.getItem('family_connect_firebase_cfg');
+        if (savedCfg) {
+          try {
+            const parsed = JSON.parse(savedCfg);
+            if (parsed && parsed.apiKey && !parsed.apiKey.includes('Sample')) {
+              activeConfig = parsed;
             }
-          };
-
-          initAuthAndSubscribe();
-        } catch(err) {
-          console.error("Firebase 초기화 에러:", err);
-          setIsLoading(false);
+          } catch(e) {}
         }
-      }, []);
+      }
 
-      const currentMember = useMemo(() => {
-        return FAMILY_MEMBERS.find(m => m.id === currentMemberId) || FAMILY_MEMBERS[0];
-      }, [currentMemberId]);
+      const isRealConfig = activeConfig.apiKey && !activeConfig.apiKey.includes('Sample');
 
-      const handleLoginSubmit = (e) => {
-        if (e) e.preventDefault();
-        const targetMember = FAMILY_MEMBERS.find(m => m.id === selectedLoginMember);
-        if (!targetMember) return;
-        
-        const validPin = memberPins[targetMember.id] || targetMember.pin;
+      try {
+        if (firebase.apps.length) firebase.app().delete();
+        firebase.initializeApp(activeConfig);
+        const firestore = firebase.firestore();
+        const auth = firebase.auth();
+        dbInstance = firestore;
 
-        if (!pinInput || pinInput === validPin) {
-          setCurrentMemberId(selectedLoginMember);
-          setIsLoggedIn(true);
-          setLoginError('');
-          setPinInput('');
-          if (rememberMe) {
-            localStorage.setItem('family_connect_login_member', selectedLoginMember);
-          }
-          showToast(`${targetMember.name}님, 환영합니다! 오늘 일정을 확인하세요 🏡`);
-        } else {
-          setLoginError(`비밀번호가 올바르지 않습니다.`);
-        }
-      };
-
-      const handleLogout = () => {
-        setIsLoggedIn(false);
-        setPinInput('');
-        setLoginError('');
-        localStorage.removeItem('family_connect_login_member');
-        showToast('로그아웃 되었습니다.');
-      };
-
-      const handleSavePin = async (e) => {
-        e.preventDefault();
-        const targetMember = FAMILY_MEMBERS.find(m => m.id === selectedLoginMember) || currentMember;
-        const currentPin = memberPins[targetMember.id] || targetMember.pin;
-
-        if (pinFormOld && pinFormOld !== currentPin) {
-          setPinModalError('기존 비밀번호가 올바르지 않습니다.');
-          return;
-        }
-        if (!pinFormNew || pinFormNew.length !== 4) {
-          setPinModalError('새 비밀번호는 숫자 4자리여야 합니다.');
-          return;
-        }
-        if (pinFormNew !== pinFormConfirm) {
-          setPinModalError('새 비밀번호와 확인 번호가 일치하지 않습니다.');
-          return;
-        }
-
-        const updatedPins = { ...memberPins, [targetMember.id]: pinFormNew };
-        setMemberPins(updatedPins);
-
-        if (dbInstance) {
-          try {
-            await dbInstance
-              .collection('artifacts')
-              .doc(appId)
-              .collection('public')
-              .doc('data')
-              .collection('pins')
-              .doc('settings')
-              .set(updatedPins, { merge: true });
-          } catch(err) {
-            console.error(err);
-          }
-        }
-
-        setIsPinModalOpen(false);
-        setPinFormOld('');
-        setPinFormNew('');
-        setPinFormConfirm('');
-        setPinModalError('');
-        showToast(`${targetMember.name}님의 비밀번호가 [${pinFormNew}](으)로 변경되었습니다! 🔑`);
-      };
-
-      // 일정 생성 1단계: 확인 모달 열기 (중복 방지)
-      const handleOpenConfirmModal = (e) => {
-        e.preventDefault();
-        if (!newSchedule.title.trim()) {
-          showToast("일정 제목을 입력해주세요!");
-          return;
-        }
-        setIsConfirmModalOpen(true);
-      };
-
-      // 일정 생성 2단계: 실제 DB 저장 (중복 클릭 완전히 차단)
-      const handleExecuteCreateSchedule = async () => {
-        if (isSubmitting || !newSchedule.title.trim()) return;
-        setIsSubmitting(true);
-
-        const newItem = {
-          ...newSchedule,
-          status: 'pending',
-          stickers: {},
-          createdAt: Date.now()
-        };
-
-        try {
-          if (dbInstance) {
-            await dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('schedules').add(newItem);
+        auth.signInAnonymously().then(() => {
+          if (isRealConfig) {
+            state.syncStatus = '실시간 동기화 완료';
+            state.isConnected = true;
           } else {
-            setSchedules(prev => [...prev, { ...newItem, id: String(Date.now()) }]);
+            state.syncStatus = '오프라인 로컬 모드';
+            state.isConnected = false;
           }
+          render();
 
-          setIsConfirmModalOpen(false);
-          setIsAddModalOpen(false);
-          setNewSchedule({
-            title: '',
-            memberId: currentMemberId,
-            date: selectedDate,
-            startTime: '16:00',
-            endTime: '17:00',
-            category: 'school',
-            notes: ''
-          });
-          showToast("일정이 정상적으로 등록 및 연동되었습니다! ✨");
-        } catch(e) {
-          console.error(e);
-          showToast("등록 실패. 다시 시도해 주세요.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      };
-
-      const handleStatusChange = async (id, newStatus) => {
-        if (dbInstance) {
-          try {
-            await dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('schedules').doc(id).update({
-              status: newStatus,
-              updatedAt: Date.now()
+          firestore.collection('artifacts').doc(appId).collection('public').doc('data').collection('schedules')
+            .onSnapshot(snapshot => {
+              const list = [];
+              snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+              state.schedules = list;
+              render();
+            }, () => {
+              state.syncStatus = '오프라인 로컬 모드';
+              state.isConnected = false;
+              render();
             });
-          } catch(e) { console.error(e); }
-        } else {
-          setSchedules(prev => prev.map(s => s.id === id ? { ...s, status: newStatus } : s));
-        }
-        const label = newStatus === 'completed' ? '완료 🎉' : newStatus === 'in_progress' ? '진행 중 🚀' : '대기 중 ⏳';
-        showToast(`일정이 [${label}] 상태로 변경되었습니다.`);
-      };
 
-      const handleDeleteSchedule = async (id) => {
-        if (dbInstance) {
-          try {
-            await dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('schedules').doc(id).delete();
-          } catch(e) { console.error(e); }
-        } else {
-          setSchedules(prev => prev.filter(s => s.id !== id));
-        }
-        showToast("일정이 삭제되었습니다.");
-      };
-
-      const handleSendSticker = async (scheduleId, stickerKey) => {
-        const target = schedules.find(s => s.id === scheduleId);
-        if (!target) return;
-        const currentCount = (target.stickers && target.stickers[stickerKey]) || 0;
-
-        if (dbInstance) {
-          try {
-            await dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('schedules').doc(scheduleId).update({
-              [`stickers.${stickerKey}`]: currentCount + 1,
-              lastCheeredBy: currentMember.name,
-              lastCheeredAt: Date.now()
+          firestore.collection('artifacts').doc(appId).collection('public').doc('data').collection('status_messages')
+            .onSnapshot(snapshot => {
+              const msgs = {};
+              snapshot.forEach(doc => msgs[doc.id] = doc.data());
+              state.statusMessages = msgs;
+              render();
             });
-          } catch(e) { console.error(e); }
-        } else {
-          setSchedules(prev => prev.map(s => s.id === scheduleId ? {
-            ...s,
-            stickers: { ...s.stickers, [stickerKey]: currentCount + 1 },
-            lastCheeredBy: currentMember.name
-          } : s));
-        }
-        showToast(`${currentMember.name}님이 응원 스티커를 보냈습니다! 💖`);
-      };
 
-      const sendStatusMessage = async (text, emoji = '😊') => {
-        if (!text.trim()) return;
-        const payload = {
-          memberId: currentMember.id,
-          memberName: currentMember.name,
-          text: text.trim(),
-          emoji: emoji,
-          updatedAt: Date.now()
-        };
-
-        if (dbInstance) {
-          try {
-            await dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('status_messages').doc(currentMember.id).set(payload);
-          } catch(e) { console.error(e); }
-        } else {
-          setStatusMessages(prev => ({ ...prev, [currentMember.id]: payload }));
-        }
-        setMyStatusInput('');
-        showToast(`${currentMember.name}님의 실시간 현황이 공유되었습니다! 📢`);
-      };
-
-      // 월간 달력 날짜 계산
-      const monthCalendarDays = useMemo(() => {
-        const { year, month } = calendarMonth;
-        const firstDay = new Date(year, month - 1, 1);
-        const lastDay = new Date(year, month, 0);
-        const firstDayWeekday = firstDay.getDay();
-        const daysInMonth = lastDay.getDate();
-
-        const days = [];
-        for (let i = 0; i < firstDayWeekday; i++) {
-          days.push({ day: null, dateStr: null });
-        }
-        for (let d = 1; d <= daysInMonth; d++) {
-          const mStr = String(month).padStart(2, '0');
-          const dStr = String(d).padStart(2, '0');
-          const dateStr = `${year}-${mStr}-${dStr}`;
-          days.push({ day: d, dateStr });
-        }
-        return days;
-      }, [calendarMonth]);
-
-      // 주간 7일 계산
-      const weekDays = useMemo(() => {
-        const curr = new Date(selectedDate);
-        const day = curr.getDay();
-        const sunday = new Date(curr);
-        sunday.setDate(curr.getDate() - day);
-
-        const days = [];
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(sunday);
-          d.setDate(sunday.getDate() + i);
-          const dateStr = d.toISOString().split('T')[0];
-          const dayName = ['일', '월', '화', '수', '목', '금', '토'][i];
-          days.push({ dateStr, dayName, dayNumber: d.getDate() });
-        }
-        return days;
-      }, [selectedDate]);
-
-      const filteredSchedules = useMemo(() => {
-        return schedules
-          .filter(item => {
-            const matchDate = item.date === selectedDate;
-            const matchMember = filterMemberId === 'all' || item.memberId === filterMemberId;
-            return matchDate && matchMember;
-          })
-          .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
-      }, [schedules, selectedDate, filterMemberId]);
-
-      const stats = useMemo(() => {
-        const todayItems = schedules.filter(s => s.date === selectedDate);
-        const total = todayItems.length;
-        const completed = todayItems.filter(s => s.status === 'completed').length;
-        const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-        const memberStats = FAMILY_MEMBERS.map(m => {
-          const mItems = todayItems.filter(s => s.memberId === m.id);
-          const mTotal = mItems.length;
-          const mCompleted = mItems.filter(s => s.status === 'completed').length;
-          const mPercentage = mTotal > 0 ? Math.round((mCompleted / mTotal) * 100) : 0;
-          return { ...m, total: mTotal, completed: mCompleted, percentage: mPercentage };
+          firestore.collection('artifacts').doc(appId).collection('public').doc('data').collection('pins').doc('settings')
+            .onSnapshot(docSnap => {
+              if (docSnap.exists) {
+                state.memberPins = { ...state.memberPins, ...docSnap.data() };
+                render();
+              }
+            });
+        }).catch(() => {
+          state.syncStatus = '오프라인 로컬 모드';
+          state.isConnected = false;
+          render();
         });
+      } catch(e) {
+        state.syncStatus = '오프라인 로컬 모드';
+        state.isConnected = false;
+        render();
+      }
+    }
 
-        return { total, completed, percentage, memberStats };
-      }, [schedules, selectedDate]);
+    // --- 3. 이벤트 처리 함수 ---
+    function handleLoginSubmit(e) {
+      if (e) e.preventDefault();
+      const targetMember = FAMILY_MEMBERS.find(m => m.id === state.selectedLoginMember);
+      if (!targetMember) return;
+      const validPin = state.memberPins[targetMember.id] || targetMember.pin;
 
-      // -------------------------------------------------------------
-      // 🔑 1. 로그인 안 되었을 때 표시할 첫 로그인 스크린
-      // -------------------------------------------------------------
-      if (!isLoggedIn) {
-        const loginTarget = FAMILY_MEMBERS.find(m => m.id === selectedLoginMember) || FAMILY_MEMBERS[0];
+      if (!state.pinInput || state.pinInput === validPin) {
+        state.currentMemberId = state.selectedLoginMember;
+        state.isLoggedIn = true;
+        state.loginError = '';
+        state.pinInput = '';
+        if (state.rememberMe) {
+          localStorage.setItem('family_connect_login_member', state.selectedLoginMember);
+        }
+        showToast(`${targetMember.name}님, 환영합니다! 오늘 일정을 확인하세요 🏡`);
+      } else {
+        state.loginError = '비밀번호가 올바르지 않습니다.';
+        render();
+      }
+    }
 
-        return (
-          <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
-            <div className="max-w-md w-full bg-slate-800 rounded-3xl p-6 shadow-2xl border border-slate-700 space-y-6">
-              
-              <div className="text-center space-y-2">
-                <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-3xl mx-auto shadow-lg shadow-indigo-500/30">
-                  🏡
-                </div>
-                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">우리집 커넥트</h1>
-                <p className="text-xs text-slate-400">온 가족 실시간 일정 & 달력 공유 시스템</p>
+    function handleLogout() {
+      state.isLoggedIn = false;
+      state.pinInput = '';
+      state.loginError = '';
+      localStorage.removeItem('family_connect_login_member');
+      showToast('로그아웃 되었습니다.');
+    }
+
+    function handleSavePin(e) {
+      if (e) e.preventDefault();
+      const targetMember = FAMILY_MEMBERS.find(m => m.id === state.selectedLoginMember);
+      const validPin = state.memberPins[targetMember.id] || targetMember.pin;
+
+      if (state.pinFormOld && state.pinFormOld !== validPin) {
+        state.pinModalError = '기존 비밀번호가 일치하지 않습니다.';
+        render();
+        return;
+      }
+      if (state.pinFormNew.length !== 4 || isNaN(state.pinFormNew)) {
+        state.pinModalError = '새 비밀번호는 숫자 4자리여야 합니다.';
+        render();
+        return;
+      }
+      if (state.pinFormNew !== state.pinFormConfirm) {
+        state.pinModalError = '새 비밀번호 확인이 일치하지 않습니다.';
+        render();
+        return;
+      }
+
+      const updatedPins = { ...state.memberPins, [targetMember.id]: state.pinFormNew };
+      state.memberPins = updatedPins;
+      state.isPinModalOpen = false;
+      state.pinModalError = '';
+      showToast('비밀번호가 성공적으로 변경되었습니다!');
+
+      if (dbInstance) {
+        dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('pins').doc('settings').set(updatedPins, { merge: true });
+      }
+      render();
+    }
+
+    function handleExecuteCreateSchedule() {
+      if (state.isSubmitting || !state.newSchedule.title.trim()) return;
+      state.isSubmitting = true;
+
+      const newItem = {
+        ...state.newSchedule,
+        status: 'pending',
+        stickers: {},
+        createdAt: Date.now()
+      };
+
+      if (dbInstance) {
+        dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('schedules').add(newItem)
+          .then(() => {
+            state.isConfirmModalOpen = false;
+            state.isAddModalOpen = false;
+            state.isSubmitting = false;
+            state.newSchedule = { title: '', memberId: state.currentMemberId, date: state.selectedDate, startTime: '16:00', endTime: '17:00', category: 'school', notes: '' };
+            showToast('일정이 등록되었습니다! ✨');
+          }).catch(() => {
+            state.isSubmitting = false;
+            render();
+          });
+      } else {
+        state.schedules.push({ ...newItem, id: String(Date.now()) });
+        state.isConfirmModalOpen = false;
+        state.isAddModalOpen = false;
+        state.isSubmitting = false;
+        state.newSchedule = { title: '', memberId: state.currentMemberId, date: state.selectedDate, startTime: '16:00', endTime: '17:00', category: 'school', notes: '' };
+        showToast('일정이 등록되었습니다! ✨');
+      }
+    }
+
+    function handleStatusChange(id, newStatus) {
+      if (dbInstance) {
+        dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('schedules').doc(id).update({ status: newStatus, updatedAt: Date.now() });
+      } else {
+        state.schedules = state.schedules.map(s => s.id === id ? { ...s, status: newStatus } : s);
+      }
+      const label = newStatus === 'completed' ? '완료 🎉' : newStatus === 'in_progress' ? '진행 중 🚀' : '대기 중 ⏳';
+      showToast(`일정이 [${label}] 상태로 변경되었습니다.`);
+    }
+
+    function handleDeleteSchedule(id) {
+      if (dbInstance) {
+        dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('schedules').doc(id).delete();
+      } else {
+        state.schedules = state.schedules.filter(s => s.id !== id);
+      }
+      showToast('일정이 삭제되었습니다.');
+    }
+
+    function handleSendSticker(scheduleId, stickerKey) {
+      const target = state.schedules.find(s => s.id === scheduleId);
+      if (!target) return;
+      const count = (target.stickers && target.stickers[stickerKey]) || 0;
+      const currentMember = FAMILY_MEMBERS.find(m => m.id === state.currentMemberId) || FAMILY_MEMBERS[0];
+
+      if (dbInstance) {
+        dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('schedules').doc(scheduleId).update({
+          [`stickers.${stickerKey}`]: count + 1,
+          lastCheeredBy: currentMember.name,
+          lastCheeredAt: Date.now()
+        });
+      } else {
+        target.stickers = target.stickers || {};
+        target.stickers[stickerKey] = count + 1;
+        target.lastCheeredBy = currentMember.name;
+        render();
+      }
+      showToast(`${currentMember.name}님이 응원 스티커를 보냈습니다! 💖`);
+    }
+
+    function sendStatusMessage(text, emoji = '😊') {
+      if (!text.trim()) return;
+      const currentMember = FAMILY_MEMBERS.find(m => m.id === state.currentMemberId) || FAMILY_MEMBERS[0];
+      const payload = { memberId: currentMember.id, memberName: currentMember.name, text: text.trim(), emoji, updatedAt: Date.now() };
+
+      if (dbInstance) {
+        dbInstance.collection('artifacts').doc(appId).collection('public').doc('data').collection('status_messages').doc(currentMember.id).set(payload);
+      } else {
+        state.statusMessages[currentMember.id] = payload;
+      }
+      state.myStatusInput = '';
+      showToast(`${currentMember.name}님의 실시간 현황이 공유되었습니다! 📢`);
+    }
+
+    function handleSaveFirebaseConfig(e) {
+      if (e) e.preventDefault();
+      try {
+        const parsed = JSON.parse(state.firebaseConfigInput);
+        if (!parsed.apiKey || !parsed.projectId) {
+          showToast('⚠️ 올바른 Firebase 설정 JSON 형식이 아닙니다.');
+          return;
+        }
+        localStorage.setItem('family_connect_firebase_cfg', JSON.stringify(parsed));
+        state.isDbModalOpen = false;
+        showToast('✨ 클라우드 DB 설정 저장 완료!');
+        setTimeout(() => window.location.reload(), 800);
+      } catch(err) {
+        showToast('⚠️ 입력 형식이 올바르지 않습니다.');
+      }
+    }
+
+    function handleCopySmartFamilyLink() {
+      const savedCfg = localStorage.getItem('family_connect_firebase_cfg');
+      if (!savedCfg) {
+        showToast('먼저 클라우드 DB 설정을 완료해 주세요!');
+        state.isDbModalOpen = true;
+        render();
+        return;
+      }
+      const smartUrl = `${window.location.origin}${window.location.pathname}#config=${encodeURIComponent(savedCfg)}`;
+      const tempInput = document.createElement('textarea');
+      tempInput.value = smartUrl;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempInput);
+      showToast('📱 가족 카톡 자동 연동 링크 복사 완료!');
+    }
+
+    function render() {
+      const root = document.getElementById('root');
+      const currentMember = FAMILY_MEMBERS.find(m => m.id === state.currentMemberId) || FAMILY_MEMBERS[0];
+      const loginTarget = FAMILY_MEMBERS.find(m => m.id === state.selectedLoginMember) || FAMILY_MEMBERS[0];
+
+      // 1. 로그인 전 화면
+      if (!state.isLoggedIn) {
+        const pinVal = state.memberPins[loginTarget.id] || loginTarget.pin;
+        root.innerHTML = `
+          <div class="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-700 space-y-6">
+              <div class="text-center space-y-2">
+                <div class="w-14 h-14 rounded-3xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-2xl mx-auto shadow-lg">🏡</div>
+                <h1 class="text-2xl font-black text-white">우리집 커넥트</h1>
+                <p class="text-xs text-slate-400">온 가족 실시간 일정 & 달력 공유 시스템</p>
               </div>
 
-              {/* 프로필 선택 */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-300 text-center">
-                  접속하실 가족 프로필을 선택하세요
-                </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  {FAMILY_MEMBERS.map((m) => {
-                    const isSelected = selectedLoginMember === m.id;
-                    const pinVal = memberPins[m.id] || m.pin;
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedLoginMember(m.id);
-                          setPinInput('');
-                          setLoginError('');
-                        }}
-                        className={`p-3 rounded-2xl border text-left transition flex items-center space-x-3 ${
-                          isSelected
-                            ? `${m.cardBg} ring-2 ${m.ringColor} text-slate-900 shadow-md`
-                            : 'bg-slate-700/60 border-slate-600 text-slate-200 hover:bg-slate-700'
-                        }`}
-                      >
-                        <span className="text-2xl">{m.avatar}</span>
+              <div class="space-y-2">
+                <label class="block text-xs font-bold text-slate-300 text-center">접속하실 가족 프로필을 선택하세요</label>
+                <div class="grid grid-cols-2 gap-2.5">
+                  ${FAMILY_MEMBERS.map(m => {
+                    const isSel = state.selectedLoginMember === m.id;
+                    return `
+                      <button type="button" onclick="state.selectedLoginMember='${m.id}'; state.pinInput=''; state.loginError=''; render();" class="p-3 rounded-2xl border text-left transition flex items-center space-x-3 ${isSel ? `${m.cardBg} ring-2 ${m.ringColor} text-slate-900 shadow-md` : 'bg-slate-700/60 border-slate-600 text-slate-200 hover:bg-slate-700'}">
+                        <span class="text-2xl">${m.avatar}</span>
                         <div>
-                          <div className="text-xs font-extrabold">{m.name}</div>
-                          <div className="text-[10px] opacity-75">{m.role} (PIN: {pinVal})</div>
+                          <div class="text-xs font-extrabold">${m.name}</div>
+                          <div class="text-[10px] opacity-75">${m.role} (PIN: ${state.memberPins[m.id] || m.pin})</div>
                         </div>
                       </button>
-                    );
-                  })}
+                    `;
+                  }).join('')}
                 </div>
               </div>
 
-              {/* PIN 번호 입력 폼 */}
-              <form onSubmit={handleLoginSubmit} className="space-y-4 pt-2 border-t border-slate-700/80">
+              <form onsubmit="handleLoginSubmit(event)" class="space-y-4 pt-2 border-t border-slate-700/80">
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-slate-300">
-                      {loginTarget.avatar} {loginTarget.name} 비밀번호 (PIN)
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setPinInput(memberPins[loginTarget.id] || loginTarget.pin)}
-                      className="text-[10px] font-bold text-indigo-400 hover:underline"
-                    >
-                      ⚡ 비밀번호 채우기 ({memberPins[loginTarget.id] || loginTarget.pin})
-                    </button>
+                  <div class="flex items-center justify-between mb-1">
+                    <label class="text-xs font-bold text-slate-300">${loginTarget.avatar} ${loginTarget.name} 비밀번호 (PIN)</label>
+                    <button type="button" onclick="state.pinInput='${pinVal}'; render();" class="text-[10px] font-bold text-indigo-400 hover:underline">⚡ 비밀번호 채우기 (${pinVal})</button>
                   </div>
-                  <input
-                    type="password"
-                    maxLength={4}
-                    value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value)}
-                    placeholder={`PIN 4자리 입력 (기본: ${memberPins[loginTarget.id] || loginTarget.pin})`}
-                    className="w-full text-center tracking-widest text-lg px-4 py-3 bg-slate-900 border border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white font-mono"
-                  />
-                  {loginError && (
-                    <p className="text-xs text-rose-400 font-bold mt-1.5 text-center">
-                      ⚠️ {loginError}
-                    </p>
-                  )}
+                  <input type="password" maxlength="4" value="${state.pinInput}" oninput="state.pinInput=this.value;" placeholder="PIN 4자리 입력" class="w-full text-center tracking-widest text-lg px-4 py-3 bg-slate-900 border border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white font-mono" />
+                  ${state.loginError ? `<p class="text-xs text-rose-400 font-bold mt-1.5 text-center">⚠️ ${state.loginError}</p>` : ''}
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                    />
+                <div class="flex items-center justify-between text-xs text-slate-400 px-1">
+                  <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" ${state.rememberMe ? 'checked' : ''} onchange="state.rememberMe=this.checked;" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 w-4 h-4" />
                     <span>로그인 상태 유지</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPinFormOld('');
-                      setPinFormNew('');
-                      setPinFormConfirm('');
-                      setPinModalError('');
-                      setIsPinModalOpen(true);
-                    }}
-                    className="text-indigo-400 hover:text-indigo-300 font-bold underline text-[11px]"
-                  >
-                    🔑 비밀번호 설정 / 변경
-                  </button>
+                  <button type="button" onclick="state.pinFormOld=''; state.pinFormNew=''; state.pinFormConfirm=''; state.pinModalError=''; state.isPinModalOpen=true; render();" class="text-indigo-400 hover:text-indigo-300 font-bold underline text-[11px]">🔑 비밀번호 설정 / 변경</button>
                 </div>
 
-                <button
-                  type="submit"
-                  className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-sm shadow-lg shadow-indigo-600/30 transition active:scale-98"
-                >
-                  {loginTarget.name}(으)로 접속하기 🚀
-                </button>
+                <button type="submit" class="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-sm shadow-lg transition active:scale-98">${loginTarget.name}(으)로 접속하기 🚀</button>
               </form>
 
-              {/* 비밀번호 변경 모달 */}
-              {isPinModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
-                  <div className="bg-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-slate-700 space-y-4 text-slate-100">
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-700">
-                      <h3 className="text-sm font-bold text-white flex items-center space-x-1.5">
-                        <span>🔑</span>
-                        <span>{loginTarget.avatar} {loginTarget.name} 비밀번호 설정</span>
-                      </h3>
-                      <button onClick={() => setIsPinModalOpen(false)} className="text-slate-400 hover:text-white font-bold text-sm">✕</button>
+              ${state.isPinModalOpen ? `
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+                  <div class="bg-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-slate-700 space-y-4 text-slate-100">
+                    <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+                      <h3 class="text-sm font-bold text-white flex items-center space-x-1.5">🔑 ${loginTarget.avatar} ${loginTarget.name} 비밀번호 설정</h3>
+                      <button onclick="state.isPinModalOpen=false; render();" class="text-slate-400 hover:text-white font-bold text-sm">✕</button>
                     </div>
-
-                    <form onSubmit={handleSavePin} className="space-y-3 text-xs">
+                    <form onsubmit="handleSavePin(event)" class="space-y-3 text-xs">
                       <div>
-                        <label className="block text-slate-300 font-bold mb-1">기존 비밀번호</label>
-                        <input
-                          type="password"
-                          maxLength={4}
-                          value={pinFormOld}
-                          onChange={(e) => setPinFormOld(e.target.value)}
-                          placeholder={`기존 PIN (기본: ${memberPins[loginTarget.id] || loginTarget.pin})`}
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
+                        <label class="block text-slate-300 font-bold mb-1">기존 비밀번호</label>
+                        <input type="password" maxlength="4" value="${state.pinFormOld}" oninput="state.pinFormOld=this.value" placeholder="기존 PIN (기본: ${pinVal})" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                       </div>
-
                       <div>
-                        <label className="block text-slate-300 font-bold mb-1">새 비밀번호 (숫자 4자리) *</label>
-                        <input
-                          type="password"
-                          maxLength={4}
-                          required
-                          value={pinFormNew}
-                          onChange={(e) => setPinFormNew(e.target.value)}
-                          placeholder="새 PIN 4자리"
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
+                        <label class="block text-slate-300 font-bold mb-1">새 비밀번호 (숫자 4자리) *</label>
+                        <input type="password" maxlength="4" required value="${state.pinFormNew}" oninput="state.pinFormNew=this.value" placeholder="새 PIN 4자리" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                       </div>
-
                       <div>
-                        <label className="block text-slate-300 font-bold mb-1">새 비밀번호 확인 *</label>
-                        <input
-                          type="password"
-                          maxLength={4}
-                          required
-                          value={pinFormConfirm}
-                          onChange={(e) => setPinFormConfirm(e.target.value)}
-                          placeholder="새 PIN 한 번 더 입력"
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
+                        <label class="block text-slate-300 font-bold mb-1">새 비밀번호 확인 *</label>
+                        <input type="password" maxlength="4" required value="${state.pinFormConfirm}" oninput="state.pinFormConfirm=this.value" placeholder="새 PIN 한 번 더 입력" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                       </div>
-
-                      {pinModalError && (
-                        <p className="text-rose-400 font-bold text-[11px] text-center">
-                          ⚠️ {pinModalError}
-                        </p>
-                      )}
-
-                      <div className="pt-2 flex items-center space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsPinModalOpen(false)}
-                          className="flex-1 py-2 rounded-xl border border-slate-600 text-slate-300 font-bold"
-                        >
-                          취소
-                        </button>
-                        <button
-                          type="submit"
-                          className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
-                        >
-                          비밀번호 저장
-                        </button>
+                      ${state.pinModalError ? `<p class="text-rose-400 font-bold text-[11px] text-center">⚠️ ${state.pinModalError}</p>` : ''}
+                      <div class="pt-2 flex items-center space-x-2">
+                        <button type="button" onclick="state.isPinModalOpen=false; render();" class="flex-1 py-2 rounded-xl border border-slate-600 text-slate-300 font-bold">취소</button>
+                        <button type="submit" class="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold">비밀번호 저장</button>
                       </div>
                     </form>
                   </div>
                 </div>
-              )}
+              ` : ''}
             </div>
           </div>
-        );
+        `;
+        return;
       }
 
-      // -------------------------------------------------------------
-      // 🚀 2. 로그인 성공 후 메인 공유 웹앱 화면
-      // -------------------------------------------------------------
-      return (
-        <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans pb-16">
-          
-          {/* 🏡 상단 헤더 */}
-          <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-xs">
-            <div className="max-w-5xl mx-auto px-3.5 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white text-lg sm:text-xl shadow-md shrink-0">
-                  🏡
-                </div>
+      // 2. 로그인 후 메인 웹앱
+      const todaySchedules = state.schedules.filter(s => s.date === state.selectedDate);
+      const filtered = todaySchedules.filter(s => state.filterMemberId === 'all' || s.memberId === state.filterMemberId)
+        .sort((a,b) => (a.startTime || '').localeCompare(b.startTime || ''));
+
+      const totalCount = todaySchedules.length;
+      const completedCount = todaySchedules.filter(s => s.status === 'completed').length;
+      const mainPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+      const memberStats = FAMILY_MEMBERS.map(m => {
+        const mItems = todaySchedules.filter(s => s.memberId === m.id);
+        const mTot = mItems.length;
+        const mComp = mItems.filter(s => s.status === 'completed').length;
+        return { ...m, total: mTot, completed: mComp, percentage: mTot > 0 ? Math.round((mComp / mTot) * 100) : 0 };
+      });
+
+      // 주간 뷰 날짜 계산
+      const curr = new Date(state.selectedDate);
+      const day = curr.getDay();
+      const sunday = new Date(curr);
+      sunday.setDate(curr.getDate() - day);
+      const weekDays = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(sunday);
+        d.setDate(sunday.getDate() + i);
+        const dateStr = d.toISOString().split('T')[0];
+        weekDays.push({ dateStr, dayName: ['일', '월', '화', '수', '목', '금', '토'][i], dayNumber: d.getDate() });
+      }
+
+      // 월간 뷰 날짜 계산
+      const { year, month } = state.calendarMonth;
+      const firstDay = new Date(year, month - 1, 1).getDay();
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const monthDays = [];
+      for (let i = 0; i < firstDay; i++) monthDays.push({ day: null });
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        monthDays.push({ day: d, dateStr });
+      }
+
+      root.innerHTML = `
+        <div class="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans pb-16">
+          <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-xs">
+            <div class="max-w-5xl mx-auto px-3.5 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between">
+              <div class="flex items-center space-x-2.5">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white text-lg sm:text-xl shadow-md shrink-0">🏡</div>
                 <div>
-                  <div className="flex items-center space-x-1.5">
-                    <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">우리집 커넥트</h1>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                      isConnected ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-amber-50 text-amber-700 border-amber-300'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full mr-1 ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-                      {syncStatus}
-                    </span>
+                  <div class="flex items-center space-x-1.5">
+                    <h1 class="text-base sm:text-lg font-bold text-slate-900 tracking-tight">우리집 커넥트</h1>
+                    <button onclick="state.isDbModalOpen=true; render();" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold border transition ${state.isConnected ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'}">
+                      <span class="w-1.5 h-1.5 rounded-full mr-1 ${state.isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}"></span>
+                      ${state.syncStatus}
+                    </button>
                   </div>
-                  <p className="text-[11px] text-slate-500 truncate max-w-[170px] sm:max-w-none">
-                    김주원 · 김주아 · 아빠 · 엄마의 하루
-                  </p>
+                  <p class="text-[11px] text-slate-500 truncate max-w-[170px] sm:max-w-none">김주원 · 김주아 · 아빠 · 엄마의 하루</p>
                 </div>
               </div>
 
-              <div className="flex items-center space-x-1.5 sm:space-x-2">
-                <button
-                  onClick={handleLogout}
-                  className="px-2.5 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 transition"
-                >
-                  🔒 로그아웃
-                </button>
-                <button
-                  onClick={() => setIsShareModalOpen(true)}
-                  className="px-2.5 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
-                >
-                  📱 기기 연결
-                </button>
-                <button
-                  onClick={() => {
-                    setNewSchedule(prev => ({ ...prev, memberId: currentMemberId, date: selectedDate }));
-                    setIsAddModalOpen(true);
-                  }}
-                  className="px-3 py-1.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition active:scale-95"
-                >
-                  + 일정 추가
-                </button>
+              <div class="flex items-center space-x-1.5 sm:space-x-2">
+                <button onclick="handleLogout();" class="px-2.5 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 transition">🔒 로그아웃</button>
+                <button onclick="state.isDbModalOpen=true; render();" class="px-2.5 py-1.5 text-xs font-bold rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition">📱 기기 연결 / DB 설정</button>
+                <button onclick="state.newSchedule.memberId='${state.currentMemberId}'; state.newSchedule.date='${state.selectedDate}'; state.isAddModalOpen=true; render();" class="px-3 py-1.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition active:scale-95">+ 일정 추가</button>
               </div>
             </div>
 
-            {/* 👤 접속 프로필 상단 바 */}
-            <div className="bg-slate-100/80 border-t border-slate-200/60 px-3.5 py-1.5">
-              <div className="max-w-5xl mx-auto flex items-center justify-between text-xs">
-                <div className="flex items-center space-x-2">
-                  <span className="font-bold text-slate-500">현재 접속:</span>
-                  <span className={`px-2.5 py-1 rounded-xl font-bold flex items-center space-x-1 ${currentMember.badgeBg}`}>
-                    <span>{currentMember.avatar}</span>
-                    <span>{currentMember.name} ({currentMember.role})</span>
+            <div class="bg-slate-100/80 border-t border-slate-200/60 px-3.5 py-1.5">
+              <div class="max-w-5xl mx-auto flex items-center justify-between text-xs">
+                <div class="flex items-center space-x-2">
+                  <span class="font-bold text-slate-500">현재 접속:</span>
+                  <span class="px-2.5 py-1 rounded-xl font-bold flex items-center space-x-1 ${currentMember.badgeBg}">
+                    <span>${currentMember.avatar}</span>
+                    <span>${currentMember.name} (${currentMember.role})</span>
                   </span>
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="font-bold text-indigo-600 hover:underline text-[11px]"
-                >
-                  프로필 변경 ➔
-                </button>
+                <button onclick="handleLogout();" class="font-bold text-indigo-600 hover:underline text-[11px]">프로필 변경 ➔</button>
               </div>
             </div>
           </header>
 
-          {/* 🌟 메인 컨텐츠 영역 */}
-          <main className="max-w-5xl mx-auto px-3.5 sm:px-4 py-4 sm:py-5 w-full space-y-4 sm:space-y-6 flex-1">
-            
-            {/* 📢 가족 실시간 한 줄 현황 보드 */}
-            <section className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center space-x-2">
-                  <span className="text-base">📢</span>
-                  <h2 className="text-sm sm:text-base font-extrabold text-slate-900">가족 실시간 한 줄 현황</h2>
+          <main class="max-w-5xl mx-auto px-3.5 sm:px-4 py-4 sm:py-5 w-full space-y-4 sm:space-y-6 flex-1">
+            <!-- 📢 가족 실시간 한 줄 현황 -->
+            <section class="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200 shadow-sm">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-2">
+                  <span class="text-base">📢</span>
+                  <h2 class="text-sm sm:text-base font-extrabold text-slate-900">가족 실시간 한 줄 현황</h2>
                 </div>
-                <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                  실시간 연동 중
-                </span>
+                <span class="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">실시간 연동 중</span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-                {FAMILY_MEMBERS.map((m) => {
-                  const msgData = statusMessages[m.id];
-                  const isMe = currentMemberId === m.id;
-                  const hasMessage = msgData && msgData.text;
-
-                  return (
-                    <div
-                      key={m.id}
-                      className={`p-2.5 sm:p-3 rounded-2xl border transition-all flex flex-col justify-between ${
-                        isMe ? `${m.cardBg} ring-2 ${m.ringColor} shadow-xs` : 'bg-slate-50/70 border-slate-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center space-x-1">
-                          <span className="text-base">{m.avatar}</span>
-                          <span className="text-xs font-bold text-slate-800">{m.name}</span>
-                          {isMe && <span className="text-[9px] bg-slate-900 text-white px-1 py-0.2 rounded font-bold">나</span>}
+              <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+                ${FAMILY_MEMBERS.map(m => {
+                  const msgData = state.statusMessages[m.id];
+                  const isMe = state.currentMemberId === m.id;
+                  return `
+                    <div class="p-2.5 sm:p-3 rounded-2xl border transition-all flex flex-col justify-between ${isMe ? `${m.cardBg} ring-2 ${m.ringColor} shadow-xs` : 'bg-slate-50/70 border-slate-200'}">
+                      <div class="flex items-center justify-between mb-1.5">
+                        <div class="flex items-center space-x-1">
+                          <span class="text-base">${m.avatar}</span>
+                          <span class="text-xs font-bold text-slate-800">${m.name}</span>
+                          ${isMe ? `<span class="text-[9px] bg-slate-900 text-white px-1 py-0.2 rounded font-bold">나</span>` : ''}
                         </div>
-                        <span className="text-[10px] text-slate-400">
-                          {msgData?.updatedAt ? formatRelativeTime(msgData.updatedAt) : '미등록'}
-                        </span>
+                        <span class="text-[10px] text-slate-400">${msgData?.updatedAt ? formatRelativeTime(msgData.updatedAt) : '미등록'}</span>
                       </div>
-                      <div className="bg-white rounded-xl p-2 border border-slate-200/60 min-h-[46px] flex items-center">
-                        {hasMessage ? (
-                          <div className="flex items-start space-x-1 w-full">
-                            <span className="text-sm shrink-0">{msgData.emoji || '💬'}</span>
-                            <span className="text-xs font-semibold text-slate-800 leading-snug line-clamp-2">
-                              {msgData.text}
-                            </span>
+                      <div class="bg-white rounded-xl p-2 border border-slate-200/60 min-h-[46px] flex items-center">
+                        ${msgData?.text ? `
+                          <div class="flex items-start space-x-1 w-full">
+                            <span class="text-sm shrink-0">${msgData.emoji || '💬'}</span>
+                            <span class="text-xs font-semibold text-slate-800 leading-snug line-clamp-2">${msgData.text}</span>
                           </div>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic">상태를 남겨주세요!</span>
-                        )}
+                        ` : `<span class="text-[11px] text-slate-400 italic">상태를 남겨주세요!</span>`}
                       </div>
                     </div>
-                  );
-                })}
+                  `;
+                }).join('')}
               </div>
 
-              {/* 빠른 상태 전송 칩 */}
-              <div className="mt-3 pt-3 border-t border-slate-100">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-bold text-slate-600">
-                    ⚡ {currentMember.avatar} {currentMember.name}의 빠른 상태 전송:
-                  </span>
-                  <span className="text-[10px] text-slate-400">터치 시 즉시 공유</span>
+              <div class="mt-3 pt-3 border-t border-slate-100">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-[11px] font-bold text-slate-600">⚡ ${currentMember.avatar} ${currentMember.name}의 빠른 상태 전송:</span>
+                  <span class="text-[10px] text-slate-400">터치 시 즉시 공유</span>
                 </div>
-                <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-1">
-                  {QUICK_STATUS_PRESETS.map((preset, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => sendStatusMessage(preset.text, preset.emoji)}
-                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 border border-slate-200 text-xs font-bold text-slate-700 transition active:scale-95 shrink-0"
-                    >
-                      {preset.text}
-                    </button>
-                  ))}
+                <div class="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-1">
+                  ${QUICK_STATUS_PRESETS.map((preset) => `
+                    <button onclick="sendStatusMessage('${preset.text}', '${preset.emoji}')" class="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 border border-slate-200 text-xs font-bold text-slate-700 transition active:scale-95 shrink-0">${preset.text}</button>
+                  `).join('')}
                 </div>
               </div>
 
-              <form onSubmit={(e) => { e.preventDefault(); sendStatusMessage(myStatusInput, myEmoji); }} className="mt-2 flex items-center space-x-1.5">
-                <input
-                  type="text"
-                  value={myStatusInput}
-                  onChange={(e) => setMyStatusInput(e.target.value)}
-                  placeholder="직접 입력: 예) 5분 뒤에 도착해요~"
-                  className="flex-1 text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
-                />
-                <button
-                  type="submit"
-                  className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shrink-0 transition"
-                >
-                  공유
-                </button>
+              <form onsubmit="event.preventDefault(); sendStatusMessage(state.myStatusInput, state.myEmoji);" class="mt-2 flex items-center space-x-1.5">
+                <input type="text" value="${state.myStatusInput}" oninput="state.myStatusInput=this.value;" placeholder="직접 입력: 예) 5분 뒤에 도착해요~" class="flex-1 text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white" />
+                <button type="submit" class="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shrink-0 transition">공유</button>
               </form>
             </section>
 
-            {/* 🗓️ 일정 보기 선택 (오늘 타임라인 / 주간 보기 / 월간 달력) */}
-            <section className="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
-                  <button
-                    onClick={() => setViewMode('today')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                      viewMode === 'today' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
-                    }`}
-                  >
-                    📋 오늘 일정
-                  </button>
-                  <button
-                    onClick={() => setViewMode('week')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                      viewMode === 'week' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
-                    }`}
-                  >
-                    📅 주간 보기
-                  </button>
-                  <button
-                    onClick={() => setViewMode('month')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                      viewMode === 'month' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
-                    }`}
-                  >
-                    🗓️ 월간 달력
-                  </button>
+            <!-- 🗓️ 일정 보기 선택 -->
+            <section class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-xs space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
+                  <button onclick="state.viewMode='today'; render();" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${state.viewMode === 'today' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}">📋 오늘 일정</button>
+                  <button onclick="state.viewMode='week'; render();" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${state.viewMode === 'week' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}">📅 주간 보기</button>
+                  <button onclick="state.viewMode='month'; render();" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${state.viewMode === 'month' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}">🗓️ 월간 달력</button>
                 </div>
-
-                <div className="text-xs font-bold text-slate-600">
-                  선택일: <span className="text-indigo-600">{selectedDate}</span>
-                </div>
+                <div class="text-xs font-bold text-slate-600">선택일: <span class="text-indigo-600">${state.selectedDate}</span></div>
               </div>
 
-              {/* 주간 바 뷰 */}
-              {viewMode === 'week' && (
-                <div className="grid grid-cols-7 gap-1 pt-1">
-                  {weekDays.map((w) => {
-                    const isSelected = w.dateStr === selectedDate;
-                    const count = schedules.filter(s => s.date === w.dateStr).length;
-                    return (
-                      <button
-                        key={w.dateStr}
-                        onClick={() => setSelectedDate(w.dateStr)}
-                        className={`py-2 px-1 rounded-xl text-center transition flex flex-col items-center justify-center ${
-                          isSelected
-                            ? 'bg-indigo-600 text-white font-bold shadow-md'
-                            : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/60'
-                        }`}
-                      >
-                        <span className="text-[10px] opacity-80">{w.dayName}</span>
-                        <span className="text-sm font-extrabold">{w.dayNumber}</span>
-                        {count > 0 && (
-                          <span className={`w-1.5 h-1.5 rounded-full mt-0.5 ${isSelected ? 'bg-white' : 'bg-indigo-500'}`}></span>
-                        )}
+              ${state.viewMode === 'week' ? `
+                <div class="grid grid-cols-7 gap-1 pt-1">
+                  ${weekDays.map(w => {
+                    const isSel = w.dateStr === state.selectedDate;
+                    const cnt = state.schedules.filter(s => s.date === w.dateStr).length;
+                    return `
+                      <button onclick="state.selectedDate='${w.dateStr}'; render();" class="py-2 px-1 rounded-xl text-center transition flex flex-col items-center justify-center ${isSel ? 'bg-indigo-600 text-white font-bold shadow-md' : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/60'}">
+                        <span class="text-[10px] opacity-80">${w.dayName}</span>
+                        <span class="text-sm font-extrabold">${w.dayNumber}</span>
+                        ${cnt > 0 ? `<span class="w-1.5 h-1.5 rounded-full mt-0.5 ${isSel ? 'bg-white' : 'bg-indigo-500'}"></span>` : ''}
                       </button>
-                    );
-                  })}
+                    `;
+                  }).join('')}
                 </div>
-              )}
+              ` : ''}
 
-              {/* 🗓️ 풀 월간 달력 뷰 */}
-              {viewMode === 'month' && (
-                <div className="space-y-2 pt-1 border-t border-slate-100">
-                  <div className="flex items-center justify-between px-2">
-                    <button
-                      onClick={() => {
-                        setCalendarMonth(prev => {
-                          const m = prev.month - 1;
-                          if (m < 1) return { year: prev.year - 1, month: 12 };
-                          return { year: prev.year, month: m };
-                        });
-                      }}
-                      className="px-2 py-1 bg-slate-100 rounded-lg text-xs font-bold"
-                    >
-                      ◀ 이전달
-                    </button>
-                    <span className="text-sm font-extrabold text-slate-800">
-                      {calendarMonth.year}년 {calendarMonth.month}월
-                    </span>
-                    <button
-                      onClick={() => {
-                        setCalendarMonth(prev => {
-                          const m = prev.month + 1;
-                          if (m > 12) return { year: prev.year + 1, month: 1 };
-                          return { year: prev.year, month: m };
-                        });
-                      }}
-                      className="px-2 py-1 bg-slate-100 rounded-lg text-xs font-bold"
-                    >
-                      다음달 ▶
-                    </button>
+              ${state.viewMode === 'month' ? `
+                <div class="space-y-2 pt-1 border-t border-slate-100">
+                  <div class="flex items-center justify-between px-2">
+                    <button onclick="state.calendarMonth.month--; if(state.calendarMonth.month<1){state.calendarMonth.year--; state.calendarMonth.month=12;} render();" class="px-2 py-1 bg-slate-100 rounded-lg text-xs font-bold">◀ 이전달</button>
+                    <span class="text-sm font-extrabold text-slate-800">${year}년 ${month}월</span>
+                    <button onclick="state.calendarMonth.month++; if(state.calendarMonth.month>12){state.calendarMonth.year++; state.calendarMonth.month=1;} render();" class="px-2 py-1 bg-slate-100 rounded-lg text-xs font-bold">다음달 ▶</button>
                   </div>
-
-                  <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-slate-400 py-1">
-                    <span className="text-rose-500">일</span>
-                    <span>월</span>
-                    <span>화</span>
-                    <span>수</span>
-                    <span>목</span>
-                    <span>금</span>
-                    <span className="text-indigo-500">토</span>
+                  <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-slate-400 py-1">
+                    <span class="text-rose-500">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="text-indigo-500">토</span>
                   </div>
-
-                  <div className="grid grid-cols-7 gap-1">
-                    {monthCalendarDays.map((item, idx) => {
-                      if (!item.day) {
-                        return <div key={idx} className="h-9 rounded-lg bg-slate-50/40"></div>;
-                      }
-                      const isSelected = item.dateStr === selectedDate;
-                      const isToday = item.dateStr === getTodayString();
-                      const count = schedules.filter(s => s.date === item.dateStr).length;
-
-                      return (
-                        <button
-                          key={idx}
-                          onClick={() => setSelectedDate(item.dateStr)}
-                          className={`h-10 rounded-xl flex flex-col items-center justify-center relative text-xs font-bold transition ${
-                            isSelected
-                              ? 'bg-indigo-600 text-white shadow-md'
-                              : isToday
-                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-300'
-                              : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200/50'
-                          }`}
-                        >
-                          <span>{item.day}</span>
-                          {count > 0 && (
-                            <span className={`w-1.5 h-1.5 rounded-full mt-0.5 ${isSelected ? 'bg-white' : 'bg-emerald-500'}`}></span>
-                          )}
+                  <div class="grid grid-cols-7 gap-1">
+                    ${monthDays.map(item => {
+                      if (!item.day) return `<div class="h-9 rounded-lg bg-slate-50/40"></div>`;
+                      const isSel = item.dateStr === state.selectedDate;
+                      const isTod = item.dateStr === getTodayString();
+                      const cnt = state.schedules.filter(s => s.date === item.dateStr).length;
+                      return `
+                        <button onclick="state.selectedDate='${item.dateStr}'; render();" class="h-10 rounded-xl flex flex-col items-center justify-center relative text-xs font-bold transition ${isSel ? 'bg-indigo-600 text-white shadow-md' : isTod ? 'bg-indigo-50 text-indigo-700 border border-indigo-300' : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200/50'}">
+                          <span>${item.day}</span>
+                          ${cnt > 0 ? `<span class="w-1.5 h-1.5 rounded-full mt-0.5 ${isSel ? 'bg-white' : 'bg-emerald-500'}"></span>` : ''}
                         </button>
-                      );
-                    })}
+                      `;
+                    }).join('')}
                   </div>
                 </div>
-              )}
+              ` : ''}
             </section>
 
-            {/* 📊 오늘 달성률 Dashboard */}
-            <section className="bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 text-white rounded-3xl p-4 sm:p-6 shadow-xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => {
-                      const d = new Date(selectedDate);
-                      d.setDate(d.getDate() - 1);
-                      setSelectedDate(d.toISOString().split('T')[0]);
-                    }}
-                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition"
-                  >
-                    ◀
-                  </button>
-                  <span className="text-sm sm:text-base font-extrabold">
-                    {selectedDate} ({new Date(selectedDate).toLocaleDateString('ko-KR', { weekday: 'short' })})
-                  </span>
-                  <button
-                    onClick={() => {
-                      const d = new Date(selectedDate);
-                      d.setDate(d.getDate() + 1);
-                      setSelectedDate(d.toISOString().split('T')[0]);
-                    }}
-                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition"
-                  >
-                    ▶
-                  </button>
+            <!-- 📊 오늘 달성률 Dashboard -->
+            <section class="bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 text-white rounded-3xl p-4 sm:p-6 shadow-xl">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                <div class="flex items-center space-x-2">
+                  <button onclick="const d=new Date(state.selectedDate); d.setDate(d.getDate()-1); state.selectedDate=d.toISOString().split('T')[0]; render();" class="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition">◀</button>
+                  <span class="text-sm sm:text-base font-extrabold">${state.selectedDate} (${new Date(state.selectedDate).toLocaleDateString('ko-KR', { weekday: 'short' })})</span>
+                  <button onclick="const d=new Date(state.selectedDate); d.setDate(d.getDate()+1); state.selectedDate=d.toISOString().split('T')[0]; render();" class="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition">▶</button>
                 </div>
-
-                <div className="flex items-center space-x-3">
-                  <span className="text-xs text-indigo-200">선택일 전체 달성률</span>
-                  <span className="text-xl font-black text-emerald-400">{stats.percentage}%</span>
-                  <span className="text-xs text-slate-300">({stats.completed}/{stats.total})</span>
+                <div class="flex items-center space-x-3">
+                  <span class="text-xs text-indigo-200">선택일 전체 달성률</span>
+                  <span class="text-xl font-black text-emerald-400">${mainPercentage}%</span>
+                  <span class="text-xs text-slate-300">(${completedCount}/${totalCount})</span>
                 </div>
               </div>
-
-              <div className="mt-3">
-                <div className="w-full bg-white/10 h-2.5 rounded-full overflow-hidden p-0.5">
-                  <div
-                    className="bg-gradient-to-r from-indigo-400 via-emerald-400 to-teal-300 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${stats.percentage}%` }}
-                  ></div>
+              <div class="mt-3">
+                <div class="w-full bg-white/10 h-2.5 rounded-full overflow-hidden p-0.5">
+                  <div class="bg-gradient-to-r from-indigo-400 via-emerald-400 to-teal-300 h-full rounded-full transition-all duration-500" style="width: ${mainPercentage}%"></div>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-white/10">
-                {stats.memberStats.map((m) => (
-                  <div key={m.id} className="bg-white/5 rounded-xl p-2 border border-white/10">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-slate-200">{m.avatar} {m.name}</span>
-                      <span className="text-xs font-extrabold text-indigo-300">{m.percentage}%</span>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-white/10">
+                ${memberStats.map(m => `
+                  <div class="bg-white/5 rounded-xl p-2 border border-white/10">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-xs font-bold text-slate-200">${m.avatar} ${m.name}</span>
+                      <span class="text-xs font-extrabold text-indigo-300">${m.percentage}%</span>
                     </div>
-                    <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
-                      <div className={`${m.barColor} h-full rounded-full`} style={{ width: `${m.percentage}%` }}></div>
+                    <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                      <div class="${m.barColor} h-full rounded-full" style="width: ${m.percentage}%"></div>
                     </div>
                   </div>
-                ))}
+                `).join('')}
               </div>
             </section>
 
-            {/* 📋 일정 목록 및 상태 토글 */}
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pb-0.5">
-                  <button
-                    onClick={() => setFilterMemberId('all')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 ${
-                      filterMemberId === 'all' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200'
-                    }`}
-                  >
-                    👨‍👩‍👧‍👦 전체 ({schedules.filter(s => s.date === selectedDate).length})
-                  </button>
-                  {FAMILY_MEMBERS.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => setFilterMemberId(m.id)}
-                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
-                        filterMemberId === m.id ? m.activeBg : 'bg-white text-slate-600 border border-slate-200'
-                      }`}
-                    >
-                      <span>{m.avatar}</span>
-                      <span>{m.name}</span>
+            <!-- 📋 일정 목록 -->
+            <section class="space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                  <button onclick="state.filterMemberId='all'; render();" class="px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 ${state.filterMemberId === 'all' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200'}">👨‍👩‍👧‍👦 전체 (${todaySchedules.length})</button>
+                  ${FAMILY_MEMBERS.map(m => `
+                    <button onclick="state.filterMemberId='${m.id}'; render();" class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${state.filterMemberId === m.id ? m.activeBg : 'bg-white text-slate-600 border border-slate-200'}">
+                      <span>${m.avatar}</span>
+                      <span>${m.name}</span>
                     </button>
-                  ))}
+                  `).join('')}
                 </div>
               </div>
 
-              {isLoading ? (
-                <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 space-y-2">
-                  <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                  <p className="text-xs text-slate-500">실시간 데이터 수신 중...</p>
+              ${filtered.length === 0 ? `
+                <div class="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300 space-y-2">
+                  <div class="text-2xl">🎈</div>
+                  <p class="text-xs text-slate-500 font-bold">선택하신 날짜에 등록된 일정이 없습니다.</p>
                 </div>
-              ) : filteredSchedules.length === 0 ? (
-                <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300 space-y-2">
-                  <div className="text-2xl">🎈</div>
-                  <p className="text-xs text-slate-500 font-bold">선택하신 날짜에 등록된 일정이 없습니다.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {filteredSchedules.map((item) => {
+              ` : `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  ${filtered.map(item => {
                     const member = FAMILY_MEMBERS.find(m => m.id === item.memberId) || FAMILY_MEMBERS[0];
                     const category = CATEGORIES.find(c => c.id === item.category) || CATEGORIES[0];
                     const isCompleted = item.status === 'completed';
                     const isInProgress = item.status === 'in_progress';
                     const isPending = item.status === 'pending' || !item.status;
 
-                    return (
-                      <div
-                        key={item.id}
-                        className={`bg-white rounded-2xl p-3.5 sm:p-4 border shadow-sm flex flex-col justify-between ${
-                          isCompleted ? 'bg-slate-50/70 opacity-90' : isInProgress ? 'border-indigo-300 ring-2 ring-indigo-500/10' : 'border-slate-200'
-                        }`}
-                      >
+                    return `
+                      <div class="bg-white rounded-2xl p-3.5 sm:p-4 border shadow-sm flex flex-col justify-between ${isCompleted ? 'bg-slate-50/70 opacity-90' : isInProgress ? 'border-indigo-300 ring-2 ring-indigo-500/10' : 'border-slate-200'}">
                         <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center space-x-1.5">
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${member.badgeBg}`}>
-                                {member.avatar} {member.name}
-                              </span>
-                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${category.color}`}>
-                                {category.name}
-                              </span>
+                          <div class="flex items-center justify-between mb-1.5">
+                            <div class="flex items-center space-x-1.5">
+                              <span class="px-2 py-0.5 rounded-full text-xs font-bold border ${member.badgeBg}">${member.avatar} ${member.name}</span>
+                              <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold border ${category.color}">${category.name}</span>
                             </div>
-                            <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg">
-                              ⏰ {item.startTime} ~ {item.endTime}
-                            </span>
+                            <span class="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg">⏰ ${item.startTime} ~ ${item.endTime}</span>
                           </div>
-
-                          <h3 className={`text-sm sm:text-base font-bold my-1.5 ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-                            {item.title}
-                          </h3>
-                          {item.notes && (
-                            <p className="text-xs text-slate-500 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                              💬 {item.notes}
-                            </p>
-                          )}
+                          <h3 class="text-sm sm:text-base font-bold my-1.5 ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-900'}">${item.title}</h3>
+                          ${item.notes ? `<p class="text-xs text-slate-500 bg-slate-50 p-1.5 rounded-lg border border-slate-100">💬 ${item.notes}</p>` : ''}
                         </div>
 
-                        <div className="mt-3 pt-2.5 border-t border-slate-100 space-y-2">
-                          <div className="flex items-center justify-between gap-1">
-                            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
-                              <button
-                                onClick={() => handleStatusChange(item.id, 'pending')}
-                                className={`px-2 py-1 rounded-lg text-xs font-bold ${isPending ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500'}`}
-                              >
-                                대기
-                              </button>
-                              <button
-                                onClick={() => handleStatusChange(item.id, 'in_progress')}
-                                className={`px-2 py-1 rounded-lg text-xs font-bold ${isInProgress ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}
-                              >
-                                진행 중
-                              </button>
-                              <button
-                                onClick={() => handleStatusChange(item.id, 'completed')}
-                                className={`px-2 py-1 rounded-lg text-xs font-bold ${isCompleted ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}
-                              >
-                                완료
-                              </button>
+                        <div class="mt-3 pt-2.5 border-t border-slate-100 space-y-2">
+                          <div class="flex items-center justify-between gap-1">
+                            <div class="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+                              <button onclick="handleStatusChange('${item.id}', 'pending')" class="px-2 py-1 rounded-lg text-xs font-bold ${isPending ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500'}">대기</button>
+                              <button onclick="handleStatusChange('${item.id}', 'in_progress')" class="px-2 py-1 rounded-lg text-xs font-bold ${isInProgress ? 'bg-indigo-600 text-white' : 'text-slate-500'}">진행 중</button>
+                              <button onclick="handleStatusChange('${item.id}', 'completed')" class="px-2 py-1 rounded-lg text-xs font-bold ${isCompleted ? 'bg-emerald-600 text-white' : 'text-slate-500'}">완료</button>
                             </div>
-                            <button
-                              onClick={() => handleDeleteSchedule(item.id)}
-                              className="text-slate-400 hover:text-rose-600 p-1 text-xs"
-                            >
-                              삭제
-                            </button>
+                            <button onclick="handleDeleteSchedule('${item.id}')" class="text-slate-400 hover:text-rose-600 p-1 text-xs">삭제</button>
                           </div>
 
-                          {/* 칭찬 스티커 */}
-                          <div className="flex items-center justify-between pt-0.5">
-                            <div className="flex items-center space-x-1">
-                              {STICKER_ICONS.map((st) => {
-                                const count = item.stickers?.[st.key] || 0;
-                                return (
-                                  <button
-                                    key={st.key}
-                                    onClick={() => handleSendSticker(item.id, st.key)}
-                                    className={`px-1.5 py-0.5 rounded-full text-xs border ${count > 0 ? 'bg-amber-50 border-amber-200 text-amber-900 font-bold' : 'bg-white text-slate-500'}`}
-                                  >
-                                    {st.emoji} {count > 0 && count}
-                                  </button>
-                                );
-                              })}
+                          <div class="flex items-center justify-between pt-0.5">
+                            <div class="flex items-center space-x-1">
+                              ${STICKER_ICONS.map(st => {
+                                const cnt = item.stickers?.[st.key] || 0;
+                                return `<button onclick="handleSendSticker('${item.id}', '${st.key}')" class="px-1.5 py-0.5 rounded-full text-xs border ${cnt > 0 ? 'bg-amber-50 border-amber-200 text-amber-900 font-bold' : 'bg-white text-slate-500'}">${st.emoji} ${cnt > 0 ? cnt : ''}</button>`;
+                              }).join('')}
                             </div>
-                            {item.lastCheeredBy && (
-                              <span className="text-[10px] text-slate-400 italic">
-                                {item.lastCheeredBy} 응원
-                              </span>
-                            )}
+                            ${item.lastCheeredBy ? `<span class="text-[10px] text-slate-400 italic">${item.lastCheeredBy} 응원</span>` : ''}
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
+                    `;
+                  }).join('')}
                 </div>
-              )}
+              `}
             </section>
           </main>
 
-          {/* ➕ 1단계: 새 일정 입력 모달 */}
-          {isAddModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-slate-900/60 backdrop-blur-xs">
-              <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                  <h3 className="text-base font-bold">새 일정 등록</h3>
-                  <button onClick={() => setIsAddModalOpen(false)} className="w-7 h-7 rounded-full bg-slate-100 text-xs font-bold">✕</button>
+          <!-- ➕ 1단계: 입력 모달 -->
+          ${state.isAddModalOpen ? `
+            <div class="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-slate-900/60 backdrop-blur-xs">
+              <div class="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-3">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h3 class="text-base font-bold">새 일정 등록</h3>
+                  <button onclick="state.isAddModalOpen=false; render();" class="w-7 h-7 rounded-full bg-slate-100 text-xs font-bold">✕</button>
                 </div>
-                <form onSubmit={handleOpenConfirmModal} className="space-y-3 text-xs">
+                <form onsubmit="event.preventDefault(); if(!state.newSchedule.title.trim()) return showToast('제목을 입력하세요!'); state.isConfirmModalOpen=true; render();" class="space-y-3 text-xs">
                   <div>
-                    <label className="block font-bold mb-1">담당 가족</label>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {FAMILY_MEMBERS.map((m) => (
-                        <button
-                          type="button"
-                          key={m.id}
-                          onClick={() => setNewSchedule({ ...newSchedule, memberId: m.id })}
-                          className={`p-1.5 rounded-xl border text-center ${newSchedule.memberId === m.id ? m.activeBg : 'bg-white'}`}
-                        >
-                          <div className="text-lg">{m.avatar}</div>
-                          <div>{m.name}</div>
+                    <label class="block font-bold mb-1">담당 가족</label>
+                    <div class="grid grid-cols-4 gap-1.5">
+                      ${FAMILY_MEMBERS.map(m => `
+                        <button type="button" onclick="state.newSchedule.memberId='${m.id}'; render();" class="p-1.5 rounded-xl border text-center ${state.newSchedule.memberId === m.id ? m.activeBg : 'bg-white'}">
+                          <div class="text-lg">${m.avatar}</div>
+                          <div>${m.name}</div>
                         </button>
-                      ))}
+                      `).join('')}
                     </div>
                   </div>
                   <div>
-                    <label className="block font-bold mb-1">일정 제목 *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newSchedule.title}
-                      onChange={(e) => setNewSchedule({ ...newSchedule, title: e.target.value })}
-                      placeholder="예: 영어 학원, 태권도 레슨"
-                      className="w-full px-3 py-2 bg-slate-50 border rounded-xl"
-                    />
+                    <label class="block font-bold mb-1">일정 제목 *</label>
+                    <input type="text" required value="${state.newSchedule.title}" oninput="state.newSchedule.title=this.value" placeholder="예: 영어 학원, 태권도 레슨" class="w-full px-3 py-2 bg-slate-50 border rounded-xl" />
                   </div>
                   <div>
-                    <label className="block font-bold mb-1">날짜</label>
-                    <input
-                      type="date"
-                      value={newSchedule.date}
-                      onChange={(e) => setNewSchedule({ ...newSchedule, date: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border rounded-xl"
-                    />
+                    <label class="block font-bold mb-1">날짜</label>
+                    <input type="date" value="${state.newSchedule.date}" onchange="state.newSchedule.date=this.value" class="w-full px-3 py-2 bg-slate-50 border rounded-xl" />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div class="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block font-bold mb-1">시작 시간</label>
-                      <input
-                        type="time"
-                        value={newSchedule.startTime}
-                        onChange={(e) => setNewSchedule({ ...newSchedule, startTime: e.target.value })}
-                        className="w-full px-2 py-1.5 bg-slate-50 border rounded-xl"
-                      />
+                      <label class="block font-bold mb-1">시작 시간</label>
+                      <input type="time" value="${state.newSchedule.startTime}" onchange="state.newSchedule.startTime=this.value" class="w-full px-2 py-1.5 bg-slate-50 border rounded-xl" />
                     </div>
                     <div>
-                      <label className="block font-bold mb-1">종료 시간</label>
-                      <input
-                        type="time"
-                        value={newSchedule.endTime}
-                        onChange={(e) => setNewSchedule({ ...newSchedule, endTime: e.target.value })}
-                        className="w-full px-2 py-1.5 bg-slate-50 border rounded-xl"
-                      />
+                      <label class="block font-bold mb-1">종료 시간</label>
+                      <input type="time" value="${state.newSchedule.endTime}" onchange="state.newSchedule.endTime=this.value" class="w-full px-2 py-1.5 bg-slate-50 border rounded-xl" />
                     </div>
                   </div>
-                  <div className="pt-2 flex items-center space-x-2">
-                    <button type="button" onClick={() => setIsAddModalOpen(false)} className="flex-1 py-2 rounded-xl border font-bold">취소</button>
-                    <button type="submit" className="flex-1 py-2 rounded-xl bg-indigo-600 text-white font-bold">다음 (확인)</button>
+                  <div class="pt-2 flex items-center space-x-2">
+                    <button type="button" onclick="state.isAddModalOpen=false; render();" class="flex-1 py-2 rounded-xl border font-bold">취소</button>
+                    <button type="submit" class="flex-1 py-2 rounded-xl bg-indigo-600 text-white font-bold">다음 (확인)</button>
                   </div>
                 </form>
               </div>
             </div>
-          )}
+          ` : ''}
 
-          {/* 🛑 2단계: 등록 확인 및 중복 방지 모달 */}
-          {isConfirmModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-slate-950/70 backdrop-blur-xs">
-              <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
-                <div className="text-center space-y-1">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-2xl mx-auto">
-                    ❓
-                  </div>
-                  <h3 className="text-base font-extrabold text-slate-900">일정을 등록하시겠습니까?</h3>
-                  <p className="text-xs text-slate-500">아래 내용으로 온 가족에게 공유됩니다.</p>
+          <!-- ➕ 2단계: 중복 방지 등록 확인 모달 -->
+          ${state.isConfirmModalOpen ? `
+            <div class="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-slate-900/80 backdrop-blur-xs">
+              <div class="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 text-center">
+                <div class="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center text-xl font-bold mx-auto">📌</div>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900">일정을 등록하시겠습니까?</h3>
+                  <p class="text-xs text-slate-500 mt-1">온 가족에게 실시간으로 등록 및 수신됩니다.</p>
                 </div>
-
-                <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200 text-xs space-y-1.5">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-bold">담당자:</span>
-                    <span className="font-extrabold text-slate-800">
-                      {(FAMILY_MEMBERS.find(m => m.id === newSchedule.memberId) || FAMILY_MEMBERS[0]).name}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-bold">제목:</span>
-                    <span className="font-extrabold text-indigo-600">{newSchedule.title}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-bold">날짜:</span>
-                    <span className="font-bold text-slate-700">{newSchedule.date}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-bold">시간:</span>
-                    <span className="font-bold text-slate-700">{newSchedule.startTime} ~ {newSchedule.endTime}</span>
-                  </div>
+                <div class="bg-slate-50 p-3 rounded-2xl border text-left text-xs space-y-1">
+                  <div><b>담당:</b> ${FAMILY_MEMBERS.find(m => m.id === state.newSchedule.memberId)?.name}</div>
+                  <div><b>제목:</b> ${state.newSchedule.title}</div>
+                  <div><b>시간:</b> ${state.newSchedule.date} (${state.newSchedule.startTime} ~ ${state.newSchedule.endTime})</div>
                 </div>
-
-                <div className="flex items-center space-x-2 pt-1">
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => setIsConfirmModalOpen(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-bold text-xs"
-                  >
-                    돌아가기
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={handleExecuteCreateSchedule}
-                    className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-400 text-white font-extrabold text-xs shadow-md transition active:scale-95 flex items-center justify-center space-x-1"
-                  >
-                    {isSubmitting ? (
-                      <span>등록 처리 중...</span>
-                    ) : (
-                      <span>확인 및 등록 🚀</span>
-                    )}
+                <div class="flex items-center space-x-2 pt-1">
+                  <button onclick="state.isConfirmModalOpen=false; render();" class="flex-1 py-2.5 rounded-xl border font-bold text-xs text-slate-600">수정하기</button>
+                  <button onclick="handleExecuteCreateSchedule()" ${state.isSubmitting ? 'disabled' : ''} class="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs shadow-md ${state.isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}">
+                    ${state.isSubmitting ? '등록 중...' : '확인 (등록 저장)'}
                   </button>
                 </div>
               </div>
             </div>
-          )}
+          ` : ''}
 
-          {/* 📲 기기 연결 안내 모달 */}
-          {isShareModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-slate-900/60 backdrop-blur-xs">
-              <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-3">
-                <h3 className="text-base font-bold">📱 온 가족 스마트폰 연결</h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  스마트폰 브라우저 주소창에 <code>https://ittechkjh.github.io/familiy/</code> 주소를 입력하여 들어오시면 실시간으로 연결됩니다!
-                </p>
-                <button onClick={() => setIsShareModalOpen(false)} className="w-full py-2 rounded-xl bg-slate-900 text-white font-bold text-xs">
-                  확인 완료
-                </button>
+          <!-- 📲 기기 연결 및 클라우드 DB 설정 안내 모달 -->
+          ${state.isDbModalOpen ? `
+            <div class="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-slate-900/70 backdrop-blur-xs">
+              <div class="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h3 class="text-base font-extrabold text-slate-900 flex items-center space-x-1.5">☁️ 온 가족 실시간 DB 연결 설정</h3>
+                  <button onclick="state.isDbModalOpen=false; render();" class="text-slate-400 hover:text-slate-600 font-bold text-sm">✕</button>
+                </div>
+
+                <div class="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 p-3.5 rounded-2xl space-y-2">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-extrabold text-indigo-900">📱 가족 자동 연동 스마트 링크</span>
+                    <span class="text-[10px] bg-indigo-600 text-white px-1.5 py-0.5 rounded font-bold">추천</span>
+                  </div>
+                  <p class="text-[11px] text-indigo-800 leading-snug">
+                    아빠가 아래에 DB 설정을 완료한 후 링크를 복사해 가족 카톡에 보내시면, 엄마와 아이들은 링크 터치 한 번으로 즉시 실시간 동기화됩니다!
+                  </p>
+                  <button onclick="handleCopySmartFamilyLink()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md transition active:scale-95">📱 가족 카톡 자동 연동 링크 복사하기</button>
+                </div>
+
+                <div class="space-y-2.5 text-xs text-slate-600 border-t border-slate-100 pt-3">
+                  <h4 class="font-bold text-slate-800 flex items-center">🔑 1분 만에 끝나는 무료 Firebase DB 설정</h4>
+                  <ol class="list-decimal list-inside space-y-1 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                    <li><b>console.firebase.google.com</b> 접속 후 구글 로그인</li>
+                    <li><b>프로젝트 추가</b> ➔ 이름 작성 ➔ 생성 (100% 무료)</li>
+                    <li>메인 화면의 <b>&lt;/&gt; (웹 앱)</b> 아이콘 클릭 ➔ 앱 등록</li>
+                    <li>화면에 나오는 <code>const firebaseConfig = &#123; ... &#125;;</code> 코드 전체 복사</li>
+                  </ol>
+
+                  <form onsubmit="handleSaveFirebaseConfig(event)" class="space-y-2 pt-1">
+                    <label class="block text-[11px] font-bold text-slate-700">Firebase firebaseConfig JSON 붙여넣기:</label>
+                    <textarea rows="4" oninput="state.firebaseConfigInput=this.value" placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "...", ... }' class="w-full p-2.5 text-[11px] font-mono bg-slate-900 text-emerald-400 rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">${state.firebaseConfigInput}</textarea>
+                    <div class="flex items-center space-x-2 pt-1">
+                      <button type="button" onclick="state.isDbModalOpen=false; render();" class="flex-1 py-2 rounded-xl border border-slate-300 font-bold text-slate-600 text-xs">닫기</button>
+                      <button type="submit" class="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md">DB 설정 저장하기</button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
-          )}
+          ` : ''}
 
-          {/* 🔔 알림 토스트 */}
-          {toastMessage && (
-            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-3.5 py-2 rounded-2xl text-xs font-bold shadow-xl">
-              ✨ {toastMessage}
-            </div>
-          )}
+          <!-- 🔔 토스트 알림 -->
+          ${state.toastMessage ? `
+            <div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-3.5 py-2 rounded-2xl text-xs font-bold shadow-xl">✨ ${state.toastMessage}</div>
+          ` : ''}
         </div>
-      );
+      `;
     }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
+    // --- 4. 페이지 초기화 ---
+    window.onload = function() {
+      initFirebase();
+      render();
+    };
   </script>
 </body>
 </html>
