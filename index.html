@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>우리집 커넥트 - 온 가족 실시간 공유</title>
 
-  <!-- PWA & 스마트폰 앱 메타 태그 -->
+  <!-- PWA & 스마트폰 메타 태그 -->
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -30,7 +30,7 @@
   <style>
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    body { -webkit-tap-highlight-color: transparent; }
+    body { -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900 selection:bg-indigo-100 min-h-screen">
@@ -39,7 +39,7 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo, useRef } = React;
 
-    // GitHub Secret Scanning 우회를 위해 API 키를 분할 결합합니다.
+    // GitHub Secret Scanning 우회를 위한 API 키 분할 결합
     const DEFAULT_FIREBASE_CONFIG = {
       apiKey: ["AIzaSyC6OW9ACw4L", "YewILAcZlE3jxhNX5KzmS7w"].join(""),
       authDomain: "family-8fba4.firebaseapp.com",
@@ -58,6 +58,16 @@
     ];
 
     const KIDS_MEMBERS = FAMILY_MEMBERS.filter(m => !m.isParent);
+
+    // 엄격한 일정 관리 권한 규칙
+    // 아빠: 아빠, 주원, 주아 (엄마 불가)
+    // 엄마: 엄마, 주원, 주아 (아빠 불가)
+    // 아이들: 본인만
+    const canManageMemberSchedule = (currentMemberId, targetMemberId) => {
+      if (currentMemberId === 'dad') return targetMemberId !== 'mom';
+      if (currentMemberId === 'mom') return targetMemberId !== 'dad';
+      return currentMemberId === targetMemberId;
+    };
 
     const DEFAULT_CATEGORIES = [
       { id: 'school', name: '학교/학원', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
@@ -226,10 +236,9 @@
       );
     }
 
-    function StatusBoard({ currentMember, currentMemberId, statusMessages, sendStatusMessage, myEmoji, setMyEmoji, myStatusInput, setMyStatusInput, statusPresets, handleAddStatusPreset, handleDeleteStatusPreset }) {
+    function StatusBoard({ currentMember, currentMemberId, statusMessages, sendStatusMessage, myStatusInput, setMyStatusInput, statusPresets, handleAddStatusPreset, handleDeleteStatusPreset }) {
       const [isManageOpen, setIsManageOpen] = useState(false);
       const [newPresetText, setNewPresetText] = useState('');
-      const [newPresetEmoji, setNewPresetEmoji] = useState('🏫');
 
       return (
         <section className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200 shadow-sm space-y-3">
@@ -301,33 +310,18 @@
             {isManageOpen && (
               <div className="mb-2 p-2.5 bg-indigo-50/80 rounded-xl border border-indigo-200 space-y-2">
                 <div className="flex items-center space-x-1.5">
-                  <select
-                    value={newPresetEmoji}
-                    onChange={(e) => setNewPresetEmoji(e.target.value)}
-                    className="text-xs bg-white border border-slate-200 rounded-lg p-1.5 font-bold shrink-0"
-                  >
-                    <option value="🏫">🏫 학원</option>
-                    <option value="🚗">🚗 이동</option>
-                    <option value="🚀">🚀 열공</option>
-                    <option value="🏠">🏠 집</option>
-                    <option value="🍱">🍱 식사</option>
-                    <option value="😴">😴 휴식</option>
-                    <option value="⚽">⚽ 운동</option>
-                    <option value="🎨">🎨 취미</option>
-                    <option value="🛒">🛒 마트</option>
-                  </select>
                   <input
                     type="text"
                     value={newPresetText}
                     onChange={(e) => setNewPresetText(e.target.value)}
                     placeholder="새 문구 추가 (예: ⚽ 축구 교실 가고 있어요!)"
-                    className="flex-1 px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg"
+                    className="flex-1 px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => {
                       if (newPresetText.trim()) {
-                        handleAddStatusPreset(newPresetText.trim(), newPresetEmoji);
+                        handleAddStatusPreset(newPresetText.trim(), '💬');
                         setNewPresetText('');
                       }
                     }}
@@ -339,7 +333,7 @@
                 <div className="max-h-28 overflow-y-auto space-y-1 no-scrollbar">
                   {statusPresets.map((preset) => (
                     <div key={preset.id || preset.text} className="flex items-center justify-between text-[11px] bg-white p-1.5 rounded-lg border border-slate-200">
-                      <span className="font-bold text-slate-800">{preset.emoji} {preset.text}</span>
+                      <span className="font-bold text-slate-800">{preset.emoji ? `${preset.emoji} ` : ''}{preset.text}</span>
                       <button
                         type="button"
                         onClick={() => handleDeleteStatusPreset(preset)}
@@ -359,37 +353,24 @@
                 <button
                   key={preset.id || idx}
                   type="button"
-                  onClick={() => sendStatusMessage(preset.text, preset.emoji)}
+                  onClick={() => sendStatusMessage(preset.text, preset.emoji || '💬')}
                   className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 text-xs font-bold text-slate-700 transition active:scale-95 shrink-0 flex items-center space-x-1"
                 >
-                  <span>{preset.emoji}</span>
-                  <span className="text-[11px]">{preset.text.replace(/^[^\s]+\s/, '')}</span>
+                  {preset.emoji && <span>{preset.emoji}</span>}
+                  <span className="text-[11px]">{preset.text}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* 직접 입력 폼 */}
-          <form onSubmit={(e) => { e.preventDefault(); sendStatusMessage(myStatusInput, myEmoji); }} className="mt-2 flex items-center space-x-1.5">
-            <select
-              value={myEmoji}
-              onChange={(e) => setMyEmoji(e.target.value)}
-              className="text-xs bg-slate-100 border border-slate-200 rounded-xl px-2 py-2 font-bold focus:outline-none shrink-0"
-            >
-              <option value="😊">😊 차분</option>
-              <option value="🏫">🏫 학원</option>
-              <option value="🚗">🚗 이동</option>
-              <option value="🚀">🚀 열공</option>
-              <option value="🏠">🏠 집</option>
-              <option value="🍱">🍱 식사</option>
-              <option value="😴">😴 휴식</option>
-            </select>
+          {/* 직접 입력 폼 (드롭박스 완전 제거) */}
+          <form onSubmit={(e) => { e.preventDefault(); sendStatusMessage(myStatusInput, '💬'); }} className="mt-2 flex items-center space-x-1.5">
             <input
               type="text"
               value={myStatusInput}
               onChange={(e) => setMyStatusInput(e.target.value)}
               placeholder="직접 입력: 예) 5분 뒤에 도착해요~"
-              className="flex-1 text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+              className="flex-1 text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
             />
             <button
               type="submit"
@@ -402,7 +383,7 @@
       );
     }
 
-    function CalendarSection({ viewMode, setViewMode, selectedDate, setSelectedDate, weekDays, monthCalendarDays, currentMonth, setCurrentMonth, stats, filterMemberId, setFilterMemberId, schedules, filteredSchedules, currentMember, isParent, handleStatusChange, handleDeleteSchedule, setNewSchedule, setIsAddModalOpen, categories }) {
+    function CalendarSection({ viewMode, setViewMode, selectedDate, setSelectedDate, weekDays, monthCalendarDays, currentMonth, setCurrentMonth, stats, filterMemberId, setFilterMemberId, schedules, filteredSchedules, currentMember, isParent, handleStatusChange, handleOpenEditScheduleModal, handleDeleteSchedule, setNewSchedule, setIsAddModalOpen, categories }) {
       return (
         <div className="space-y-4">
           <section className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200 shadow-xs space-y-3">
@@ -665,7 +646,7 @@
                   const isCompleted = item.status === 'completed';
                   const isInProgress = item.status === 'in_progress';
                   const isPending = item.status === 'pending' || !item.status;
-                  const canManage = isParent || item.memberId === currentMember.id;
+                  const canManage = canManageMemberSchedule(currentMember.id, item.memberId);
 
                   return (
                     <div
@@ -749,16 +730,26 @@
                             )}
 
                             {canManage ? (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteSchedule(item)}
-                                className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition"
-                                title="일정 삭제"
-                              >
-                                🗑️
-                              </button>
+                              <React.Fragment>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditScheduleModal(item)}
+                                  className="p-1 text-slate-500 hover:text-indigo-600 rounded-lg transition"
+                                  title="일정 수정"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSchedule(item)}
+                                  className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition"
+                                  title="일정 삭제"
+                                >
+                                  🗑️
+                                </button>
+                              </React.Fragment>
                             ) : (
-                              <span className="text-[10px] text-slate-300 px-1 select-none">🔒</span>
+                              <span className="text-[10px] text-slate-300 px-1 select-none" title="권한 없음">🔒</span>
                             )}
                           </div>
                         </div>
@@ -1052,7 +1043,6 @@
       const [syncStatus, setSyncStatus] = useState('connecting');
 
       const [myStatusInput, setMyStatusInput] = useState('');
-      const [myEmoji, setMyEmoji] = useState('😊');
 
       const [statusPresets, setStatusPresets] = useState(() => {
         const saved = localStorage.getItem('family_status_presets');
@@ -1060,6 +1050,8 @@
       });
 
       const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+      const [editingSchedule, setEditingSchedule] = useState(null);
+
       const [isAddTodoModalOpen, setIsAddTodoModalOpen] = useState(false);
       const [editingTodo, setEditingTodo] = useState(null);
       const [isPraiseModalOpen, setIsPraiseModalOpen] = useState(false);
@@ -1134,7 +1126,7 @@
               const list = [];
               snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
               if (list.length > 0) {
-                setCategories([...DEFAULT_CATEGORIES, ...list]);
+                setCategories([...DEFAULT_CATEGORIES, ...list.filter(c => !DEFAULT_CATEGORIES.some(dc => dc.id === c.id))]);
               } else {
                 setCategories(DEFAULT_CATEGORIES);
               }
@@ -1251,7 +1243,14 @@
       const handleAddCategory = async (e) => {
         e.preventDefault();
         if (!newCatName.trim()) return;
+
+        if (categories.some(c => c.name === newCatName.trim())) {
+          showToast("이미 등록된 카테고리 이름입니다.");
+          return;
+        }
+
         const newCat = {
+          id: 'cat_' + Date.now(),
           name: newCatName.trim(),
           color: newCatColor,
           isCustom: true,
@@ -1260,9 +1259,9 @@
 
         try {
           if (dbRef.current) {
-            await dbRef.current.collection('categories').add(newCat);
+            await dbRef.current.collection('categories').doc(newCat.id).set(newCat);
           } else {
-            setCategories(prev => [...prev, { id: 'cat_' + Date.now(), ...newCat }]);
+            setCategories(prev => [...prev, newCat]);
           }
           setNewCatName('');
           setIsAddCategoryModalOpen(false);
@@ -1272,11 +1271,10 @@
 
       const handleDeleteCategory = async (catItem) => {
         try {
-          if (dbRef.current && catItem.id && catItem.isCustom) {
+          if (dbRef.current && catItem.id) {
             await dbRef.current.collection('categories').doc(catItem.id).delete();
-          } else {
-            setCategories(prev => prev.filter(c => c.id !== catItem.id));
           }
+          setCategories(prev => prev.filter(c => c.id !== catItem.id));
           showToast(`'${catItem.name}' 카테고리가 삭제되었습니다.`);
         } catch (err) { console.error(err); }
       };
@@ -1346,15 +1344,38 @@
       };
 
       const handleOpenAddScheduleModal = () => {
+        setEditingSchedule(null);
         setNewSchedule({
           title: '',
-          memberId: currentMemberId,
+          memberId: currentMemberId === 'mom' ? 'mom' : currentMemberId === 'dad' ? 'dad' : currentMemberId,
           date: selectedDate,
           startTime: '16:00',
           endTime: '17:00',
-          category: 'school',
+          category: categories[0]?.id || 'school',
           notes: ''
         });
+        setIsAddModalOpen(true);
+      };
+
+      const handleOpenEditScheduleModal = (scheduleItem) => {
+        if (!canManageMemberSchedule(currentMember.id, scheduleItem.memberId)) {
+          showToast("⚠️ 해당 가족의 일정을 수정할 권한이 없습니다.");
+          return;
+        }
+        setEditingSchedule(scheduleItem);
+        setNewSchedule({ ...scheduleItem });
+        setIsAddModalOpen(true);
+      };
+
+      const handleSaveScheduleSubmit = (e) => {
+        e.preventDefault();
+        if (!newSchedule.title.trim()) return;
+
+        if (!canManageMemberSchedule(currentMember.id, newSchedule.memberId)) {
+          showToast("⚠️ 선택한 가족의 일정을 수정할 권한이 없습니다.");
+          return;
+        }
+
         setIsConfirmModalOpen(true);
       };
 
@@ -1364,34 +1385,43 @@
 
         const itemData = {
           title: newSchedule.title.trim(),
-          memberId: isParent ? newSchedule.memberId : currentMemberId,
+          memberId: newSchedule.memberId,
           date: newSchedule.date,
           startTime: newSchedule.startTime,
           endTime: newSchedule.endTime,
           category: newSchedule.category,
           notes: newSchedule.notes.trim(),
-          status: 'pending',
-          stickers: {},
-          createdAt: Date.now()
+          updatedAt: Date.now()
         };
 
         try {
-          if (dbRef.current) {
-            await dbRef.current.collection('schedules').add(itemData);
+          if (editingSchedule) {
+            if (dbRef.current) {
+              await dbRef.current.collection('schedules').doc(editingSchedule.id).update(itemData);
+            } else {
+              setSchedules(prev => prev.map(s => s.id === editingSchedule.id ? { ...s, ...itemData } : s));
+            }
+            showToast("일정이 수정되었습니다! ✏️");
           } else {
-            setSchedules(prev => [...prev, { id: 'sch_' + Date.now(), ...itemData }]);
-          }
+            const newItem = { ...itemData, status: 'pending', stickers: {}, createdAt: Date.now() };
+            if (dbRef.current) {
+              await dbRef.current.collection('schedules').add(newItem);
+            } else {
+              setSchedules(prev => [...prev, { id: 'sch_' + Date.now(), ...newItem }]);
+            }
 
-          if (autoAddToGCal) {
-            const gcalUrl = createGoogleCalendarUrl(itemData);
-            window.open(gcalUrl, '_blank');
+            if (isParent && autoAddToGCal) {
+              const gcalUrl = createGoogleCalendarUrl(newItem);
+              window.open(gcalUrl, '_blank');
+            }
+            showToast("새 일정이 등록되었습니다! ✨");
           }
 
           setIsConfirmModalOpen(false);
           setIsAddModalOpen(false);
-          showToast("새 일정이 등록되었습니다! ✨");
+          setEditingSchedule(null);
         } catch (err) {
-          showToast("일정 등록 중 오류가 발생했습니다.");
+          showToast("일정 저장 중 오류가 발생했습니다.");
         } finally {
           setIsSubmitting(false);
         }
@@ -1412,8 +1442,8 @@
       };
 
       const handleDeleteSchedule = async (item) => {
-        if (!isParent && item.memberId !== currentMemberId) {
-          showToast("⚠️ 본인의 일정만 삭제할 수 있습니다.");
+        if (!canManageMemberSchedule(currentMember.id, item.memberId)) {
+          showToast("⚠️ 이 일정을 삭제할 권한이 없습니다.");
           return;
         }
         try {
@@ -1495,7 +1525,7 @@
           if (dbRef.current) {
             await dbRef.current.collection('todos').doc(todoItem.id).delete();
           } else {
-            setTodos(prev => prev.filter(t => t.id !== todoItem.id));
+            setTodos(prev => prev.filter(s => s.id !== todoItem.id));
           }
           showToast("할 일이 삭제되었습니다.");
         } catch (err) { console.error(err); }
@@ -1771,10 +1801,7 @@
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setNewSchedule(prev => ({ ...prev, memberId: currentMember.id, date: selectedDate }));
-                    setIsAddModalOpen(true);
-                  }}
+                  onClick={handleOpenAddScheduleModal}
                   className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition shrink-0 active:scale-95"
                 >
                   + 일정 추가
@@ -1802,6 +1829,7 @@
             </div>
           </header>
 
+          {}
           <main className="max-w-5xl mx-auto px-4 py-5 w-full space-y-6 flex-1">
             <nav className="flex items-center space-x-1.5 border-b border-slate-200 pb-2.5 overflow-x-auto no-scrollbar">
               <button
@@ -1849,8 +1877,6 @@
                   currentMemberId={currentMemberId}
                   statusMessages={statusMessages}
                   sendStatusMessage={sendStatusMessage}
-                  myEmoji={myEmoji}
-                  setMyEmoji={setMyEmoji}
                   myStatusInput={myStatusInput}
                   setMyStatusInput={setMyStatusInput}
                   statusPresets={statusPresets}
@@ -1874,6 +1900,7 @@
                   currentMember={currentMember}
                   isParent={isParent}
                   handleStatusChange={handleStatusChange}
+                  handleOpenEditScheduleModal={handleOpenEditScheduleModal}
                   handleDeleteSchedule={handleDeleteSchedule}
                   setNewSchedule={setNewSchedule}
                   setIsAddModalOpen={setIsAddModalOpen}
@@ -1927,6 +1954,7 @@
                 currentMember={currentMember}
                 isParent={isParent}
                 handleStatusChange={handleStatusChange}
+                handleOpenEditScheduleModal={handleOpenEditScheduleModal}
                 handleDeleteSchedule={handleDeleteSchedule}
                 setNewSchedule={setNewSchedule}
                 setIsAddModalOpen={setIsAddModalOpen}
@@ -1968,33 +1996,36 @@
             )}
           </main>
 
-          {/* 일정 추가 모달 */}
+          {}
+          {/* 일정 추가 / 수정 모달 */}
           {isAddModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
               <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <h3 className="text-base font-bold text-slate-900">🗓️ 새 일정 작성</h3>
-                  <button type="button" onClick={() => setIsAddModalOpen(false)} className="text-slate-400 font-bold hover:text-slate-600">✕</button>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {editingSchedule ? '✏️ 일정 수정하기' : '🗓️ 새 일정 작성'}
+                  </h3>
+                  <button type="button" onClick={() => { setIsAddModalOpen(false); setEditingSchedule(null); }} className="text-slate-400 font-bold hover:text-slate-600">✕</button>
                 </div>
 
-                <div className="space-y-3 text-xs sm:text-sm">
+                <form onSubmit={handleSaveScheduleSubmit} className="space-y-3 text-xs sm:text-sm">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">담당 가족</label>
+                    <label className="block font-bold text-slate-700 mb-1">담당 가족 (권한에 따라 선택 가능)</label>
                     <div className="grid grid-cols-4 gap-1.5">
                       {FAMILY_MEMBERS.map((m) => {
-                        const disabled = !isParent && m.id !== currentMember.id;
+                        const isAllowed = canManageMemberSchedule(currentMember.id, m.id);
                         return (
                           <button
                             type="button"
                             key={m.id}
-                            disabled={disabled}
+                            disabled={!isAllowed}
                             onClick={() => setNewSchedule({ ...newSchedule, memberId: m.id })}
                             className={`p-2 rounded-xl border text-center transition ${
                               newSchedule.memberId === m.id
                                 ? `${m.activeBg} font-bold ring-2 ring-indigo-400`
-                                : disabled
-                                ? 'opacity-40 bg-slate-100 border-slate-200'
-                                : 'bg-white border-slate-200 text-slate-700'
+                                : isAllowed
+                                ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                                : 'opacity-40 bg-slate-100 border-slate-200 cursor-not-allowed'
                             }`}
                           >
                             <div className="text-base">{m.avatar}</div>
@@ -2089,7 +2120,7 @@
                     />
                   </div>
 
-                  {isParent && (
+                  {isParent && !editingSchedule && (
                     <label className="flex items-center space-x-2 text-xs font-bold text-indigo-700 bg-indigo-50 p-2 rounded-xl cursor-pointer">
                       <input
                         type="checkbox"
@@ -2104,30 +2135,31 @@
                   <div className="pt-2 flex items-center space-x-2">
                     <button
                       type="button"
-                      onClick={() => setIsAddModalOpen(false)}
+                      onClick={() => { setIsAddModalOpen(false); setEditingSchedule(null); }}
                       className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs"
                     >
                       취소
                     </button>
                     <button
-                      type="button"
-                      onClick={handleOpenAddScheduleModal}
+                      type="submit"
                       className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md"
                     >
-                      일정 등록하기 ➔
+                      {editingSchedule ? '일정 수정 확정 ➔' : '일정 등록하기 ➔'}
                     </button>
                   </div>
-                </div>
+                </form>
               </div>
             </div>
           )}
 
-          {/* 일정 2단계 등록 확인 모달 */}
+          {/* 일정 2단계 등록/수정 확인 모달 */}
           {isConfirmModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
               <div className="bg-white rounded-3xl max-w-sm w-full p-6 text-center space-y-4 border border-slate-100 shadow-2xl">
-                <div className="text-3xl">📝</div>
-                <h3 className="text-base font-extrabold text-slate-900">일정을 공유하시겠습니까?</h3>
+                <div className="text-3xl">{editingSchedule ? '✏️' : '📝'}</div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  {editingSchedule ? '일정을 수정하시겠습니까?' : '일정을 공유하시겠습니까?'}
+                </h3>
                 <div className="bg-slate-50 p-3 rounded-2xl text-xs text-left space-y-1 text-slate-700 font-medium">
                   <div>📌 <b>제목:</b> {newSchedule.title}</div>
                   <div>👤 <b>담당:</b> {FAMILY_MEMBERS.find(m => m.id === newSchedule.memberId)?.name}</div>
@@ -2149,7 +2181,7 @@
                     onClick={handleConfirmScheduleCreate}
                     className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md"
                   >
-                    {isSubmitting ? '등록 중...' : '최종 등록 확정'}
+                    {isSubmitting ? '처리 중...' : editingSchedule ? '최종 수정 확정' : '최종 등록 확정'}
                   </button>
                 </div>
               </div>
@@ -2196,7 +2228,7 @@
                     </div>
                   </div>
 
-                  <button type="submit" className="w-full py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl">
+                  <button type="submit" className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl">
                     + 카테고리 추가
                   </button>
                 </form>
@@ -2225,6 +2257,7 @@
             </div>
           )}
 
+          {}
           {/* 할 일 등록/수정 모달 */}
           {isAddTodoModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
