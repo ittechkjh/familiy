@@ -60,9 +60,6 @@
     const KIDS_MEMBERS = FAMILY_MEMBERS.filter(m => !m.isParent);
 
     // 엄격한 일정 관리 권한 규칙
-    // 아빠: 아빠, 주원, 주아 (엄마 불가)
-    // 엄마: 엄마, 주원, 주아 (아빠 불가)
-    // 아이들: 본인만
     const canManageMemberSchedule = (currentMemberId, targetMemberId) => {
       if (currentMemberId === 'dad') return targetMemberId !== 'mom';
       if (currentMemberId === 'mom') return targetMemberId !== 'dad';
@@ -122,6 +119,15 @@
       "👟 줄넘기 100개 / 운동하기"
     ];
 
+    const GAME_REASON_PRESETS = [
+      "📚 숙제/공부 완료 보너스",
+      "✨ 방 정리정돈 스스로 완료",
+      "🎮 게임 플레이 사용 차감",
+      "🎁 주말/특별 보너스 시간",
+      "⏰ 약속 시간 초과 차감",
+      "👍 약속 잘 지킨 칭찬 선물"
+    ];
+
     const getTodayString = () => {
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -135,6 +141,16 @@
       const diffHours = Math.floor(diffMinutes / 60);
       if (diffHours < 24) return `${diffHours}시간 전`;
       return new Date(timestamp).toLocaleDateString([], { month: 'numeric', day: 'numeric' });
+    };
+
+    const formatMinutesToHours = (totalMinutes) => {
+      const mins = Number(totalMinutes) || 0;
+      if (mins <= 0) return '0분';
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      if (h === 0) return `${m}분`;
+      if (m === 0) return `${h}시간`;
+      return `${h}시간 ${m}분`;
     };
 
     const createGoogleCalendarUrl = (item) => {
@@ -158,7 +174,7 @@
                 🏡
               </div>
               <h1 className="text-2xl font-black tracking-tight text-white">우리집 커넥트</h1>
-              <p className="text-xs text-slate-400">주원·주아 맞춤 할 일 & 실시간 공유 웹앱</p>
+              <p className="text-xs text-slate-400">주원·주아 맞춤 할 일, 게임 시간 & 실시간 공유 웹앱</p>
             </div>
 
             <div>
@@ -363,7 +379,6 @@
             </div>
           </div>
 
-          {/* 직접 입력 폼 (드롭박스 완전 제거) */}
           <form onSubmit={(e) => { e.preventDefault(); sendStatusMessage(myStatusInput, '💬'); }} className="mt-2 flex items-center space-x-1.5">
             <input
               type="text"
@@ -379,6 +394,234 @@
               공유
             </button>
           </form>
+        </section>
+      );
+    }
+
+    // 신규: 김주원, 김주아 전용 게임 시간 컴포넌트
+    function GameTimeSection({ isParent, gameTimes, gameTimeLogs, handleOpenGameTimeModal, handleDeleteGameLog }) {
+      return (
+        <section className="bg-gradient-to-br from-violet-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-4 sm:p-6 shadow-xl border border-indigo-500/20 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-white/10">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xl sm:text-2xl">🎮</span>
+                <h2 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center space-x-2">
+                  <span>주원·주아 게임 시간 카운트</span>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-500/30 text-violet-200 border border-violet-400/30">
+                    {isParent ? '엄마·아빠 관리 권한' : '실시간 잔여 시간'}
+                  </span>
+                </h2>
+              </div>
+              <p className="text-xs text-slate-300 mt-1">
+                {isParent
+                  ? '엄마와 아빠만 분 단위로 게임 시간을 충전하거나 차감(마이너스)할 수 있습니다.'
+                  : '주원이와 주아는 남은 게임 시간을 확인하고 약속된 시간 동안 즐겁게 플레이해요!'}
+              </p>
+            </div>
+
+            {isParent && (
+              <button
+                type="button"
+                onClick={() => handleOpenGameTimeModal('child1')}
+                className="px-4 py-2 text-xs font-extrabold rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white shadow-lg shadow-indigo-500/30 transition active:scale-95 shrink-0 self-start sm:self-auto"
+              >
+                ⏱️ 게임 시간 조정 / 설정
+              </button>
+            )}
+          </div>
+
+          {/* 아이들별 게임 시간 카드 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {KIDS_MEMBERS.map((kid) => {
+              const currentMinutes = gameTimes[kid.id] || 0;
+              const formattedTime = formatMinutesToHours(currentMinutes);
+              const isOverZero = currentMinutes > 0;
+
+              return (
+                <div
+                  key={kid.id}
+                  className="bg-white/10 backdrop-blur rounded-2xl p-4 sm:p-5 border border-white/15 space-y-3.5 relative overflow-hidden flex flex-col justify-between"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <span className="text-3xl sm:text-4xl">{kid.avatar}</span>
+                      <div>
+                        <div className="flex items-center space-x-1.5">
+                          <h3 className="font-extrabold text-base text-white">{kid.name}</h3>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${kid.badgeBg}`}>
+                            {kid.role}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">현재 플레이 가능 시간</p>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className={`text-2xl sm:text-3xl font-black tracking-tight ${isOverZero ? 'text-emerald-400' : 'text-slate-400'}`}>
+                        {currentMinutes} <span className="text-sm font-bold text-slate-300">분</span>
+                      </div>
+                      <div className="text-[11px] font-semibold text-indigo-300">
+                        ({formattedTime})
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 시간 바 게이지 */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-slate-400 font-medium">
+                      <span>잔여 상태</span>
+                      <span>{isOverZero ? '🎮 플레이 가능' : '⏳ 시간 충전 필요'}</span>
+                    </div>
+                    <div className="w-full bg-black/40 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/10">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          currentMinutes >= 60
+                            ? 'bg-gradient-to-r from-teal-400 to-emerald-400'
+                            : currentMinutes > 0
+                            ? 'bg-gradient-to-r from-amber-400 to-yellow-400'
+                            : 'bg-rose-500/50'
+                        }`}
+                        style={{ width: `${Math.min(100, Math.max(0, (currentMinutes / 120) * 100))}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* 부모 전용 빠른 분 단위 +/- 조정 버튼 */}
+                  {isParent ? (
+                    <div className="pt-2 border-t border-white/10 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] text-slate-300 font-bold">
+                        <span>⚡ 원터치 빠른 시간 조정:</span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenGameTimeModal(kid.id)}
+                          className="text-violet-300 hover:text-white underline"
+                        >
+                          직접 입력 & 사유
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-6 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenGameTimeModal(kid.id, -30, '🎮 게임 플레이 사용 (30분)')}
+                          className="py-1.5 px-1 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-black text-xs transition active:scale-95 text-center"
+                          title="30분 차감"
+                        >
+                          -30분
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenGameTimeModal(kid.id, -10, '🎮 게임 플레이 사용 (10분)')}
+                          className="py-1.5 px-1 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-black text-xs transition active:scale-95 text-center"
+                          title="10분 차감"
+                        >
+                          -10분
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenGameTimeModal(kid.id, -5, '🎮 게임 플레이 사용 (5분)')}
+                          className="py-1.5 px-1 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-black text-xs transition active:scale-95 text-center"
+                          title="5분 차감"
+                        >
+                          -5분
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenGameTimeModal(kid.id, 10, '✨ 착한 행동 / 10분 보너스')}
+                          className="py-1.5 px-1 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 font-black text-xs transition active:scale-95 text-center"
+                          title="10분 추가"
+                        >
+                          +10분
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenGameTimeModal(kid.id, 30, '📚 숙제 / 약속 실천 보너스 (+30분)')}
+                          className="py-1.5 px-1 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 font-black text-xs transition active:scale-95 text-center"
+                          title="30분 추가"
+                        >
+                          +30분
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenGameTimeModal(kid.id, 60, '🎁 주말 / 특별 보너스 (+60분)')}
+                          className="py-1.5 px-1 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-indigo-200 border border-indigo-400/30 font-black text-xs transition active:scale-95 text-center"
+                          title="60분 추가"
+                        >
+                          +60분
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pt-2 border-t border-white/10 text-[11px] text-slate-300 text-center bg-black/20 p-2 rounded-xl">
+                      🔒 게임 시간 추가 및 차감은 엄마, 아빠만 가능합니다.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 최근 게임 시간 변동 내역 */}
+          <div className="space-y-2 pt-2 border-t border-white/10">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-300 flex items-center space-x-1">
+                <span>⏱️ 최근 게임 시간 조정 및 사용 내역</span>
+              </h3>
+              <span className="text-[10px] text-slate-400">최근 변동 내역</span>
+            </div>
+
+            {gameTimeLogs.length === 0 ? (
+              <div className="text-center py-6 bg-white/5 rounded-2xl border border-dashed border-white/10 text-xs text-slate-400">
+                아직 기록된 게임 시간 조정 내역이 없습니다.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto no-scrollbar">
+                {gameTimeLogs
+                  .sort((a, b) => b.createdAt - a.createdAt)
+                  .map((log) => {
+                    const isPositive = log.minutesDelta > 0;
+                    return (
+                      <div
+                        key={log.id}
+                        className="bg-white/10 backdrop-blur p-3 rounded-2xl border border-white/10 flex items-start justify-between text-xs space-x-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center space-x-1.5 font-bold">
+                            <span className="text-indigo-300">{log.toMemberName}</span>
+                            <span className="text-[10px] text-slate-400">by {log.fromMemberName}</span>
+                            <span className="text-[10px] text-slate-400">({formatRelativeTime(log.createdAt)})</span>
+                          </div>
+                          <p className="text-[11px] text-slate-200 mt-0.5 truncate">{log.reason || '게임 시간 조정'}</p>
+                        </div>
+
+                        <div className="flex items-center space-x-1.5 shrink-0">
+                          <span
+                            className={`px-2 py-0.5 rounded-lg text-xs font-black ${
+                              isPositive
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                            }`}
+                          >
+                            {isPositive ? `+${log.minutesDelta}분` : `${log.minutesDelta}분`}
+                          </span>
+
+                          {isParent && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteGameLog(log.id)}
+                              className="p-1 text-slate-400 hover:text-rose-400 transition"
+                              title="내역 삭제"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
         </section>
       );
     }
@@ -1042,6 +1285,17 @@
       const [statusMessages, setStatusMessages] = useState({});
       const [syncStatus, setSyncStatus] = useState('connecting');
 
+      // 신규: 게임 시간 상태
+      const [gameTimes, setGameTimes] = useState({ child1: 30, child2: 30 });
+      const [gameTimeLogs, setGameTimeLogs] = useState([]);
+      const [isGameTimeModalOpen, setIsGameTimeModalOpen] = useState(false);
+      const [gameTimeForm, setGameTimeForm] = useState({
+        childId: 'child1',
+        mode: 'add', // 'add', 'subtract', 'set'
+        minutes: 30,
+        reason: '📚 숙제/공부 완료 보너스'
+      });
+
       const [myStatusInput, setMyStatusInput] = useState('');
 
       const [statusPresets, setStatusPresets] = useState(() => {
@@ -1176,6 +1430,24 @@
               setMemberPins(pins);
             });
 
+            // 신규: 게임 시간 동기화
+            db.collection('game_times').onSnapshot((snapshot) => {
+              const times = { child1: 30, child2: 30 };
+              snapshot.forEach((doc) => {
+                if (doc.data().minutes !== undefined) {
+                  times[doc.id] = doc.data().minutes;
+                }
+              });
+              setGameTimes(times);
+            });
+
+            // 신규: 게임 시간 변동 로그 동기화
+            db.collection('game_time_logs').onSnapshot((snapshot) => {
+              const logs = [];
+              snapshot.forEach((doc) => logs.push({ id: doc.id, ...doc.data() }));
+              setGameTimeLogs(logs);
+            });
+
           } catch (error) {
             console.error(error);
             setSyncStatus('offline');
@@ -1284,6 +1556,107 @@
       }, [currentMemberId]);
 
       const isParent = currentMember.isParent;
+
+      // 게임 시간 모달 열기 함수 (직접 또는 빠른 프리셋)
+      const handleOpenGameTimeModal = (kidId = 'child1', defaultDelta = null, defaultReason = '') => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 게임 시간을 조정할 수 있습니다.");
+          return;
+        }
+
+        if (defaultDelta !== null) {
+          // 프리셋 바로 적용
+          const currentVal = gameTimes[kidId] || 0;
+          const finalVal = Math.max(0, currentVal + defaultDelta);
+          applyGameTimeChange(kidId, defaultDelta, finalVal, defaultReason);
+        } else {
+          setGameTimeForm({
+            childId: kidId,
+            mode: 'add',
+            minutes: 30,
+            reason: GAME_REASON_PRESETS[0]
+          });
+          setIsGameTimeModalOpen(true);
+        }
+      };
+
+      // 게임 시간 최종 적용 처리 함수
+      const applyGameTimeChange = async (kidId, deltaMinutes, finalTotalMinutes, reasonText) => {
+        if (!isParent) return;
+
+        const targetKid = KIDS_MEMBERS.find(k => k.id === kidId) || KIDS_MEMBERS[0];
+        const logData = {
+          fromMemberId: currentMember.id,
+          fromMemberName: currentMember.name,
+          toMemberId: targetKid.id,
+          toMemberName: targetKid.name,
+          minutesDelta: deltaMinutes,
+          finalMinutes: finalTotalMinutes,
+          reason: reasonText || (deltaMinutes >= 0 ? `+${deltaMinutes}분 충전` : `${deltaMinutes}분 차감`),
+          createdAt: Date.now()
+        };
+
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('game_times').doc(targetKid.id).set({
+              minutes: finalTotalMinutes,
+              updatedAt: Date.now(),
+              updatedBy: currentMember.name
+            });
+            await dbRef.current.collection('game_time_logs').add(logData);
+          } else {
+            setGameTimes(prev => ({ ...prev, [targetKid.id]: finalTotalMinutes }));
+            setGameTimeLogs(prev => [...prev, { id: 'log_' + Date.now(), ...logData }]);
+          }
+
+          const sign = deltaMinutes > 0 ? `+${deltaMinutes}분 추가` : `${deltaMinutes}분 차감`;
+          showToast(`🎮 ${targetKid.name}의 게임 시간이 ${sign}되었습니다! (잔여: ${finalTotalMinutes}분)`);
+        } catch (err) {
+          console.error(err);
+          showToast("게임 시간 저장 중 오류가 발생했습니다.");
+        }
+      };
+
+      const handleGameTimeFormSubmit = async (e) => {
+        e.preventDefault();
+        if (!isParent) return;
+
+        const kidId = gameTimeForm.childId;
+        const currentVal = gameTimes[kidId] || 0;
+        const inputMin = Math.abs(parseInt(gameTimeForm.minutes, 10) || 0);
+
+        let delta = 0;
+        let finalVal = currentVal;
+
+        if (gameTimeForm.mode === 'add') {
+          delta = inputMin;
+          finalVal = currentVal + delta;
+        } else if (gameTimeForm.mode === 'subtract') {
+          delta = -inputMin;
+          finalVal = Math.max(0, currentVal + delta);
+        } else if (gameTimeForm.mode === 'set') {
+          finalVal = inputMin;
+          delta = finalVal - currentVal;
+        }
+
+        await applyGameTimeChange(kidId, delta, finalVal, gameTimeForm.reason.trim());
+        setIsGameTimeModalOpen(false);
+      };
+
+      const handleDeleteGameLog = async (logId) => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 기록을 삭제할 수 있습니다.");
+          return;
+        }
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('game_time_logs').doc(logId).delete();
+          } else {
+            setGameTimeLogs(prev => prev.filter(l => l.id !== logId));
+          }
+          showToast("기록이 삭제되었습니다.");
+        } catch (err) { console.error(err); }
+      };
 
       const handleLoginSubmit = (e) => {
         e.preventDefault();
@@ -1787,7 +2160,7 @@
                       실시간 동기화 완료
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500">주원·주아·아빠·엄마의 하루 공유</p>
+                  <p className="text-xs text-slate-500">주원·주아·아빠·엄마의 하루 & 게임 시간 공유</p>
                 </div>
               </div>
 
@@ -1829,7 +2202,6 @@
             </div>
           </header>
 
-          {}
           <main className="max-w-5xl mx-auto px-4 py-5 w-full space-y-6 flex-1">
             <nav className="flex items-center space-x-1.5 border-b border-slate-200 pb-2.5 overflow-x-auto no-scrollbar">
               <button
@@ -1857,7 +2229,16 @@
                   mainTab === 'todo' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <span>✅ 사용자별 할 일 체크리스트</span>
+                <span>✅ 할 일 체크</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMainTab('game')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
+                  mainTab === 'game' ? 'bg-violet-700 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span>🎮 게임 시간</span>
               </button>
               <button
                 type="button"
@@ -1866,7 +2247,7 @@
                   mainTab === 'praise' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <span>🌟 주원·주아 칭찬 스티커</span>
+                <span>🌟 칭찬 스티커</span>
               </button>
             </nav>
 
@@ -1883,6 +2264,7 @@
                   handleAddStatusPreset={handleAddStatusPreset}
                   handleDeleteStatusPreset={handleDeleteStatusPreset}
                 />
+
                 <CalendarSection
                   viewMode={viewMode}
                   setViewMode={setViewMode}
@@ -1906,6 +2288,7 @@
                   setIsAddModalOpen={setIsAddModalOpen}
                   categories={categories}
                 />
+
                 <TodoListSection
                   isParent={isParent}
                   todos={todos}
@@ -1922,6 +2305,16 @@
                   }}
                   handleDeleteTodo={handleDeleteTodo}
                 />
+
+                {/* 할 일 체크 밑으로 이동된 게임 시간 요약 섹션 */}
+                <GameTimeSection
+                  isParent={isParent}
+                  gameTimes={gameTimes}
+                  gameTimeLogs={gameTimeLogs}
+                  handleOpenGameTimeModal={handleOpenGameTimeModal}
+                  handleDeleteGameLog={handleDeleteGameLog}
+                />
+
                 <PraiseSection
                   isParent={isParent}
                   kidStickerStats={kidStickerStats}
@@ -1934,6 +2327,17 @@
                   handleDeletePraise={handleDeletePraise}
                 />
               </div>
+            )}
+
+            {/* 신규: 전용 게임 시간 탭 */}
+            {mainTab === 'game' && (
+              <GameTimeSection
+                isParent={isParent}
+                gameTimes={gameTimes}
+                gameTimeLogs={gameTimeLogs}
+                handleOpenGameTimeModal={handleOpenGameTimeModal}
+                handleDeleteGameLog={handleDeleteGameLog}
+              />
             )}
 
             {mainTab === 'schedule' && (
@@ -1996,7 +2400,153 @@
             )}
           </main>
 
-          {}
+          {/* 신규: 엄마·아빠 전용 게임 시간 조정 모달 */}
+          {isGameTimeModalOpen && isParent && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
+              <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-100">
+                <div className="flex items-center justify-between pb-2 border-b border-violet-100">
+                  <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-1.5">
+                    <span>⏱️ 게임 시간 조정 / 설정</span>
+                  </h3>
+                  <button type="button" onClick={() => setIsGameTimeModalOpen(false)} className="text-xs font-bold text-slate-400">✕</button>
+                </div>
+
+                <form onSubmit={handleGameTimeFormSubmit} className="space-y-3.5 text-xs sm:text-sm">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">대상 어린이 선택</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {KIDS_MEMBERS.map((kid) => (
+                        <button
+                          type="button"
+                          key={kid.id}
+                          onClick={() => setGameTimeForm({ ...gameTimeForm, childId: kid.id })}
+                          className={`p-3 rounded-2xl border text-left transition flex items-center space-x-2.5 ${
+                            gameTimeForm.childId === kid.id
+                              ? `${kid.cardBg} ring-2 ${kid.ringColor} font-bold`
+                              : 'bg-white border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          <span className="text-2xl">{kid.avatar}</span>
+                          <div>
+                            <div className="text-xs font-extrabold">{kid.name}</div>
+                            <div className="text-[10px] text-slate-500">현재 {gameTimes[kid.id] || 0}분</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">조정 방식</label>
+                    <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setGameTimeForm({ ...gameTimeForm, mode: 'add' })}
+                        className={`py-1.5 rounded-lg text-xs font-extrabold transition ${
+                          gameTimeForm.mode === 'add' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600'
+                        }`}
+                      >
+                        ➕ 시간 충전 (+)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGameTimeForm({ ...gameTimeForm, mode: 'subtract' })}
+                        className={`py-1.5 rounded-lg text-xs font-extrabold transition ${
+                          gameTimeForm.mode === 'subtract' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600'
+                        }`}
+                      >
+                        ➖ 시간 차감 (-)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGameTimeForm({ ...gameTimeForm, mode: 'set' })}
+                        className={`py-1.5 rounded-lg text-xs font-extrabold transition ${
+                          gameTimeForm.mode === 'set' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600'
+                        }`}
+                      >
+                        ⚙️ 직접 설정
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {gameTimeForm.mode === 'add' ? '충전할 시간(분)' : gameTimeForm.mode === 'subtract' ? '차감할 시간(분)' : '설정할 총 시간(분)'}
+                    </label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="300"
+                        required
+                        value={gameTimeForm.minutes}
+                        onChange={(e) => setGameTimeForm({ ...gameTimeForm, minutes: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900"
+                      />
+                      <span className="font-extrabold text-slate-600 shrink-0">분</span>
+                    </div>
+
+                    <div className="flex items-center space-x-1 mt-1.5 overflow-x-auto no-scrollbar">
+                      {[10, 20, 30, 60].map(min => (
+                        <button
+                          key={min}
+                          type="button"
+                          onClick={() => setGameTimeForm({ ...gameTimeForm, minutes: min })}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-violet-50 text-slate-700 hover:text-violet-700 rounded-lg text-xs font-bold border border-slate-200 shrink-0"
+                        >
+                          {min}분
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">사유 / 메모</label>
+                    <input
+                      type="text"
+                      value={gameTimeForm.reason}
+                      onChange={(e) => setGameTimeForm({ ...gameTimeForm, reason: e.target.value })}
+                      placeholder="예: 숙제 완료 보상, 게임 30분 플레이 완료"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
+                    />
+
+                    <div className="mt-1.5 space-y-1">
+                      <span className="block text-[10px] font-bold text-slate-400">자주 쓰는 추천 사유:</span>
+                      <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar py-0.5">
+                        {GAME_REASON_PRESETS.map((preset, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setGameTimeForm({ ...gameTimeForm, reason: preset })}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg shrink-0 border border-slate-200"
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsGameTimeModalOpen(false)}
+                      className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-md"
+                    >
+                      시간 변경 확정 ➔
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {/* 일정 추가 / 수정 모달 */}
           {isAddModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
@@ -2257,7 +2807,6 @@
             </div>
           )}
 
-          {}
           {/* 할 일 등록/수정 모달 */}
           {isAddTodoModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
@@ -2303,7 +2852,6 @@
                       </button>
                     </div>
 
-                    {/* 자주 쓰는 문구 관리 UI */}
                     {isPresetManageOpen && (
                       <div className="mb-2 p-2.5 bg-indigo-50/80 rounded-xl border border-indigo-200 space-y-2">
                         <div className="flex items-center space-x-1.5">
@@ -2354,7 +2902,6 @@
                       className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold"
                     />
 
-                    {/* 추천 문구 칩 */}
                     <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar pt-2">
                       {todoPresets.map((preset) => (
                         <button
