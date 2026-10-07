@@ -2742,7 +2742,7 @@
       });
 
       // 신규: 주원·주아 독서 시간 기록 상태 (Firebase Firestore 'reading_logs'와 실시간 동기화)
-      const [readingLogs, setReadingLogs] = useState(DEFAULT_READING_LOGS);
+      const [readingLogs, setReadingLogs] = useState([]);
       const [isReadingModalOpen, setIsReadingModalOpen] = useState(false);
       const [readingForm, setReadingForm] = useState({
         childId: 'child1',
@@ -2927,11 +2927,7 @@
             db.collection('reading_logs').onSnapshot((snapshot) => {
               const list = [];
               snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
-              if (list.length > 0) {
-                setReadingLogs(list);
-              } else {
-                setReadingLogs(DEFAULT_READING_LOGS);
-              }
+              setReadingLogs(list);
             }, (err) => console.warn("reading_logs snapshot error:", err));
 
           } catch (error) {
@@ -3730,17 +3726,19 @@
           return;
         }
         const logId = deletingReadingLog.id;
+        const targetTitle = deletingReadingLog.bookTitle ? `《${deletingReadingLog.bookTitle}》` : '독서 기록';
+        const childName = deletingReadingLog.childName;
         try {
-          if (dbRef.current) {
+          // 로컬 상태 즉시 반영
+          setReadingLogs(prev => prev.filter(l => l.id !== logId));
+
+          if (dbRef.current && !logId.startsWith('rl_')) {
             await dbRef.current.collection('reading_logs').doc(logId).delete();
-          } else {
-            setReadingLogs(prev => prev.filter(l => l.id !== logId));
           }
-          const targetTitle = deletingReadingLog.bookTitle ? `《${deletingReadingLog.bookTitle}》` : '독서 기록';
-          showToast(`🗑️ ${deletingReadingLog.childName}의 ${targetTitle} 기록이 삭제되었습니다.`);
+          showToast(`🗑️ ${childName}의 ${targetTitle} 기록이 삭제되었습니다.`);
           triggerHaptic([40, 60, 40]);
         } catch (err) {
-          console.error(err);
+          console.error("독서 기록 삭제 오류:", err);
           showToast("독서 기록 삭제 중 오류가 발생했습니다.");
         } finally {
           setDeletingReadingLog(null);
