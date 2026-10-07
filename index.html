@@ -1043,7 +1043,7 @@
     }
 
     // 신규: 주원·주아 독서 시간 기록, 1주일 단위 분석, 누적 명예의 전당 & 레벨 컴포넌트
-    function ReadingSection({ isParent, currentMember, readingLogs, handleOpenReadingModal, handleDeleteReadingLog }) {
+    function ReadingSection({ isParent, currentMember, readingLogs, handleOpenReadingModal, handleRequestDeleteReadingLog }) {
       const [selectedWeekOffset, setSelectedWeekOffset] = useState(0);
       const [isLevelGuideOpen, setIsLevelGuideOpen] = useState(false);
       const [readingKidFilter, setReadingKidFilter] = useState('all');
@@ -1555,7 +1555,19 @@
                               ⏱️ +{log.minutes}분
                             </span>
                           </span>
-                          <span className="text-[10px] text-slate-300 font-medium px-2 py-0.5 rounded-md bg-white/10 border border-white/10">📅 {log.date}</span>
+                          <div className="flex items-center space-x-1.5">
+                            <span className="text-[10px] text-slate-300 font-medium px-2 py-0.5 rounded-md bg-white/10 border border-white/10">📅 {log.date}</span>
+                            {isParent && (
+                              <button
+                                type="button"
+                                onClick={() => handleRequestDeleteReadingLog(log)}
+                                className="px-1.5 py-0.5 rounded-md bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[10px] font-bold transition active:scale-90"
+                                title="독서 기록 삭제 (엄마·아빠 전용)"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="text-sm font-extrabold text-amber-100 mt-1.5 truncate tracking-tight">
@@ -2752,6 +2764,7 @@
       const [isPraiseModalOpen, setIsPraiseModalOpen] = useState(false);
       const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
       const [isResetPraiseConfirmOpen, setIsResetPraiseConfirmOpen] = useState(false);
+      const [deletingReadingLog, setDeletingReadingLog] = useState(null);
       const [isSubmitting, setIsSubmitting] = useState(false);
       const [toastMessage, setToastMessage] = useState(null);
 
@@ -3680,16 +3693,37 @@
         }
       };
 
-      const handleDeleteReadingLog = async (logId) => {
+      // 신규: 독서 기록 삭제 요청 (부모 전용, 확인 창 호출)
+      const handleRequestDeleteReadingLog = (logItem) => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 독서 기록을 삭제할 수 있습니다.");
+          return;
+        }
+        setDeletingReadingLog(logItem);
+      };
+
+      const handleConfirmDeleteReadingLog = async () => {
+        if (!deletingReadingLog) return;
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 독서 기록을 삭제할 수 있습니다.");
+          setDeletingReadingLog(null);
+          return;
+        }
+        const logId = deletingReadingLog.id;
         try {
           if (dbRef.current) {
             await dbRef.current.collection('reading_logs').doc(logId).delete();
           } else {
             setReadingLogs(prev => prev.filter(l => l.id !== logId));
           }
-          showToast("독서 기록이 삭제되었습니다.");
+          const targetTitle = deletingReadingLog.bookTitle ? `《${deletingReadingLog.bookTitle}》` : '독서 기록';
+          showToast(`🗑️ ${deletingReadingLog.childName}의 ${targetTitle} 기록이 삭제되었습니다.`);
+          triggerHaptic([40, 60, 40]);
         } catch (err) {
           console.error(err);
+          showToast("독서 기록 삭제 중 오류가 발생했습니다.");
+        } finally {
+          setDeletingReadingLog(null);
         }
       };
 
@@ -4069,7 +4103,7 @@
                   currentMember={currentMember}
                   readingLogs={readingLogs}
                   handleOpenReadingModal={handleOpenReadingModal}
-                  handleDeleteReadingLog={handleDeleteReadingLog}
+                  handleRequestDeleteReadingLog={handleRequestDeleteReadingLog}
                 />
 
                 <PraiseSection
@@ -4185,7 +4219,7 @@
                 currentMember={currentMember}
                 readingLogs={readingLogs}
                 handleOpenReadingModal={handleOpenReadingModal}
-                handleDeleteReadingLog={handleDeleteReadingLog}
+                handleRequestDeleteReadingLog={handleRequestDeleteReadingLog}
               />
             )}
           </main>
@@ -4939,6 +4973,58 @@
                     className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md"
                   >
                     리셋 실행
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 독서 기록 삭제 2단계 확인 모달 (엄마·아빠 전용) */}
+          {deletingReadingLog && isParent && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/70 backdrop-blur-xs">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-sm w-full p-5 sm:p-6 text-center space-y-4 border border-slate-100 shadow-2xl">
+                <div className="text-3xl">🗑️</div>
+                <h3 className="text-base font-extrabold text-slate-900">독서 기록을 삭제할까요?</h3>
+
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 text-left space-y-1 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">독서 대상:</span>
+                    <span className="font-black text-slate-900">{deletingReadingLog.childName}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">읽은 날짜:</span>
+                    <span className="font-medium text-slate-700">{deletingReadingLog.date}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">독서 시간:</span>
+                    <span className="font-black text-amber-600">{deletingReadingLog.minutes}분</span>
+                  </div>
+                  {deletingReadingLog.bookTitle && (
+                    <div className="flex justify-between items-center pt-1 border-t border-slate-200">
+                      <span className="font-bold text-slate-600">책 제목:</span>
+                      <span className="font-extrabold text-slate-900 truncate max-w-[180px]">《{deletingReadingLog.bookTitle}》</span>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-rose-600 font-semibold leading-relaxed">
+                  ⚠️ 삭제 시 누적 독서 시간 및 레벨 통계에서도 즉시 제외됩니다.
+                </p>
+
+                <div className="flex items-center space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeletingReadingLog(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDeleteReadingLog}
+                    className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition"
+                  >
+                    삭제 실행
                   </button>
                 </div>
               </div>
