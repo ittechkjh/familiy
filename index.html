@@ -3521,12 +3521,12 @@
                 {praiseLogs
                   .sort((a, b) => b.createdAt - a.createdAt)
                   .map((log) => (
-                    <div key={log.id} className="bg-white p-3 rounded-2xl border border-amber-100 shadow-2xs flex items-start space-x-2.5">
+                    <div key={log.id} className={`${Number(log.count) < 0 ? 'bg-rose-50/70 border-rose-200' : 'bg-white border-amber-100'} p-3 rounded-2xl border shadow-2xs flex items-start space-x-2.5`}>
                       <div className="relative shrink-0">
                         <span className="text-2xl">{log.stickerEmoji || '🌟'}</span>
-                        {Number(log.count) > 1 && (
-                          <span className="absolute -bottom-1 -right-1 bg-amber-500 text-white text-[9px] font-black px-1 py-0.2 rounded-full shadow-xs leading-none">
-                            +{log.count}
+                        {Number(log.count) !== 1 && (
+                          <span className={`absolute -bottom-1 -right-1 ${Number(log.count) < 0 ? 'bg-rose-500' : 'bg-amber-500'} text-white text-[9px] font-black px-1 py-0.2 rounded-full shadow-xs leading-none`}>
+                            {Number(log.count) > 0 ? `+${log.count}` : log.count}
                           </span>
                         )}
                       </div>
@@ -4808,6 +4808,31 @@
         const logId = deletingReadingLog.id;
         const targetTitle = deletingReadingLog.bookTitle ? `《${deletingReadingLog.bookTitle}》` : '독서 기록';
         const childName = deletingReadingLog.childName;
+        const childId = deletingReadingLog.childId;
+
+        // 삭제 전후 레벨 변화 계산
+        const kidLogs = readingLogs.filter(l => l.childId === childId);
+        const prevTotalMins = kidLogs.reduce((acc, l) => acc + (Number(l.minutes) || 0), 0);
+        const prevLevelInfo = getReadingLevelInfo(prevTotalMins);
+
+        const remainingLogs = kidLogs.filter(l => l.id !== logId);
+        const newTotalMins = remainingLogs.reduce((acc, l) => acc + (Number(l.minutes) || 0), 0);
+        const newLevelInfo = getReadingLevelInfo(newTotalMins);
+
+        const isLevelDown = newLevelInfo.level < prevLevelInfo.level;
+        const demotedLevels = [];
+        let totalDeductedStickers = 0;
+
+        if (isLevelDown) {
+          for (let lvl = prevLevelInfo.level; lvl > newLevelInfo.level; lvl--) {
+            const lvlConfig = READING_LEVELS.find(l => l.level === lvl);
+            if (lvlConfig && lvlConfig.rewardStickers > 0) {
+              demotedLevels.push(lvlConfig);
+              totalDeductedStickers += lvlConfig.rewardStickers;
+            }
+          }
+        }
+
         try {
           // 로컬 상태 즉시 반영
           setReadingLogs(prev => prev.filter(l => l.id !== logId));
@@ -4815,8 +4840,34 @@
           if (dbRef.current && !logId.startsWith('rl_')) {
             await dbRef.current.collection('reading_logs').doc(logId).delete();
           }
-          showToast(`🗑️ ${childName}의 ${targetTitle} 기록이 삭제되었습니다.`);
-          triggerHaptic([40, 60, 40]);
+
+          // 레벨 강등 시 칭찬 스티커 회수 및 내역 기록 추가
+          if (isLevelDown && totalDeductedStickers > 0) {
+            for (const lvlConfig of demotedLevels) {
+              const deductionData = {
+                fromMemberId: currentMember.id,
+                fromMemberName: `${currentMember.name} (독서 레벨 조정)`,
+                toMemberId: childId,
+                toMemberName: childName,
+                stickerKey: 'alert',
+                stickerEmoji: '📉',
+                count: -lvlConfig.rewardStickers,
+                reason: `📉 독서 기록 삭제로 Lv.${newLevelInfo.level} [${newLevelInfo.title}] 강등 (Lv.${lvlConfig.level} 보너스 ${lvlConfig.rewardStickers}개 회수)`,
+                createdAt: Date.now() + (lvlConfig.level * 10)
+              };
+
+              if (dbRef.current) {
+                await dbRef.current.collection('praise_stickers').add(deductionData);
+              } else {
+                setPraiseLogs(prev => [...prev, { id: 'praise_' + Date.now() + '_' + lvlConfig.level, ...deductionData }]);
+              }
+            }
+            showToast(`📉 ${childName}의 독서 레벨이 Lv.${newLevelInfo.level}로 내려가 칭찬 스티커 ${totalDeductedStickers}개가 회수 및 기록되었습니다.`);
+            triggerHaptic([60, 40, 60, 40]);
+          } else {
+            showToast(`🗑️ ${childName}의 ${targetTitle} 기록이 삭제되었습니다.`);
+            triggerHaptic([40, 60, 40]);
+          }
         } catch (err) {
           console.error("독서 기록 삭제 오류:", err);
           showToast("독서 기록 삭제 중 오류가 발생했습니다.");
@@ -5153,7 +5204,7 @@
       const kidStickerStats = useMemo(() => {
         return KIDS_MEMBERS.map(kid => {
           const receivedLogs = praiseLogs.filter(p => p.toMemberId === kid.id);
-          const totalReceived = receivedLogs.reduce((sum, p) => sum + (Number(p.count) || 1), 0);
+          const totalReceived = Math.max(0, receivedLogs.reduce((sum, p) => sum + ((p.count !== undefined && !isNaN(Number(p.count))) ? Number(p.count) : 1), 0));
           const redeemedCount = praiseRedeems
             .filter(r => r.memberId === kid.id)
             .reduce((sum, r) => sum + (Number(r.cost) || 0), 0);
@@ -6388,7 +6439,7 @@
                 </div>
 
                 <p className="text-[11px] text-rose-600 font-semibold leading-relaxed">
-                  ⚠️ 삭제 시 누적 독서 시간 및 레벨 통계에서도 즉시 제외됩니다.
+                  ⚠️ 삭제 시 누적 독서 시간 및 레벨 통계에서 제외되며, 레벨이 내려갈 경우 승급 시 지급되었던 칭찬 스티커가 자동 회수 및 기록됩니다.
                 </p>
 
                 <div className="flex items-center space-x-2 pt-2">
