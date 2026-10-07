@@ -199,6 +199,17 @@
       { id: 'dd_child2', title: '주아 생일', date: '2026-11-25', icon: '👧', isAnnual: true }
     ];
 
+    const MOOD_OPTIONS = [
+      { key: 'happy', emoji: '😄', label: '행복해요', bg: 'bg-amber-100 text-amber-800 border-amber-300' },
+      { key: 'fun', emoji: '🥳', label: '신나요', bg: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+      { key: 'love', emoji: '🥰', label: '사랑가득', bg: 'bg-rose-100 text-rose-800 border-rose-300' },
+      { key: 'proud', emoji: '😎', label: '뿌듯해요', bg: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
+      { key: 'calm', emoji: '😌', label: '편안해요', bg: 'bg-teal-100 text-teal-800 border-teal-300' },
+      { key: 'tired', emoji: '🥱', label: '피곤해요', bg: 'bg-slate-100 text-slate-800 border-slate-300' },
+      { key: 'sad', emoji: '😢', label: '슬퍼요', bg: 'bg-blue-100 text-blue-800 border-blue-300' },
+      { key: 'angry', emoji: '😡', label: '속상해요', bg: 'bg-red-100 text-red-800 border-red-300' }
+    ];
+
     const calculateDDay = (dateStr, isAnnual = false) => {
       if (!dateStr) return { text: '', diffDays: 0, isToday: false };
       const parts = dateStr.split('-').map(Number);
@@ -2313,6 +2324,752 @@
       );
     }
 
+    // 신규: 우리 가족 소통 & 소원 보드 (위시리스트, 편지/하고싶은말, 하루 감정)
+    function FamilyBoardSection({
+      currentMember,
+      currentMemberId,
+      isParent,
+      wishlist = [],
+      familyLetters = [],
+      dailyMoods = [],
+      handleSaveWishItem,
+      handleToggleWishFulfilled,
+      handleDeleteWishItem,
+      handleSaveFamilyLetter,
+      handleSaveLetterReply,
+      handleDeleteFamilyLetter,
+      handleSaveDailyMood,
+      handleDeleteDailyMood
+    }) {
+      const [boardTab, setBoardTab] = useState('wish'); // 'wish', 'letter', 'mood'
+
+      // 위시리스트 폼 상태
+      const [wishForm, setWishForm] = useState({
+        childId: currentMemberId === 'child2' ? 'child2' : 'child1',
+        title: '',
+        price: '',
+        reason: '',
+        link: ''
+      });
+
+      // 하고 싶은 말 폼 상태
+      const [letterForm, setLetterForm] = useState({
+        toRole: 'parents', // 'mom', 'dad', 'parents'
+        content: '',
+        isSecret: false // 부모님과 작성자만 볼 수 있는 비밀글
+      });
+
+      // 답글 입력 상태
+      const [replyInputMap, setReplyInputMap] = useState({});
+
+      // 하루 감정 폼 상태
+      const todayStr = getTodayString();
+      const myTodayMood = dailyMoods.find(m => m.memberId === currentMemberId && m.date === todayStr);
+      const [selectedMoodKey, setSelectedMoodKey] = useState(myTodayMood?.moodKey || 'happy');
+      const [moodNotes, setMoodNotes] = useState(myTodayMood?.notes || '');
+
+      // 위시리스트 필터 (전체 / 주원 / 주아)
+      const [wishFilter, setWishFilter] = useState('all');
+      const filteredWishlist = wishlist.filter(w => {
+        if (wishFilter === 'all') return true;
+        return w.childId === wishFilter;
+      });
+
+      const onWishSubmit = (e) => {
+        e.preventDefault();
+        if (!wishForm.title.trim()) return;
+        handleSaveWishItem(wishForm);
+        setWishForm({
+          childId: currentMemberId === 'child2' ? 'child2' : 'child1',
+          title: '',
+          price: '',
+          reason: '',
+          link: ''
+        });
+      };
+
+      const onLetterSubmit = (e) => {
+        e.preventDefault();
+        if (!letterForm.content.trim()) return;
+        handleSaveFamilyLetter(letterForm);
+        setLetterForm({ toRole: 'parents', content: '', isSecret: false });
+      };
+
+      const onMoodSubmit = (e) => {
+        e.preventDefault();
+        handleSaveDailyMood({ moodKey: selectedMoodKey, notes: moodNotes });
+      };
+
+      return (
+        <section className="bg-gradient-to-br from-indigo-50/70 via-pink-50/40 to-amber-50/70 rounded-3xl p-4 sm:p-6 border border-indigo-100 shadow-sm space-y-5">
+          {/* 상단 탭 헤더 */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-indigo-100/80 pb-3 gap-3">
+            <div>
+              <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center space-x-2">
+                <span>🎈 우리 가족 소통 & 소원 보드</span>
+                <span className="text-xs bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">
+                  따뜻한 대화
+                </span>
+              </h2>
+              <p className="text-xs text-slate-600 mt-0.5">
+                가지고 싶은 물건을 조르고, 엄마·아빠에게 속마음을 전하고, 오늘 나의 기분을 기록해요!
+              </p>
+            </div>
+
+            {/* 3개 서브탭 버튼 */}
+            <div className="flex items-center space-x-1.5 bg-white/90 p-1 rounded-2xl border border-indigo-150 shadow-2xs self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setBoardTab('wish')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center space-x-1 ${
+                  boardTab === 'wish' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <span>🎁</span>
+                <span>갖고 싶은 물건</span>
+                {wishlist.filter(w => !w.isFulfilled).length > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    boardTab === 'wish' ? 'bg-white text-amber-600' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {wishlist.filter(w => !w.isFulfilled).length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBoardTab('letter')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center space-x-1 ${
+                  boardTab === 'letter' ? 'bg-pink-500 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <span>💌</span>
+                <span>엄마·아빠에게</span>
+                {familyLetters.length > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    boardTab === 'letter' ? 'bg-white text-pink-600' : 'bg-pink-100 text-pink-700'
+                  }`}>
+                    {familyLetters.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBoardTab('mood')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center space-x-1 ${
+                  boardTab === 'mood' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <span>😊</span>
+                <span>하루 감정</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ======================= 1. 갖고 싶은 물건 위시리스트 ======================= */}
+          {boardTab === 'wish' && (
+            <div className="space-y-4">
+              {/* 등록 카드 */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-amber-200/80 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="text-xs sm:text-sm font-extrabold text-amber-900 flex items-center space-x-1.5">
+                    <span>✨</span>
+                    <span>새로운 소원/갖고 싶은 물건 등록하기</span>
+                  </span>
+                  <span className="text-[11px] text-slate-400">아이들이 직접 쓰거나 부모님이 대신 적어줄 수 있어요</span>
+                </div>
+
+                <form onSubmit={onWishSubmit} className="space-y-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">소원 대상 어린이</label>
+                      <select
+                        value={wishForm.childId}
+                        onChange={(e) => setWishForm({ ...wishForm, childId: e.target.value })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-amber-400"
+                      >
+                        <option value="child1">👦 김주원</option>
+                        <option value="child2">👧 김주아</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-slate-700 font-bold mb-1">갖고 싶은 물건 이름 *</label>
+                      <input
+                        type="text"
+                        required
+                        value={wishForm.title}
+                        onChange={(e) => setWishForm({ ...wishForm, title: e.target.value })}
+                        placeholder="예: 닌텐도 포켓몬 신작 칩, 레고 성 시리즈, 동물 필통 등"
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">예상 가격 / 용돈 (선택)</label>
+                      <input
+                        type="text"
+                        value={wishForm.price}
+                        onChange={(e) => setWishForm({ ...wishForm, price: e.target.value })}
+                        placeholder="예: 약 35,000원 또는 칭찬스티커 15개"
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">참고 링크 / 파는 곳 (선택)</label>
+                      <input
+                        type="text"
+                        value={wishForm.link}
+                        onChange={(e) => setWishForm({ ...wishForm, link: e.target.value })}
+                        placeholder="예: 쿠팡, 문구점, 당근마켓 링크"
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">갖고 싶은 이유나 다짐 (선택)</label>
+                    <textarea
+                      rows={2}
+                      value={wishForm.reason}
+                      onChange={(e) => setWishForm({ ...wishForm, reason: e.target.value })}
+                      placeholder="예: 이번 학기 수학 90점 맞으면 꼭 사주세요! 매일 30분씩 스스로 책 읽을게요~"
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs shadow-md shadow-amber-200 transition active:scale-95 flex items-center space-x-1.5"
+                    >
+                      <span>🎁</span>
+                      <span>소원 목록에 추가하기</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* 필터 및 목록 헤더 */}
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center space-x-1 bg-white p-1 rounded-xl border border-slate-200 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setWishFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                      wishFilter === 'all' ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    전체 보기 ({wishlist.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWishFilter('child1')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center space-x-1 ${
+                      wishFilter === 'child1' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>👦 주원</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWishFilter('child2')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center space-x-1 ${
+                      wishFilter === 'child2' ? 'bg-rose-500 text-white' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>👧 주아</span>
+                  </button>
+                </div>
+
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {isParent ? "엄마, 아빠는 선물을 사주신 후 '선물 완료' 버튼을 눌러주세요! 💝" : "엄마, 아빠가 확인하고 선물해 주실 거예요! ✨"}
+                </span>
+              </div>
+
+              {/* 위시리스트 그리드 */}
+              {filteredWishlist.length === 0 ? (
+                <div className="text-center py-10 bg-white/70 rounded-2xl border border-dashed border-amber-300/60 text-xs text-slate-400 font-bold space-y-1">
+                  <div className="text-2xl">🎁</div>
+                  <div>등록된 소원/물건이 없습니다.</div>
+                  <div className="text-[11px] text-slate-400 font-normal">위 양식을 통해 갖고 싶은 물건을 등록해 보세요!</div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredWishlist.map((item) => {
+                    const kid = FAMILY_MEMBERS.find(m => m.id === item.childId) || FAMILY_MEMBERS[2];
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col justify-between shadow-2xs ${
+                          item.isFulfilled
+                            ? 'bg-slate-50/80 border-slate-200 text-slate-400'
+                            : item.childId === 'child1'
+                            ? 'bg-white border-indigo-200/80 hover:border-indigo-400'
+                            : 'bg-white border-rose-200/80 hover:border-rose-400'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="flex items-center space-x-1.5 text-xs font-black">
+                              <span>{kid.avatar}</span>
+                              <span className={item.childId === 'child1' ? 'text-indigo-600' : 'text-rose-600'}>
+                                {item.childName || kid.name}의 소원
+                              </span>
+                              {item.isFulfilled && (
+                                <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                                  🎉 선물 완료!
+                                </span>
+                              )}
+                            </span>
+                            <div className="flex items-center space-x-1.5 text-[10px] text-slate-400">
+                              <span>{formatRelativeTime(item.createdAt)}</span>
+                              {(isParent || currentMemberId === item.childId) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteWishItem(item.id)}
+                                  className="text-slate-300 hover:text-rose-500 font-bold p-0.5 text-xs transition"
+                                  title="삭제"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <h3 className={`text-sm font-extrabold ${item.isFulfilled ? 'line-through text-slate-400' : 'text-slate-900'} leading-snug`}>
+                            🎁 {item.title}
+                          </h3>
+
+                          {item.price && (
+                            <div className="mt-1 text-xs font-bold text-amber-600 flex items-center space-x-1">
+                              <span>🏷️</span>
+                              <span>{item.price}</span>
+                            </div>
+                          )}
+
+                          {item.reason && (
+                            <p className="mt-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100/80 whitespace-pre-wrap leading-relaxed">
+                              "{item.reason}"
+                            </p>
+                          )}
+
+                          {item.link && (
+                            <div className="mt-2">
+                              <a
+                                href={item.link.startsWith('http') ? item.link : `https://${item.link}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center space-x-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 underline"
+                              >
+                                <span>🔗 물건 상세 링크 보기</span>
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 부모 전용 선물 완료 토글 버튼 */}
+                        <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400">
+                            {item.isFulfilled ? `선물해 주셨어요 ❤️ (${item.fulfilledBy || '부모님'})` : '선물 대기 중 ⏳'}
+                          </span>
+                          {isParent ? (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleWishFulfilled(item)}
+                              className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center space-x-1 ${
+                                item.isFulfilled
+                                  ? 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                  : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs'
+                              }`}
+                            >
+                              <span>{item.isFulfilled ? '↩️ 선물 취소' : '💝 선물 완료 체크'}</span>
+                            </button>
+                          ) : (
+                            item.isFulfilled && (
+                              <span className="text-xs font-bold text-emerald-600">감사합니다! 💖</span>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ======================= 2. 엄마·아빠한테 하고 싶은 말 ======================= */}
+          {boardTab === 'letter' && (
+            <div className="space-y-4">
+              {/* 편지/메시지 작성 폼 */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-pink-200/80 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="text-xs sm:text-sm font-extrabold text-pink-900 flex items-center space-x-1.5">
+                    <span>💌</span>
+                    <span>엄마, 아빠에게 전하는 따뜻한 메시지 쓰기</span>
+                  </span>
+                  <span className="text-[11px] text-slate-400">평소 쑥스러워 하지 못했던 말이나 고마움을 적어보세요</span>
+                </div>
+
+                <form onSubmit={onLetterSubmit} className="space-y-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-slate-700 font-bold">받는 분:</span>
+                    <div className="flex items-center space-x-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setLetterForm({ ...letterForm, toRole: 'parents' })}
+                        className={`px-2.5 py-1 rounded-xl font-bold transition ${
+                          letterForm.toRole === 'parents' ? 'bg-pink-500 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        👨‍👩‍👦 엄마 & 아빠 모두
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLetterForm({ ...letterForm, toRole: 'mom' })}
+                        className={`px-2.5 py-1 rounded-xl font-bold transition ${
+                          letterForm.toRole === 'mom' ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        👩 엄마에게만
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLetterForm({ ...letterForm, toRole: 'dad' })}
+                        className={`px-2.5 py-1 rounded-xl font-bold transition ${
+                          letterForm.toRole === 'dad' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        👨 아빠에게만
+                      </button>
+                    </div>
+
+                    <label className="ml-auto flex items-center space-x-1.5 text-[11px] font-bold text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={letterForm.isSecret}
+                        onChange={(e) => setLetterForm({ ...letterForm, isSecret: e.target.checked })}
+                        className="rounded text-pink-500 focus:ring-pink-400"
+                      />
+                      <span>🔒 비밀 편지 (부모님과 나만 보기)</span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <textarea
+                      required
+                      rows={3}
+                      value={letterForm.content}
+                      onChange={(e) => setLetterForm({ ...letterForm, content: e.target.value })}
+                      placeholder="엄마 아빠, 오늘 맛있는 저녁 해주셔서 감사해요! / 주말에 같이 자전거 타러 가요~ 사랑해요 ❤️"
+                      className="w-full p-3 bg-pink-50/40 border border-pink-200 rounded-2xl font-medium focus:ring-2 focus:ring-pink-400 placeholder-slate-400 leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-slate-500">
+                      보내는 사람: <strong className="text-slate-800">{currentMember.avatar} {currentMember.name}</strong>
+                    </span>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-extrabold text-xs shadow-md shadow-pink-200 transition active:scale-95 flex items-center space-x-1.5"
+                    >
+                      <span>💌</span>
+                      <span>사랑의 편지 보내기</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* 편지 목록 */}
+              {familyLetters.length === 0 ? (
+                <div className="text-center py-10 bg-white/70 rounded-2xl border border-dashed border-pink-300/60 text-xs text-slate-400 font-bold space-y-1">
+                  <div className="text-2xl">💌</div>
+                  <div>아직 작성된 메시지가 없습니다.</div>
+                  <div className="text-[11px] text-slate-400 font-normal">엄마, 아빠에게 첫 번째 마음의 편지를 띄워보세요!</div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {familyLetters.map((letter) => {
+                    // 비밀 편지 열람 권한: 작성자이거나 부모인 경우만
+                    const canViewSecret = !letter.isSecret || isParent || currentMemberId === letter.fromMemberId;
+                    const fromMember = FAMILY_MEMBERS.find(m => m.id === letter.fromMemberId) || { name: letter.fromMemberName, avatar: '👦' };
+
+                    return (
+                      <div
+                        key={letter.id}
+                        className="bg-white rounded-2xl p-4 sm:p-5 border border-pink-150 shadow-2xs space-y-3"
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xl">{fromMember.avatar}</span>
+                            <div>
+                              <div className="flex items-center space-x-1.5 text-xs font-black">
+                                <span className="text-slate-900">{letter.fromMemberName}</span>
+                                <span className="text-slate-400 font-normal">➔</span>
+                                <span className="text-pink-600">
+                                  {letter.toRole === 'mom' ? '👩 엄마에게' : letter.toRole === 'dad' ? '👨 아빠에게' : '👨‍👩‍👦 엄마 & 아빠에게'}
+                                </span>
+                                {letter.isSecret && (
+                                  <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-bold">
+                                    🔒 비밀글
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-400">{formatRelativeTime(letter.createdAt)}</span>
+                            </div>
+                          </div>
+
+                          {(isParent || currentMemberId === letter.fromMemberId) && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteFamilyLetter(letter.id)}
+                              className="text-slate-300 hover:text-rose-500 font-bold p-1 text-xs transition"
+                              title="삭제"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+
+                        {canViewSecret ? (
+                          <p className="text-xs sm:text-sm text-slate-800 font-medium whitespace-pre-wrap leading-relaxed bg-pink-50/30 p-3 rounded-2xl border border-pink-100/60">
+                            {letter.content}
+                          </p>
+                        ) : (
+                          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-400 italic">
+                            🔒 작성자와 엄마, 아빠만 읽을 수 있는 비밀 편지입니다.
+                          </div>
+                        )}
+
+                        {/* 부모님의 따뜻한 답글 목록 */}
+                        {letter.replies && letter.replies.length > 0 && (
+                          <div className="mt-2 space-y-1.5 pl-3 border-l-2 border-pink-300">
+                            {letter.replies.map((rep, idx) => (
+                              <div key={idx} className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/60 text-xs space-y-0.5">
+                                <div className="flex items-center justify-between text-[11px] font-bold">
+                                  <span className="text-amber-900 flex items-center space-x-1">
+                                    <span>{rep.authorRole === 'mom' ? '👩' : '👨'}</span>
+                                    <span>{rep.authorName}의 답글:</span>
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">{formatRelativeTime(rep.createdAt)}</span>
+                                </div>
+                                <p className="text-slate-700 font-medium whitespace-pre-wrap">{rep.content}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* 부모 전용 답글 달기 입력창 */}
+                        {isParent && canViewSecret && (
+                          <div className="pt-2 flex items-center space-x-2">
+                            <input
+                              type="text"
+                              value={replyInputMap[letter.id] || ''}
+                              onChange={(e) => setReplyInputMap({ ...replyInputMap, [letter.id]: e.target.value })}
+                              placeholder={`${currentMember.name}의 사랑이 담긴 답글 남기기...`}
+                              className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-pink-400"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  const val = replyInputMap[letter.id];
+                                  if (val && val.trim()) {
+                                    handleSaveLetterReply(letter.id, val.trim());
+                                    setReplyInputMap({ ...replyInputMap, [letter.id]: '' });
+                                  }
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const val = replyInputMap[letter.id];
+                                if (val && val.trim()) {
+                                  handleSaveLetterReply(letter.id, val.trim());
+                                  setReplyInputMap({ ...replyInputMap, [letter.id]: '' });
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-bold text-xs shrink-0 shadow-2xs"
+                            >
+                              답글 💬
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ======================= 3. 하루 감정 일기 ======================= */}
+          {boardTab === 'mood' && (
+            <div className="space-y-4">
+              {/* 오늘 내 기분 등록/수정 카드 */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-indigo-200/80 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xl">{currentMember.avatar}</span>
+                    <span className="text-xs sm:text-sm font-extrabold text-indigo-950">
+                      오늘 ({todayStr}) {currentMember.name}의 기분은 어떤가요?
+                    </span>
+                  </div>
+                  {myTodayMood && (
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                      오늘 등록 완료 ✓
+                    </span>
+                  )}
+                </div>
+
+                <form onSubmit={onMoodSubmit} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1.5">감정 아이콘 선택</label>
+                    <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                      {MOOD_OPTIONS.map((mood) => (
+                        <button
+                          type="button"
+                          key={mood.key}
+                          onClick={() => setSelectedMoodKey(mood.key)}
+                          className={`p-2.5 rounded-2xl border text-center transition flex flex-col items-center justify-center space-y-1 ${
+                            selectedMoodKey === mood.key
+                              ? `${mood.bg} ring-2 ring-indigo-400 font-black shadow-xs scale-105`
+                              : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700 font-bold'
+                          }`}
+                        >
+                          <span className="text-2xl">{mood.emoji}</span>
+                          <span className="text-[11px] tracking-tight">{mood.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">오늘 있었던 일이나 한 줄 감정 메모</label>
+                    <input
+                      type="text"
+                      value={moodNotes}
+                      onChange={(e) => setMoodNotes(e.target.value)}
+                      placeholder="예: 학교에서 친구랑 술래잡기해서 너무 신났어요! / 숙제가 많아서 조금 힘들었어요."
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-indigo-400"
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-md shadow-indigo-200 transition active:scale-95 flex items-center space-x-1.5"
+                    >
+                      <span>😊</span>
+                      <span>오늘 감정 저장하기</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* 가족 구성원별 오늘 감정 현황 요약 */}
+              <div className="bg-indigo-50/50 p-3.5 rounded-2xl border border-indigo-150 space-y-2">
+                <span className="text-xs font-black text-indigo-900 flex items-center space-x-1.5">
+                  <span>🌈</span>
+                  <span>오늘 우리 가족 하루 감정 모아보기 ({todayStr})</span>
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {FAMILY_MEMBERS.map((m) => {
+                    const mood = dailyMoods.find(d => d.memberId === m.id && d.date === todayStr);
+                    const moodOpt = mood ? MOOD_OPTIONS.find(o => o.key === mood.moodKey) : null;
+                    return (
+                      <div
+                        key={m.id}
+                        className={`p-2.5 rounded-xl border flex items-center space-x-2 bg-white ${
+                          mood ? 'border-indigo-200 shadow-2xs' : 'border-slate-200/60 opacity-60'
+                        }`}
+                      >
+                        <span className="text-xl shrink-0">{m.avatar}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[11px] font-extrabold text-slate-800 truncate">{m.name}</div>
+                          {moodOpt ? (
+                            <div className="text-xs font-black text-indigo-600 flex items-center space-x-1 mt-0.5">
+                              <span>{moodOpt.emoji}</span>
+                              <span className="truncate">{moodOpt.label}</span>
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-slate-400 mt-0.5">아직 기록 전</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 전체 감정 일기 타임라인 */}
+              {dailyMoods.length === 0 ? (
+                <div className="text-center py-8 bg-white/70 rounded-2xl border border-dashed border-indigo-300/60 text-xs text-slate-400 font-bold space-y-1">
+                  <div className="text-2xl">😊</div>
+                  <div>아직 기록된 감정 일기가 없습니다.</div>
+                  <div className="text-[11px] text-slate-400 font-normal">오늘 나의 기분을 남겨 가족과 감정을 나눠보세요!</div>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="text-xs font-extrabold text-slate-700">📖 최근 감정 일기 피드</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-80 overflow-y-auto no-scrollbar">
+                    {dailyMoods.map((log) => {
+                      const moodOpt = MOOD_OPTIONS.find(o => o.key === log.moodKey) || MOOD_OPTIONS[0];
+                      const member = FAMILY_MEMBERS.find(m => m.id === log.memberId) || { name: log.memberName, avatar: '👤' };
+
+                      return (
+                        <div
+                          key={log.id}
+                          className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-start space-x-3 transition hover:border-indigo-300"
+                        >
+                          <div className="text-3xl shrink-0 p-2 bg-indigo-50/80 rounded-2xl">
+                            {moodOpt.emoji}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-extrabold text-slate-800 flex items-center space-x-1">
+                                <span>{member.avatar}</span>
+                                <span>{log.memberName || member.name}</span>
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold border ${moodOpt.bg}`}>
+                                  {moodOpt.label}
+                                </span>
+                              </span>
+                              <div className="flex items-center space-x-1.5 text-[10px] text-slate-400">
+                                <span>📅 {log.date}</span>
+                                {(isParent || currentMemberId === log.memberId) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteDailyMood(log.id)}
+                                    className="text-slate-300 hover:text-rose-500 font-bold text-xs p-0.5 transition"
+                                    title="삭제"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {log.notes && (
+                              <p className="mt-1.5 text-xs text-slate-700 font-medium whitespace-pre-wrap bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                "{log.notes}"
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      );
+    }
+
     function PraiseSection({
       isParent,
       currentMemberId,
@@ -2752,6 +3509,11 @@
         notes: ''
       });
 
+      // 신규: 가지고 싶은 물건 위시리스트, 엄마아빠에게 하고싶은말, 하루 감정 상태
+      const [wishlist, setWishlist] = useState([]);
+      const [familyLetters, setFamilyLetters] = useState([]);
+      const [dailyMoods, setDailyMoods] = useState([]);
+
       const [myStatusInput, setMyStatusInput] = useState('');
 
       const [statusPresets, setStatusPresets] = useState(() => QUICK_STATUS_PRESETS.map((p, idx) => ({ id: `default_sp_${idx}`, ...p })));
@@ -2929,6 +3691,30 @@
               snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
               setReadingLogs(list);
             }, (err) => console.warn("reading_logs snapshot error:", err));
+
+            // 신규: 갖고 싶은 물건 위시리스트 동기화
+            db.collection('wishlist').onSnapshot((snapshot) => {
+              const list = [];
+              snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+              list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+              setWishlist(list);
+            }, (err) => console.warn("wishlist snapshot error:", err));
+
+            // 신규: 엄마·아빠에게 하고 싶은 말(편지) 동기화
+            db.collection('family_letters').onSnapshot((snapshot) => {
+              const list = [];
+              snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+              list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+              setFamilyLetters(list);
+            }, (err) => console.warn("letters snapshot error:", err));
+
+            // 신규: 가족 하루 감정 동기화
+            db.collection('daily_moods').onSnapshot((snapshot) => {
+              const list = [];
+              snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+              list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+              setDailyMoods(list);
+            }, (err) => console.warn("daily_moods snapshot error:", err));
 
           } catch (error) {
             console.error(error);
@@ -3765,6 +4551,195 @@
         } catch (err) { console.error(err); }
       };
 
+      // 신규: 갖고 싶은 물건 위시리스트 핸들러
+      const handleSaveWishItem = async (form) => {
+        const kid = FAMILY_MEMBERS.find(m => m.id === form.childId) || FAMILY_MEMBERS[2];
+        const itemData = {
+          childId: form.childId,
+          childName: kid.name,
+          title: form.title.trim(),
+          price: (form.price || '').trim(),
+          reason: (form.reason || '').trim(),
+          link: (form.link || '').trim(),
+          isFulfilled: false,
+          fulfilledBy: '',
+          fulfilledAt: null,
+          createdAt: Date.now(),
+          createdBy: currentMember.name
+        };
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('wishlist').add(itemData);
+          } else {
+            setWishlist(prev => [{ id: 'wish_' + Date.now(), ...itemData }, ...prev]);
+          }
+          showToast(`🎁 ${kid.name}의 소원("${itemData.title}")이 등록되었습니다! ✨`);
+          triggerHaptic([30, 50, 30]);
+        } catch (err) {
+          console.error(err);
+          showToast("소원 등록 중 오류가 발생했습니다.");
+        }
+      };
+
+      const handleToggleWishFulfilled = async (item) => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 선물 완료 상태를 변경할 수 있습니다.");
+          return;
+        }
+        const newFulfilled = !item.isFulfilled;
+        const updateData = {
+          isFulfilled: newFulfilled,
+          fulfilledBy: newFulfilled ? currentMember.name : '',
+          fulfilledAt: newFulfilled ? Date.now() : null
+        };
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('wishlist').doc(item.id).update(updateData);
+          } else {
+            setWishlist(prev => prev.map(w => w.id === item.id ? { ...w, ...updateData } : w));
+          }
+          showToast(newFulfilled ? `💝 '${item.title}' 선물이 완료 처리되었습니다!` : `↩️ '${item.title}' 선물 완료가 취소되었습니다.`);
+          triggerHaptic(30);
+        } catch (err) {
+          console.error(err);
+          showToast("선물 상태 변경 중 오류가 발생했습니다.");
+        }
+      };
+
+      const handleDeleteWishItem = async (itemId) => {
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('wishlist').doc(itemId).delete();
+          } else {
+            setWishlist(prev => prev.filter(w => w.id !== itemId));
+          }
+          showToast("소원 항목이 삭제되었습니다.");
+          triggerHaptic(20);
+        } catch (err) {
+          console.error(err);
+          showToast("소원 삭제 중 오류가 발생했습니다.");
+        }
+      };
+
+      // 신규: 엄마·아빠에게 하고 싶은 말 (편지) 핸들러
+      const handleSaveFamilyLetter = async (form) => {
+        const letterData = {
+          fromMemberId: currentMember.id,
+          fromMemberName: currentMember.name,
+          toRole: form.toRole || 'parents',
+          content: form.content.trim(),
+          isSecret: !!form.isSecret,
+          replies: [],
+          createdAt: Date.now()
+        };
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('family_letters').add(letterData);
+          } else {
+            setFamilyLetters(prev => [{ id: 'letter_' + Date.now(), ...letterData }, ...prev]);
+          }
+          showToast("💌 따뜻한 마음의 편지가 전달되었습니다! ❤️");
+          triggerHaptic([40, 60, 40]);
+        } catch (err) {
+          console.error(err);
+          showToast("편지 전송 중 오류가 발생했습니다.");
+        }
+      };
+
+      const handleSaveLetterReply = async (letterId, replyContent) => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 답글을 달 수 있습니다.");
+          return;
+        }
+        const targetLetter = familyLetters.find(l => l.id === letterId);
+        if (!targetLetter) return;
+        const newReply = {
+          authorId: currentMember.id,
+          authorName: currentMember.name,
+          authorRole: currentMember.role,
+          content: replyContent.trim(),
+          createdAt: Date.now()
+        };
+        const updatedReplies = [...(targetLetter.replies || []), newReply];
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('family_letters').doc(letterId).update({ replies: updatedReplies });
+          } else {
+            setFamilyLetters(prev => prev.map(l => l.id === letterId ? { ...l, replies: updatedReplies } : l));
+          }
+          showToast("💬 아이에게 따뜻한 답글을 남겼습니다! 💕");
+          triggerHaptic(30);
+        } catch (err) {
+          console.error(err);
+          showToast("답글 저장 중 오류가 발생했습니다.");
+        }
+      };
+
+      const handleDeleteFamilyLetter = async (letterId) => {
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('family_letters').doc(letterId).delete();
+          } else {
+            setFamilyLetters(prev => prev.filter(l => l.id !== letterId));
+          }
+          showToast("편지가 삭제되었습니다.");
+          triggerHaptic(20);
+        } catch (err) {
+          console.error(err);
+          showToast("편지 삭제 중 오류가 발생했습니다.");
+        }
+      };
+
+      // 신규: 하루 감정 일기 핸들러
+      const handleSaveDailyMood = async ({ moodKey, notes }) => {
+        const today = getTodayString();
+        const existing = dailyMoods.find(m => m.memberId === currentMember.id && m.date === today);
+        const moodData = {
+          memberId: currentMember.id,
+          memberName: currentMember.name,
+          date: today,
+          moodKey: moodKey,
+          notes: (notes || '').trim(),
+          updatedAt: Date.now()
+        };
+        try {
+          if (dbRef.current) {
+            if (existing) {
+              await dbRef.current.collection('daily_moods').doc(existing.id).update(moodData);
+            } else {
+              await dbRef.current.collection('daily_moods').add({ ...moodData, createdAt: Date.now() });
+            }
+          } else {
+            if (existing) {
+              setDailyMoods(prev => prev.map(d => d.id === existing.id ? { ...d, ...moodData } : d));
+            } else {
+              setDailyMoods(prev => [{ id: 'mood_' + Date.now(), createdAt: Date.now(), ...moodData }, ...prev]);
+            }
+          }
+          const moodOpt = MOOD_OPTIONS.find(o => o.key === moodKey) || MOOD_OPTIONS[0];
+          showToast(`오늘의 감정(${moodOpt.emoji} ${moodOpt.label})이 저장되었습니다! ✨`);
+          triggerHaptic([30, 50, 30]);
+        } catch (err) {
+          console.error(err);
+          showToast("감정 저장 중 오류가 발생했습니다.");
+        }
+      };
+
+      const handleDeleteDailyMood = async (moodId) => {
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('daily_moods').doc(moodId).delete();
+          } else {
+            setDailyMoods(prev => prev.filter(d => d.id !== moodId));
+          }
+          showToast("감정 기록이 삭제되었습니다.");
+          triggerHaptic(20);
+        } catch (err) {
+          console.error(err);
+          showToast("감정 기록 삭제 중 오류가 발생했습니다.");
+        }
+      };
+
       const weekDays = useMemo(() => {
         const parts = selectedDate.split('-').map(Number);
         const curr = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
@@ -4042,6 +5017,20 @@
               >
                 <span>📖 독서 기록 & 명예의 전당</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setMainTab('board')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
+                  mainTab === 'board' ? 'bg-pink-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span>🎈 소통 & 소원</span>
+                {wishlist.filter(w => !w.isFulfilled).length > 0 && (
+                  <span className="text-[10px] bg-amber-400 text-slate-900 px-1.5 py-0.2 rounded-full font-black">
+                    {wishlist.filter(w => !w.isFulfilled).length}
+                  </span>
+                )}
+              </button>
             </nav>
 
             {mainTab === 'all' && (
@@ -4142,6 +5131,24 @@
                   handleRedeemReward={handleRedeemReward}
                   handleDeleteRedeemLog={handleDeleteRedeemLog}
                 />
+
+                {/* 신규: 우리 가족 소통 & 소원 보드 (위시리스트, 하고싶은말, 하루감정) */}
+                <FamilyBoardSection
+                  currentMember={currentMember}
+                  currentMemberId={currentMemberId}
+                  isParent={isParent}
+                  wishlist={wishlist}
+                  familyLetters={familyLetters}
+                  dailyMoods={dailyMoods}
+                  handleSaveWishItem={handleSaveWishItem}
+                  handleToggleWishFulfilled={handleToggleWishFulfilled}
+                  handleDeleteWishItem={handleDeleteWishItem}
+                  handleSaveFamilyLetter={handleSaveFamilyLetter}
+                  handleSaveLetterReply={handleSaveLetterReply}
+                  handleDeleteFamilyLetter={handleDeleteFamilyLetter}
+                  handleSaveDailyMood={handleSaveDailyMood}
+                  handleDeleteDailyMood={handleDeleteDailyMood}
+                />
               </div>
             )}
 
@@ -4238,6 +5245,26 @@
                 readingLogs={readingLogs}
                 handleOpenReadingModal={handleOpenReadingModal}
                 handleRequestDeleteReadingLog={handleRequestDeleteReadingLog}
+              />
+            )}
+
+            {/* 신규: 전용 소통 & 소원 보드 탭 */}
+            {mainTab === 'board' && (
+              <FamilyBoardSection
+                currentMember={currentMember}
+                currentMemberId={currentMemberId}
+                isParent={isParent}
+                wishlist={wishlist}
+                familyLetters={familyLetters}
+                dailyMoods={dailyMoods}
+                handleSaveWishItem={handleSaveWishItem}
+                handleToggleWishFulfilled={handleToggleWishFulfilled}
+                handleDeleteWishItem={handleDeleteWishItem}
+                handleSaveFamilyLetter={handleSaveFamilyLetter}
+                handleSaveLetterReply={handleSaveLetterReply}
+                handleDeleteFamilyLetter={handleDeleteFamilyLetter}
+                handleSaveDailyMood={handleSaveDailyMood}
+                handleDeleteDailyMood={handleDeleteDailyMood}
               />
             )}
           </main>
@@ -5464,6 +6491,19 @@
             >
               <span className={`text-xl transition-transform ${mainTab === 'praise' ? 'scale-110' : ''}`}>🌟</span>
               <span className="text-[10px] tracking-tight mt-0.5">칭찬</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMainTab('board'); triggerHaptic(10); }}
+              className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-2xl transition flex-1 relative ${
+                mainTab === 'board' ? 'text-pink-600 font-black' : 'text-slate-400 font-semibold'
+              }`}
+            >
+              <span className={`text-xl transition-transform ${mainTab === 'board' ? 'scale-110' : ''}`}>🎈</span>
+              <span className="text-[10px] tracking-tight mt-0.5">소통</span>
+              {wishlist.filter(w => !w.isFulfilled).length > 0 && (
+                <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-pink-500 animate-ping" />
+              )}
             </button>
           </nav>
 
