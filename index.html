@@ -1189,13 +1189,15 @@
               >
                 🏅 레벨 등급표
               </button>
-              <button
-                type="button"
-                onClick={() => handleOpenReadingModal('child1')}
-                className="px-3.5 py-1.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-amber-500/20 transition active:scale-95"
-              >
-                + 📖 독서 시간 기록
-              </button>
+              {isParent && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenReadingModal('child1')}
+                  className="px-3.5 py-1.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-amber-500/20 transition active:scale-95"
+                >
+                  + 📖 독서 시간 기록
+                </button>
+              )}
             </div>
           </div>
 
@@ -1314,14 +1316,16 @@
                       </div>
                     </div>
 
-                    {/* 빠른 기록 버튼 */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenReadingModal(kid.id)}
-                      className="w-full py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition active:scale-95 border border-white/15 flex items-center justify-center space-x-1"
-                    >
-                      <span>+ {kid.name} 독서 시간 기록하기</span>
-                    </button>
+                    {/* 빠른 기록 버튼 (엄마·아빠 전용) */}
+                    {isParent && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReadingModal(kid.id)}
+                        className="w-full py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition active:scale-95 border border-white/15 flex items-center justify-center space-x-1"
+                      >
+                        <span>+ {kid.name} 독서 시간 기록하기</span>
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -1518,7 +1522,9 @@
             {filteredReadingLogs.length === 0 ? (
               <div className="text-center py-8 bg-white/5 rounded-2xl border border-dashed border-white/20 text-xs text-slate-400 font-bold space-y-1">
                 <div>🔍 조건에 맞는 독서 기록이 없습니다.</div>
-                <div className="text-[11px] text-slate-500 font-normal">상단의 '+ 📖 독서 시간 기록'을 눌러 새로운 책을 등록해 보세요!</div>
+                <div className="text-[11px] text-slate-500 font-normal">
+                  {isParent ? "상단의 '+ 📖 독서 시간 기록'을 눌러 새로운 책을 등록해 보세요!" : "엄마, 아빠가 독서 시간을 기록해 주시면 여기에 예쁘게 표시돼요! 📚✨"}
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-80 overflow-y-auto no-scrollbar pr-0.5">
@@ -3624,8 +3630,12 @@
         }
       };
 
-      // 신규: 주원·주아 독서 시간 기록 핸들러
+      // 신규: 주원·주아 독서 시간 기록 핸들러 (엄마, 아빠 전용)
       const handleOpenReadingModal = (childId = 'child1') => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 독서 시간을 기록할 수 있습니다.");
+          return;
+        }
         setReadingForm({
           childId: childId || 'child1',
           date: getTodayString(),
@@ -3638,6 +3648,10 @@
 
       const handleSaveReadingLog = async (e) => {
         e.preventDefault();
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 독서 시간을 기록할 수 있습니다.");
+          return;
+        }
         const mins = Math.max(1, Number(readingForm.minutes) || 1);
         const kid = FAMILY_MEMBERS.find(m => m.id === readingForm.childId) || (readingForm.childId === 'child1' ? FAMILY_MEMBERS[2] : FAMILY_MEMBERS[3]);
         const logData = {
