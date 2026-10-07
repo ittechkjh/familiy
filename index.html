@@ -2322,7 +2322,7 @@
       praiseRedeems = [],
       setIsResetPraiseConfirmOpen,
       handleOpenPraiseModal,
-      handleDeletePraise,
+      handleRequestDeletePraise,
       handleOpenAddRewardModal,
       handleDeleteReward,
       handleRedeemReward,
@@ -2658,7 +2658,7 @@
                             {isParent && (
                               <button
                                 type="button"
-                                onClick={() => handleDeletePraise(log.id)}
+                                onClick={() => handleRequestDeletePraise(log)}
                                 className="p-0.5 text-slate-300 hover:text-rose-500 font-bold transition text-xs"
                                 title="삭제"
                               >
@@ -2765,6 +2765,7 @@
       const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
       const [isResetPraiseConfirmOpen, setIsResetPraiseConfirmOpen] = useState(false);
       const [deletingReadingLog, setDeletingReadingLog] = useState(null);
+      const [deletingPraiseLog, setDeletingPraiseLog] = useState(null);
       const [isSubmitting, setIsSubmitting] = useState(false);
       const [toastMessage, setToastMessage] = useState(null);
 
@@ -3456,19 +3457,38 @@
         } catch (err) { console.error(err); }
       };
 
-      const handleDeletePraise = async (praiseId) => {
+      // 신규: 칭찬 스티커 삭제 요청 (부모 전용, 확인 창 호출)
+      const handleRequestDeletePraise = (logItem) => {
         if (!isParent) {
           showToast("⚠️ 엄마, 아빠만 칭찬 스티커를 삭제할 수 있습니다.");
           return;
         }
+        setDeletingPraiseLog(logItem);
+      };
+
+      const handleConfirmDeletePraise = async () => {
+        if (!deletingPraiseLog) return;
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 칭찬 스티커를 삭제할 수 있습니다.");
+          setDeletingPraiseLog(null);
+          return;
+        }
+        const praiseId = deletingPraiseLog.id;
         try {
           if (dbRef.current) {
             await dbRef.current.collection('praise_stickers').doc(praiseId).delete();
           } else {
             setPraiseLogs(prev => prev.filter(p => p.id !== praiseId));
           }
-          showToast("칭찬 스티커 기록이 삭제되었습니다.");
-        } catch (err) { console.error(err); }
+          const cnt = Number(deletingPraiseLog.count) || 1;
+          showToast(`🗑️ ${deletingPraiseLog.toMemberName}의 칭찬 스티커(${cnt}개)가 취소·삭제되었습니다.`);
+          triggerHaptic([40, 60, 40]);
+        } catch (err) {
+          console.error(err);
+          showToast("칭찬 스티커 삭제 중 오류가 발생했습니다.");
+        } finally {
+          setDeletingPraiseLog(null);
+        }
       };
 
       const handleResetAllPraise = async () => {
@@ -4118,7 +4138,7 @@
                     setPraiseForm({ toMemberId: kidId, stickerKey: 'star', reason: '' });
                     setIsPraiseModalOpen(true);
                   }}
-                  handleDeletePraise={handleDeletePraise}
+                  handleRequestDeletePraise={handleRequestDeletePraise}
                   handleOpenAddRewardModal={handleOpenAddRewardModal}
                   handleDeleteReward={handleDeleteReward}
                   handleRedeemReward={handleRedeemReward}
@@ -4204,7 +4224,7 @@
                   setPraiseForm({ toMemberId: kidId, stickerKey: 'star', reason: '' });
                   setIsPraiseModalOpen(true);
                 }}
-                handleDeletePraise={handleDeletePraise}
+                handleRequestDeletePraise={handleRequestDeletePraise}
                 handleOpenAddRewardModal={handleOpenAddRewardModal}
                 handleDeleteReward={handleDeleteReward}
                 handleRedeemReward={handleRedeemReward}
@@ -5022,6 +5042,60 @@
                   <button
                     type="button"
                     onClick={handleConfirmDeleteReadingLog}
+                    className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition"
+                  >
+                    삭제 실행
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 칭찬 스티커 삭제 2단계 확인 모달 (엄마·아빠 전용) */}
+          {deletingPraiseLog && isParent && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/70 backdrop-blur-xs">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-sm w-full p-5 sm:p-6 text-center space-y-4 border border-slate-100 shadow-2xl">
+                <div className="text-3xl">🌟</div>
+                <h3 className="text-base font-extrabold text-slate-900">칭찬 스티커를 취소·삭제할까요?</h3>
+
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-left space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">받은 어린이:</span>
+                    <span className="font-black text-indigo-600">{deletingPraiseLog.toMemberName}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">칭찬 준 사람:</span>
+                    <span className="font-bold text-amber-600">{deletingPraiseLog.fromMemberName}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">스티커 수량:</span>
+                    <span className="font-black text-rose-500">{Number(deletingPraiseLog.count) || 1}개</span>
+                  </div>
+                  {deletingPraiseLog.reason && (
+                    <div className="pt-1.5 border-t border-slate-200">
+                      <span className="font-bold text-slate-600 block mb-0.5">칭찬 사유:</span>
+                      <p className="text-slate-800 font-medium bg-white p-2 rounded-lg border border-slate-200/60 break-words">
+                        {deletingPraiseLog.reason}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-rose-600 font-semibold leading-relaxed">
+                  ⚠️ 삭제 시 아이의 보유 스티커 및 총 누적 개수에서 차감됩니다.
+                </p>
+
+                <div className="flex items-center space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeletingPraiseLog(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDeletePraise}
                     className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition"
                   >
                     삭제 실행
