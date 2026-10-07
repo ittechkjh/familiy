@@ -160,6 +160,38 @@
       { id: 'rw_toy', title: '🎁 갖고 싶던 선물/장난감 사기', cost: 20, icon: '🎁' }
     ];
 
+    // 신규: 주원·주아 독서 시간 누적 레벨 시스템 정의
+    const READING_LEVELS = [
+      { level: 1, title: '책과 친해지는 중', icon: '📖', minMinutes: 0, maxMinutes: 300, desc: '첫 페이지를 활짝 열었어요!' },
+      { level: 2, title: '독서 꿈나무', icon: '🐛', minMinutes: 300, maxMinutes: 900, desc: '매일 읽는 습관이 쑥쑥!' },
+      { level: 3, title: '열정 독서왕', icon: '📚', minMinutes: 900, maxMinutes: 1800, desc: '책 속 모험에 푹 빠졌어요!' },
+      { level: 4, title: '지혜의 숲 탐험가', icon: '🦉', minMinutes: 1800, maxMinutes: 3600, desc: '상상력과 지혜가 퐁퐁!' },
+      { level: 5, title: '마스터 북리더', icon: '👑', minMinutes: 3600, maxMinutes: 6000, desc: '우리집 최고의 다독왕!' },
+      { level: 6, title: '독서 대마법사', icon: '🌟', minMinutes: 6000, maxMinutes: 999999, desc: '책으로 세상을 바꾸는 멋진 리더!' }
+    ];
+
+    const getReadingLevelInfo = (totalMinutes) => {
+      const mins = Math.max(0, Number(totalMinutes) || 0);
+      for (let i = READING_LEVELS.length - 1; i >= 0; i--) {
+        if (mins >= READING_LEVELS[i].minMinutes) {
+          const cur = READING_LEVELS[i];
+          const isMax = i === READING_LEVELS.length - 1;
+          const next = isMax ? null : READING_LEVELS[i + 1];
+          const range = isMax ? 1 : (cur.maxMinutes - cur.minMinutes);
+          const progress = isMax ? 100 : Math.min(100, Math.round(((mins - cur.minMinutes) / range) * 100));
+          const remainingForNext = isMax ? 0 : Math.max(0, cur.maxMinutes - mins);
+          return { ...cur, progress, next, remainingForNext };
+        }
+      }
+      return { ...READING_LEVELS[0], progress: 0, next: READING_LEVELS[1], remainingForNext: 300 };
+    };
+
+    const DEFAULT_READING_LOGS = [
+      { id: 'rl_1', childId: 'child1', childName: '김주원', date: '2026-10-05', minutes: 35, bookTitle: '삼국지 1권', notes: '도원결의 부분 완독!', createdAt: Date.now() - 86400000 * 2, loggedBy: '김주원' },
+      { id: 'rl_2', childId: 'child2', childName: '김주아', date: '2026-10-06', minutes: 30, bookTitle: '백설공주와 일곱 난쟁이', notes: '사과 조심해! 🍎', createdAt: Date.now() - 86400000, loggedBy: '김주아' },
+      { id: 'rl_3', childId: 'child1', childName: '김주원', date: '2026-10-07', minutes: 40, bookTitle: '마법천자문 5권', notes: '한자 5개 마스터!', createdAt: Date.now(), loggedBy: '김주원' }
+    ];
+
     const DEFAULT_DDAYS = [
       { id: 'dd_mom', title: '엄마 생신', date: '2026-05-15', icon: '🎂', isAnnual: true },
       { id: 'dd_dad', title: '아빠 생신', date: '2026-08-20', icon: '🎂', isAnnual: true },
@@ -233,13 +265,21 @@
       return `${h}시간 ${m}분`;
     };
 
+    const isScheduleOnDate = (item, dateStr) => {
+      if (!item || !item.date || !dateStr) return false;
+      const start = item.date;
+      const end = (item.endDate && item.endDate >= item.date) ? item.endDate : item.date;
+      return dateStr >= start && dateStr <= end;
+    };
+
     const createGoogleCalendarUrl = (item) => {
       const title = encodeURIComponent(`[우리집] ${item.title}`);
       const notes = encodeURIComponent(item.notes ? `메모: ${item.notes}` : '');
-      const dateFormatted = item.date.replace(/-/g, '');
+      const startDateFormatted = item.date.replace(/-/g, '');
+      const endDateFormatted = (item.endDate && item.endDate >= item.date ? item.endDate : item.date).replace(/-/g, '');
       const startFormatted = (item.startTime || '09:00').replace(/:/g, '') + '00';
       const endFormatted = (item.endTime || '10:00').replace(/:/g, '') + '00';
-      const dates = `${dateFormatted}T${startFormatted}/${dateFormatted}T${endFormatted}`;
+      const dates = `${startDateFormatted}T${startFormatted}/${endDateFormatted}T${endFormatted}`;
       return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&details=${notes}`;
     };
 
@@ -1002,6 +1042,479 @@
       );
     }
 
+    // 신규: 주원·주아 독서 시간 기록, 1주일 단위 분석, 누적 명예의 전당 & 레벨 컴포넌트
+    function ReadingSection({ isParent, currentMember, readingLogs, handleOpenReadingModal, handleDeleteReadingLog }) {
+      const [selectedWeekOffset, setSelectedWeekOffset] = useState(0);
+      const [isLevelGuideOpen, setIsLevelGuideOpen] = useState(false);
+
+      // 기준 주의 월요일 ~ 일요일 7일 계산
+      const weekDays = useMemo(() => {
+        const now = new Date();
+        now.setDate(now.getDate() + (selectedWeekOffset * 7));
+        const day = now.getDay();
+        const diffToMon = day === 0 ? -6 : 1 - day;
+        const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMon);
+        const days = [];
+        for (let i = 0; i < 7; i++) {
+          const cur = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i);
+          const dateStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+          const dayName = ['월', '화', '수', '목', '금', '토', '일'][i];
+          days.push({ dateStr, dayName, dayNum: cur.getDate(), isToday: dateStr === getTodayString() });
+        }
+        return days;
+      }, [selectedWeekOffset]);
+
+      const weekDatesSet = useMemo(() => new Set(weekDays.map(w => w.dateStr)), [weekDays]);
+
+      // 주원·주아 통계 계산
+      const kidStats = useMemo(() => {
+        return KIDS_MEMBERS.map(kid => {
+          const kidLogs = readingLogs.filter(l => l.childId === kid.id);
+          const totalMinutes = kidLogs.reduce((acc, l) => acc + (Number(l.minutes) || 0), 0);
+          const levelInfo = getReadingLevelInfo(totalMinutes);
+
+          const weekLogs = kidLogs.filter(l => weekDatesSet.has(l.date));
+          const weekMinutes = weekLogs.reduce((acc, l) => acc + (Number(l.minutes) || 0), 0);
+
+          // 일별 독서 시간 맵
+          const dailyMap = {};
+          weekDays.forEach(w => { dailyMap[w.dateStr] = 0; });
+          weekLogs.forEach(l => {
+            if (dailyMap[l.date] !== undefined) {
+              dailyMap[l.date] += Number(l.minutes) || 0;
+            }
+          });
+
+          // 최근 읽은 책 로그 (최대 5건)
+          const recentLogs = [...kidLogs].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
+
+          return {
+            ...kid,
+            totalMinutes,
+            totalFormatted: formatMinutesToHours(totalMinutes),
+            levelInfo,
+            weekLogs,
+            weekMinutes,
+            weekFormatted: formatMinutesToHours(weekMinutes),
+            dailyMap,
+            recentLogs
+          };
+        });
+      }, [readingLogs, weekDatesSet, weekDays]);
+
+      const child1 = kidStats.find(k => k.id === 'child1') || kidStats[0];
+      const child2 = kidStats.find(k => k.id === 'child2') || kidStats[1];
+
+      // 주간 독서왕 (Weekly Winner)
+      const weeklyWinnerId = (child1.weekMinutes > child2.weekMinutes && child1.weekMinutes > 0)
+        ? 'child1'
+        : (child2.weekMinutes > child1.weekMinutes && child2.weekMinutes > 0)
+        ? 'child2'
+        : (child1.weekMinutes === child2.weekMinutes && child1.weekMinutes > 0)
+        ? 'tie'
+        : null;
+
+      // 누적 명예의 전당 1위 (All-time Winner)
+      const allTimeWinnerId = (child1.totalMinutes > child2.totalMinutes && child1.totalMinutes > 0)
+        ? 'child1'
+        : (child2.totalMinutes > child1.totalMinutes && child2.totalMinutes > 0)
+        ? 'child2'
+        : (child1.totalMinutes === child2.totalMinutes && child1.totalMinutes > 0)
+        ? 'tie'
+        : null;
+
+      const totalFamilyWeekMinutes = (child1.weekMinutes || 0) + (child2.weekMinutes || 0);
+
+      // 전체 최근 읽은 로그 목록 (최대 10개)
+      const allRecentLogs = useMemo(() => {
+        return [...readingLogs].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10);
+      }, [readingLogs]);
+
+      return (
+        <section className="bg-gradient-to-br from-amber-950 via-stone-900 to-amber-950 text-white rounded-3xl p-4 sm:p-6 shadow-xl border border-amber-500/20 space-y-5">
+          {/* 헤더 */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-white/10">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xl sm:text-2xl">📖</span>
+                <h2 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center space-x-2">
+                  <span>주원·주아 독서 기록 & 명예의 전당</span>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 border border-amber-400/30">
+                    주간 분석 & 레벨 시스템
+                  </span>
+                </h2>
+              </div>
+              <p className="text-xs text-amber-200/80 mt-1">
+                매일 책 읽는 시간을 1주일 단위로 기록하고, 누적 독서 시간으로 레벨업에 도전해요! 📚✨
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-1.5 self-start sm:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsLevelGuideOpen(true)}
+                className="px-3 py-1.5 text-xs font-bold rounded-xl bg-white/10 hover:bg-white/20 text-amber-200 border border-white/15 transition active:scale-95"
+              >
+                🏅 레벨 등급표
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenReadingModal('child1')}
+                className="px-3.5 py-1.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-amber-500/20 transition active:scale-95"
+              >
+                + 📖 독서 시간 기록
+              </button>
+            </div>
+          </div>
+
+          {/* 1. 누적 명예의 전당 & 레벨 카드 (주원 & 주아) */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-amber-300 flex items-center space-x-1">
+                <span>🏆</span>
+                <span>누적 독서 명예의 전당 & 레벨 달성 현황</span>
+              </span>
+              <span className="text-[10px] text-slate-300">누적 독서 시간에 따라 자동 레벨업!</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+              {kidStats.map((kid) => {
+                const isWeeklyKing = weeklyWinnerId === kid.id || (weeklyWinnerId === 'tie' && kid.weekMinutes > 0);
+                const isAllTimeKing = allTimeWinnerId === kid.id || (allTimeWinnerId === 'tie' && kid.totalMinutes > 0);
+
+                return (
+                  <div
+                    key={kid.id}
+                    className="bg-white/10 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-white/15 space-y-3 relative overflow-hidden flex flex-col justify-between"
+                  >
+                    {/* 상단 뱃지 및 프로필 */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-2.5">
+                        <span className="text-3xl sm:text-4xl">{kid.avatar}</span>
+                        <div>
+                          <div className="flex items-center space-x-1.5">
+                            <span className="text-sm sm:text-base font-black text-white">{kid.name}</span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-white/20 text-slate-200 font-bold">
+                              {kid.role}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-1.5 mt-0.5">
+                            <span className="text-xs font-extrabold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-400/30 flex items-center space-x-1">
+                              <span>{kid.levelInfo.icon}</span>
+                              <span>Lv.{kid.levelInfo.level} {kid.levelInfo.title}</span>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 트로피 / 왕관 뱃지 */}
+                      <div className="flex flex-col items-end space-y-1">
+                        {isWeeklyKing && (
+                          <span className="text-[10px] font-black bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full shadow-xs flex items-center space-x-0.5 animate-pulse">
+                            <span>👑</span>
+                            <span>이번 주 독서왕!</span>
+                          </span>
+                        )}
+                        {isAllTimeKing && (
+                          <span className="text-[10px] font-black bg-gradient-to-r from-yellow-300 to-amber-400 text-amber-950 px-2 py-0.5 rounded-full shadow-xs flex items-center space-x-0.5">
+                            <span>🏆</span>
+                            <span>누적 명예의전당 1위</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 독서 시간 요약 */}
+                    <div className="grid grid-cols-2 gap-2 bg-black/20 p-2.5 rounded-xl border border-white/10 text-center">
+                      <div>
+                        <div className="text-[10px] text-slate-300 font-bold">📚 총 누적 독서</div>
+                        <div className="text-sm sm:text-base font-black text-amber-300 mt-0.5">
+                          {kid.totalFormatted}
+                        </div>
+                        <div className="text-[9px] text-slate-400">({kid.totalMinutes}분)</div>
+                      </div>
+                      <div className="border-l border-white/10">
+                        <div className="text-[10px] text-slate-300 font-bold">📅 이번 주 독서</div>
+                        <div className="text-sm sm:text-base font-black text-emerald-300 mt-0.5">
+                          {kid.weekFormatted}
+                        </div>
+                        <div className="text-[9px] text-slate-400">({kid.weekMinutes}분)</div>
+                      </div>
+                    </div>
+
+                    {/* 레벨 게이지 바 */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-slate-300">
+                          다음 레벨 ({kid.levelInfo.next ? `Lv.${kid.levelInfo.next.level} ${kid.levelInfo.next.title}` : '최고 등급 달성!'})
+                        </span>
+                        <span className="font-black text-amber-300">{kid.levelInfo.progress}%</span>
+                      </div>
+                      <div className="w-full bg-white/15 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/20">
+                        <div
+                          className="bg-gradient-to-r from-amber-400 via-orange-400 to-yellow-300 h-full rounded-full transition-all duration-500 shadow-xs"
+                          style={{ width: `${kid.levelInfo.progress}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                        <span>"{kid.levelInfo.desc}"</span>
+                        {kid.levelInfo.next && (
+                          <span className="text-amber-200 font-bold">
+                            앞으로 {kid.levelInfo.remainingForNext}분 남음
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 빠른 기록 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenReadingModal(kid.id)}
+                      className="w-full py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition active:scale-95 border border-white/15 flex items-center justify-center space-x-1"
+                    >
+                      <span>+ {kid.name} 독서 시간 기록하기</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 2. 1주일 단위 독서 분석 & 일별 그래프 */}
+          <div className="bg-black/30 backdrop-blur rounded-2xl p-4 sm:p-5 border border-white/10 space-y-4">
+            {/* 주간 네비게이션 */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-white/10">
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedWeekOffset(prev => prev - 1)}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold transition active:scale-90"
+                  title="이전 주간"
+                >
+                  ◀ 이전 주
+                </button>
+                <span className="text-xs sm:text-sm font-extrabold text-white">
+                  📅 {weekDays[0].dateStr.slice(5)} ({weekDays[0].dayName}) ~ {weekDays[6].dateStr.slice(5)} ({weekDays[6].dayName}) 주간
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedWeekOffset(prev => prev + 1)}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold transition active:scale-90"
+                  title="다음 주간"
+                >
+                  다음 주 ▶
+                </button>
+                {selectedWeekOffset !== 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWeekOffset(0)}
+                    className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 text-[10px] font-bold rounded-lg border border-amber-400/30 transition"
+                  >
+                    이번 주로 ↩
+                  </button>
+                )}
+              </div>
+
+              <div className="text-xs text-slate-300 font-bold flex items-center space-x-1">
+                <span>가족 주간 독서 합계:</span>
+                <span className="text-amber-300 font-black text-sm">{formatMinutesToHours(totalFamilyWeekMinutes)}</span>
+                <span className="text-[10px] text-slate-400">({totalFamilyWeekMinutes}분)</span>
+              </div>
+            </div>
+
+            {/* 일별 독서 시간 막대 그래프 (7일간) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] text-slate-300 font-bold">
+                <span>📊 일별 독서 시간 비교</span>
+                <div className="flex items-center space-x-3 text-[10px]">
+                  <span className="flex items-center space-x-1">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-indigo-400 inline-block"></span>
+                    <span>주원</span>
+                  </span>
+                  <span className="flex items-center space-x-1">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-rose-400 inline-block"></span>
+                    <span>주아</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-2 pt-2">
+                {weekDays.map((day) => {
+                  const m1 = child1.dailyMap[day.dateStr] || 0;
+                  const m2 = child2.dailyMap[day.dateStr] || 0;
+                  const maxMinutes = Math.max(60, m1, m2);
+                  const h1 = Math.min(100, Math.round((m1 / maxMinutes) * 100));
+                  const h2 = Math.min(100, Math.round((m2 / maxMinutes) * 100));
+                  const dayTotal = m1 + m2;
+
+                  return (
+                    <div
+                      key={day.dateStr}
+                      className={`rounded-xl p-2 flex flex-col items-center justify-between transition ${
+                        day.isToday ? 'bg-amber-500/20 border border-amber-400/50' : 'bg-white/5 border border-white/10'
+                      }`}
+                    >
+                      <span className="text-[10px] font-bold text-slate-300">{day.dayName}</span>
+                      <span className={`text-[11px] font-black ${day.isToday ? 'text-amber-300' : 'text-slate-400'}`}>
+                        {day.dayNum}
+                      </span>
+
+                      {/* 막대 바 컨테이너 */}
+                      <div className="w-full h-24 sm:h-28 flex items-end justify-center space-x-1 py-1">
+                        {/* 주원 바 */}
+                        <div className="w-2.5 sm:w-3.5 bg-white/10 rounded-t-sm h-full flex items-end">
+                          <div
+                            className="w-full bg-gradient-to-t from-indigo-600 to-indigo-400 rounded-t-sm transition-all duration-300"
+                            style={{ height: `${Math.max(h1 > 0 ? 8 : 0, h1)}%` }}
+                            title={`주원: ${m1}분`}
+                          ></div>
+                        </div>
+
+                        {/* 주아 바 */}
+                        <div className="w-2.5 sm:w-3.5 bg-white/10 rounded-t-sm h-full flex items-end">
+                          <div
+                            className="w-full bg-gradient-to-t from-rose-600 to-rose-400 rounded-t-sm transition-all duration-300"
+                            style={{ height: `${Math.max(h2 > 0 ? 8 : 0, h2)}%` }}
+                            title={`주아: ${m2}분`}
+                          ></div>
+                        </div>
+                      </div>
+
+                      {/* 일별 총합 분 표시 */}
+                      <span className="text-[10px] font-bold text-slate-300">
+                        {dayTotal > 0 ? `${dayTotal}분` : '-'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* 3. 최근 독서 기록 피드 */}
+          <div className="space-y-2.5 pt-2 border-t border-white/10">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-amber-200 flex items-center space-x-1">
+                <span>📚</span>
+                <span>최근 읽은 책 기록 (최신 10건)</span>
+              </h3>
+              <span className="text-[10px] text-slate-400">총 {readingLogs.length}건 기록됨</span>
+            </div>
+
+            {allRecentLogs.length === 0 ? (
+              <div className="text-center py-6 bg-white/5 rounded-2xl border border-dashed border-white/20 text-xs text-slate-400 font-bold">
+                아직 등록된 독서 기록이 없습니다. 상단의 '+ 독서 시간 기록'을 눌러 첫 책을 기록해 보세요!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto no-scrollbar">
+                {allRecentLogs.map((log) => {
+                  const kid = FAMILY_MEMBERS.find(m => m.id === log.childId) || (log.childId === 'child1' ? FAMILY_MEMBERS[2] : FAMILY_MEMBERS[3]);
+                  return (
+                    <div
+                      key={log.id}
+                      className="bg-white/10 p-3 rounded-2xl border border-white/15 flex items-start space-x-2.5 shadow-2xs"
+                    >
+                      <span className="text-2xl shrink-0 p-1 bg-white/10 rounded-xl">📖</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-extrabold text-white flex items-center space-x-1">
+                            <span>{kid.avatar}</span>
+                            <span className={kid.id === 'child1' ? 'text-indigo-300' : 'text-rose-300'}>{log.childName}</span>
+                            <span className="text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded-md font-bold text-[10px]">
+                              +{log.minutes}분
+                            </span>
+                          </span>
+                          <div className="flex items-center space-x-1">
+                            <span className="text-[10px] text-slate-400">{log.date}</span>
+                            {(isParent || currentMember.name === log.loggedBy || currentMember.id === log.childId) && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteReadingLog(log.id)}
+                                className="p-0.5 text-slate-400 hover:text-rose-400 font-bold transition text-xs"
+                                title="삭제"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="text-xs font-black text-amber-100 mt-1 truncate">
+                          {log.bookTitle ? `《${log.bookTitle}》` : '자유 독서'}
+                        </div>
+                        {log.notes && (
+                          <p className="text-[11px] text-slate-300 mt-0.5 line-clamp-1 italic">
+                            💬 {log.notes}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 4. 레벨 등급 안내 팝업 모달 */}
+          {isLevelGuideOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
+              <div className="bg-slate-900 text-white rounded-3xl max-w-md w-full p-5 sm:p-6 space-y-4 border border-amber-500/30 shadow-2xl">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <h3 className="text-base font-extrabold text-amber-300 flex items-center space-x-1.5">
+                    <span>🏅</span>
+                    <span>독서 누적 레벨 시스템 등급표</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setIsLevelGuideOpen(false)}
+                    className="text-xs font-bold text-slate-400 hover:text-white"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-80 overflow-y-auto no-scrollbar">
+                  {READING_LEVELS.map((lvl) => (
+                    <div
+                      key={lvl.level}
+                      className="p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center space-x-3"
+                    >
+                      <span className="text-3xl shrink-0">{lvl.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-amber-300">
+                            Lv.{lvl.level} {lvl.title}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-bold">
+                            {lvl.minMinutes === 0
+                              ? `0 ~ ${Math.round(lvl.maxMinutes / 60)}시간`
+                              : lvl.maxMinutes >= 999999
+                              ? `${Math.round(lvl.minMinutes / 60)}시간 이상`
+                              : `${Math.round(lvl.minMinutes / 60)} ~ ${Math.round(lvl.maxMinutes / 60)}시간`}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-300 mt-0.5">{lvl.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-2 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setIsLevelGuideOpen(false)}
+                    className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs"
+                  >
+                    확인 완료 닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      );
+    }
+
     function CalendarSection({ viewMode, setViewMode, selectedDate, setSelectedDate, weekDays, monthCalendarDays, currentMonth, setCurrentMonth, stats, filterMemberId, setFilterMemberId, schedules, filteredSchedules, currentMember, isParent, handleStatusChange, handleOpenEditScheduleModal, handleDeleteSchedule, setNewSchedule, setIsAddModalOpen, categories }) {
       return (
         <div className="space-y-4">
@@ -1062,7 +1575,7 @@
               <div className="grid grid-cols-7 gap-1 pt-1">
                 {weekDays.map((w) => {
                   const isSelected = w.dateStr === selectedDate;
-                  const count = schedules.filter(s => s.date === w.dateStr).length;
+                  const count = schedules.filter(s => isScheduleOnDate(s, w.dateStr)).length;
                   return (
                     <button
                       key={w.dateStr}
@@ -1184,7 +1697,7 @@
                     <div>
                       <span className="text-xs font-black text-slate-900">{selectedDate} 일정</span>
                       <span className="text-[11px] text-indigo-600 font-bold ml-1.5">
-                        ({schedules.filter(s => s.date === selectedDate).length}개 등록됨)
+                        ({schedules.filter(s => isScheduleOnDate(s, selectedDate)).length}개 등록됨)
                       </span>
                     </div>
                   </div>
@@ -1285,10 +1798,10 @@
                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                 }`}
               >
-                👨‍👩‍👧‍👦 전체 ({viewMode === 'week' ? schedules.filter(s => weekDays.some(w => w.dateStr === s.date)).length : schedules.filter(s => s.date === selectedDate).length})
+                👨‍👩‍👧‍👦 전체 ({viewMode === 'week' ? schedules.filter(s => weekDays.some(w => isScheduleOnDate(s, w.dateStr))).length : schedules.filter(s => isScheduleOnDate(s, selectedDate)).length})
               </button>
               {FAMILY_MEMBERS.map((m) => {
-                const count = schedules.filter(s => (viewMode === 'week' ? weekDays.some(w => w.dateStr === s.date) : s.date === selectedDate) && s.memberId === m.id).length;
+                const count = schedules.filter(s => (viewMode === 'week' ? weekDays.some(w => isScheduleOnDate(s, w.dateStr)) : isScheduleOnDate(s, selectedDate)) && s.memberId === m.id).length;
                 return (
                   <button
                     key={m.id}
@@ -1342,9 +1855,11 @@
                       <div>
                         <div className="flex items-center justify-between mb-1.5 gap-1 flex-wrap">
                           <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                            {viewMode === 'week' && (
+                            {(viewMode === 'week' || (item.endDate && item.endDate > item.date)) && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                📅 {item.date.slice(5)} ({new Date(item.date.replace(/-/g, '/')).toLocaleDateString('ko-KR', { weekday: 'short' })})
+                                📅 {item.endDate && item.endDate > item.date
+                                  ? `${item.date.slice(5)} ~ ${item.endDate.slice(5)} (기간)`
+                                  : `${item.date.slice(5)} (${new Date(item.date.replace(/-/g, '/')).toLocaleDateString('ko-KR', { weekday: 'short' })})`}
                               </span>
                             )}
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${member.badgeBg}`}>
@@ -1989,7 +2504,14 @@
                   .sort((a, b) => b.createdAt - a.createdAt)
                   .map((log) => (
                     <div key={log.id} className="bg-white p-3 rounded-2xl border border-amber-100 shadow-2xs flex items-start space-x-2.5">
-                      <span className="text-2xl shrink-0">{log.stickerEmoji || '🌟'}</span>
+                      <div className="relative shrink-0">
+                        <span className="text-2xl">{log.stickerEmoji || '🌟'}</span>
+                        {Number(log.count) > 1 && (
+                          <span className="absolute -bottom-1 -right-1 bg-amber-500 text-white text-[9px] font-black px-1 py-0.2 rounded-full shadow-xs leading-none">
+                            +{log.count}
+                          </span>
+                        )}
+                      </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="font-bold text-slate-800">
@@ -2083,12 +2605,20 @@
         icon: '🎁'
       });
 
+      // 신규: 주원·주아 독서 시간 기록 상태 (Firebase Firestore 'reading_logs'와 실시간 동기화)
+      const [readingLogs, setReadingLogs] = useState(DEFAULT_READING_LOGS);
+      const [isReadingModalOpen, setIsReadingModalOpen] = useState(false);
+      const [readingForm, setReadingForm] = useState({
+        childId: 'child1',
+        date: getTodayString(),
+        minutes: 30,
+        bookTitle: '',
+        notes: ''
+      });
+
       const [myStatusInput, setMyStatusInput] = useState('');
 
-      const [statusPresets, setStatusPresets] = useState(() => {
-        const saved = localStorage.getItem('family_status_presets');
-        return saved ? JSON.parse(saved) : QUICK_STATUS_PRESETS.map((p, idx) => ({ id: `default_sp_${idx}`, ...p }));
-      });
+      const [statusPresets, setStatusPresets] = useState(() => QUICK_STATUS_PRESETS.map((p, idx) => ({ id: `default_sp_${idx}`, ...p })));
 
       const [isAddModalOpen, setIsAddModalOpen] = useState(false);
       const [editingSchedule, setEditingSchedule] = useState(null);
@@ -2103,10 +2633,7 @@
 
       const [autoAddToGCal, setAutoAddToGCal] = useState(true);
 
-      const [todoPresets, setTodoPresets] = useState(() => {
-        const saved = localStorage.getItem('family_todo_presets');
-        return saved ? JSON.parse(saved) : DEFAULT_TODO_PRESETS.map((text, idx) => ({ id: `default_${idx}`, text }));
-      });
+      const [todoPresets, setTodoPresets] = useState(() => DEFAULT_TODO_PRESETS.map((text, idx) => ({ id: `default_${idx}`, text })));
       const [isPresetManageOpen, setIsPresetManageOpen] = useState(false);
       const [newPresetText, setNewPresetText] = useState('');
 
@@ -2114,6 +2641,8 @@
         title: '',
         memberId: 'child1',
         date: getTodayString(),
+        endDate: getTodayString(),
+        isRange: false,
         startTime: '16:00',
         endTime: '17:00',
         category: 'school',
@@ -2121,7 +2650,7 @@
       });
 
       const [todoForm, setTodoForm] = useState({ text: '', memberId: 'child1', category: 'study' });
-      const [praiseForm, setPraiseForm] = useState({ toMemberId: 'child1', stickerKey: 'star', reason: '' });
+      const [praiseForm, setPraiseForm] = useState({ toMemberId: 'child1', stickerKey: 'star', reason: '', count: 1 });
 
       const dbRef = useRef(null);
       const authRef = useRef(null);
@@ -2130,14 +2659,6 @@
         setToastMessage(msg);
         setTimeout(() => setToastMessage(null), 3000);
       };
-
-      useEffect(() => {
-        localStorage.setItem('family_todo_presets', JSON.stringify(todoPresets));
-      }, [todoPresets]);
-
-      useEffect(() => {
-        localStorage.setItem('family_status_presets', JSON.stringify(statusPresets));
-      }, [statusPresets]);
 
       useEffect(() => {
         const initFirebase = async () => {
@@ -2263,6 +2784,17 @@
               snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
               setPraiseRedeems(list);
             }, (err) => console.warn("redeems snapshot error:", err));
+
+            // 신규: 주원·주아 독서 시간 기록 동기화
+            db.collection('reading_logs').onSnapshot((snapshot) => {
+              const list = [];
+              snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+              if (list.length > 0) {
+                setReadingLogs(list);
+              } else {
+                setReadingLogs(DEFAULT_READING_LOGS);
+              }
+            }, (err) => console.warn("reading_logs snapshot error:", err));
 
           } catch (error) {
             console.error(error);
@@ -2539,6 +3071,8 @@
           title: '',
           memberId: currentMemberId === 'mom' ? 'mom' : currentMemberId === 'dad' ? 'dad' : currentMemberId,
           date: selectedDate,
+          endDate: selectedDate,
+          isRange: false,
           startTime: '16:00',
           endTime: '17:00',
           category: categories[0]?.id || 'school',
@@ -2553,7 +3087,11 @@
           return;
         }
         setEditingSchedule(scheduleItem);
-        setNewSchedule({ ...scheduleItem });
+        setNewSchedule({
+          ...scheduleItem,
+          endDate: scheduleItem.endDate || scheduleItem.date,
+          isRange: !!(scheduleItem.endDate && scheduleItem.endDate > scheduleItem.date)
+        });
         setIsAddModalOpen(true);
       };
 
@@ -2573,10 +3111,16 @@
         if (!newSchedule.title.trim()) return;
         setIsSubmitting(true);
 
+        const isRange = !!newSchedule.isRange;
+        const validEndDate = (isRange && newSchedule.endDate && newSchedule.endDate >= newSchedule.date)
+          ? newSchedule.endDate
+          : newSchedule.date;
+
         const itemData = {
           title: newSchedule.title.trim(),
           memberId: newSchedule.memberId,
           date: newSchedule.date,
+          endDate: validEndDate,
           startTime: newSchedule.startTime,
           endTime: newSchedule.endTime,
           category: newSchedule.category,
@@ -2748,6 +3292,7 @@
         const defaultReason = `${stickerObj.label}! 참 잘했어요! 🎉`;
         const finalReason = praiseForm.reason.trim() || defaultReason;
 
+        const count = Math.max(1, Number(praiseForm.count) || 1);
         const praiseData = {
           fromMemberId: currentMember.id,
           fromMemberName: currentMember.name,
@@ -2755,6 +3300,7 @@
           toMemberName: targetMember.name,
           stickerKey: praiseForm.stickerKey,
           stickerEmoji: stickerObj.emoji,
+          count: count,
           reason: finalReason,
           createdAt: Date.now()
         };
@@ -2767,8 +3313,8 @@
           }
 
           setIsPraiseModalOpen(false);
-          setPraiseForm({ toMemberId: 'child1', stickerKey: 'star', reason: '' });
-          showToast(`🌟 ${targetMember.name}에게 칭찬 스티커를 선물했습니다!`);
+          setPraiseForm({ toMemberId: 'child1', stickerKey: 'star', reason: '', count: 1 });
+          showToast(`🌟 ${targetMember.name}에게 칭찬 스티커 ${count > 1 ? count + '개를' : '를'} 선물했습니다!`);
           triggerHaptic([50, 80, 50]);
         } catch (err) { console.error(err); }
       };
@@ -2960,6 +3506,61 @@
         }
       };
 
+      // 신규: 주원·주아 독서 시간 기록 핸들러
+      const handleOpenReadingModal = (childId = 'child1') => {
+        setReadingForm({
+          childId: childId || 'child1',
+          date: getTodayString(),
+          minutes: 30,
+          bookTitle: '',
+          notes: ''
+        });
+        setIsReadingModalOpen(true);
+      };
+
+      const handleSaveReadingLog = async (e) => {
+        e.preventDefault();
+        const mins = Math.max(1, Number(readingForm.minutes) || 1);
+        const kid = FAMILY_MEMBERS.find(m => m.id === readingForm.childId) || (readingForm.childId === 'child1' ? FAMILY_MEMBERS[2] : FAMILY_MEMBERS[3]);
+        const logData = {
+          childId: readingForm.childId,
+          childName: kid.name,
+          date: readingForm.date || getTodayString(),
+          minutes: mins,
+          bookTitle: readingForm.bookTitle.trim(),
+          notes: readingForm.notes.trim(),
+          createdAt: Date.now(),
+          loggedBy: currentMember.name
+        };
+
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('reading_logs').add(logData);
+          } else {
+            setReadingLogs(prev => [...prev, { id: 'rl_' + Date.now(), ...logData }]);
+          }
+          setIsReadingModalOpen(false);
+          showToast(`📚 ${kid.name}의 독서 시간(${mins}분)이 기록되었습니다! 🎉`);
+          triggerHaptic([50, 70, 50]);
+        } catch (err) {
+          console.error(err);
+          showToast("독서 기록 저장 중 오류가 발생했습니다.");
+        }
+      };
+
+      const handleDeleteReadingLog = async (logId) => {
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('reading_logs').doc(logId).delete();
+          } else {
+            setReadingLogs(prev => prev.filter(l => l.id !== logId));
+          }
+          showToast("독서 기록이 삭제되었습니다.");
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
       const sendStatusMessage = async (text, emoji) => {
         if (!text.trim()) {
           showToast("⚠️ 공유할 한 줄 현황을 입력해주세요!");
@@ -3000,10 +3601,10 @@
 
       const currentDisplaySchedules = useMemo(() => {
         if (viewMode === 'week') {
-          return schedules.filter(s => weekDatesSet.has(s.date));
+          return schedules.filter(s => weekDays.some(w => isScheduleOnDate(s, w.dateStr)));
         }
-        return schedules.filter(s => s.date === selectedDate);
-      }, [schedules, selectedDate, viewMode, weekDatesSet]);
+        return schedules.filter(s => isScheduleOnDate(s, selectedDate));
+      }, [schedules, selectedDate, viewMode, weekDays]);
 
       const filteredSchedules = useMemo(() => {
         return currentDisplaySchedules
@@ -3049,7 +3650,7 @@
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
           const isSelected = dateStr === selectedDate;
           const isToday = dateStr === getTodayString();
-          const daySchedules = schedules.filter(s => s.date === dateStr);
+          const daySchedules = schedules.filter(s => isScheduleOnDate(s, dateStr));
           days.push({ id: dateStr, dateStr, dayNumber: d, isSelected, isToday, schedules: daySchedules });
         }
         return days;
@@ -3058,13 +3659,14 @@
       const kidStickerStats = useMemo(() => {
         return KIDS_MEMBERS.map(kid => {
           const receivedLogs = praiseLogs.filter(p => p.toMemberId === kid.id);
+          const totalReceived = receivedLogs.reduce((sum, p) => sum + (Number(p.count) || 1), 0);
           const redeemedCount = praiseRedeems
             .filter(r => r.memberId === kid.id)
             .reduce((sum, r) => sum + (Number(r.cost) || 0), 0);
-          const available = Math.max(0, receivedLogs.length - redeemedCount);
+          const available = Math.max(0, totalReceived - redeemedCount);
           return {
             ...kid,
-            totalReceived: receivedLogs.length,
+            totalReceived,
             redeemedCount,
             available,
             logs: receivedLogs
@@ -3247,6 +3849,15 @@
               >
                 <span>🌟 칭찬 스티커</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setMainTab('reading')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
+                  mainTab === 'reading' ? 'bg-amber-800 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span>📖 독서 기록 & 명예의 전당</span>
+              </button>
             </nav>
 
             {mainTab === 'all' && (
@@ -3318,6 +3929,15 @@
                   gameTimeLogs={gameTimeLogs}
                   handleOpenGameTimeModal={handleOpenGameTimeModal}
                   handleDeleteGameLog={handleDeleteGameLog}
+                />
+
+                {/* 신규: 주원·주아 독서 시간 & 명예의 전당 섹션 */}
+                <ReadingSection
+                  isParent={isParent}
+                  currentMember={currentMember}
+                  readingLogs={readingLogs}
+                  handleOpenReadingModal={handleOpenReadingModal}
+                  handleDeleteReadingLog={handleDeleteReadingLog}
                 />
 
                 <PraiseSection
@@ -3423,6 +4043,17 @@
                 handleDeleteReward={handleDeleteReward}
                 handleRedeemReward={handleRedeemReward}
                 handleDeleteRedeemLog={handleDeleteRedeemLog}
+              />
+            )}
+
+            {/* 신규: 전용 독서 시간 기록 & 명예의 전당 탭 */}
+            {mainTab === 'reading' && (
+              <ReadingSection
+                isParent={isParent}
+                currentMember={currentMember}
+                readingLogs={readingLogs}
+                handleOpenReadingModal={handleOpenReadingModal}
+                handleDeleteReadingLog={handleDeleteReadingLog}
               />
             )}
           </main>
@@ -3656,19 +4287,70 @@
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">날짜</label>
-                      <input
-                        type="date"
-                        value={newSchedule.date}
-                        onChange={(e) => setNewSchedule({ ...newSchedule, date: e.target.value })}
-                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                      />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-slate-700 text-xs">일정 일자</label>
+                      <label className="flex items-center space-x-1.5 text-xs text-indigo-600 font-bold cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={newSchedule.isRange || false}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setNewSchedule({
+                              ...newSchedule,
+                              isRange: checked,
+                              endDate: checked ? (newSchedule.endDate || newSchedule.date) : newSchedule.date
+                            });
+                          }}
+                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>기간(연속 일정) 설정</span>
+                      </label>
                     </div>
-                    <div className="grid grid-cols-2 gap-1">
+
+                    {newSchedule.isRange ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 mb-0.5">시작일</label>
+                          <input
+                            type="date"
+                            value={newSchedule.date}
+                            onChange={(e) => {
+                              const newStart = e.target.value;
+                              const updated = { ...newSchedule, date: newStart };
+                              if (newSchedule.endDate && newSchedule.endDate < newStart) {
+                                updated.endDate = newStart;
+                              }
+                              setNewSchedule(updated);
+                            }}
+                            className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 mb-0.5">종료일</label>
+                          <input
+                            type="date"
+                            min={newSchedule.date}
+                            value={newSchedule.endDate || newSchedule.date}
+                            onChange={(e) => setNewSchedule({ ...newSchedule, endDate: e.target.value })}
+                            className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                          />
+                        </div>
+                      </div>
+                    ) : (
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">시작</label>
+                        <input
+                          type="date"
+                          value={newSchedule.date}
+                          onChange={(e) => setNewSchedule({ ...newSchedule, date: e.target.value, endDate: e.target.value })}
+                          className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                        />
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-1 pt-1">
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1 text-xs">시작 시간</label>
                         <input
                           type="time"
                           value={newSchedule.startTime}
@@ -3677,7 +4359,7 @@
                         />
                       </div>
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">종료</label>
+                        <label className="block font-bold text-slate-700 mb-1 text-xs">종료 시간</label>
                         <input
                           type="time"
                           value={newSchedule.endTime}
@@ -3742,7 +4424,7 @@
                 <div className="bg-slate-50 p-3 rounded-2xl text-xs text-left space-y-1 text-slate-700 font-medium">
                   <div>📌 <b>제목:</b> {newSchedule.title}</div>
                   <div>👤 <b>담당:</b> {FAMILY_MEMBERS.find(m => m.id === newSchedule.memberId)?.name}</div>
-                  <div>⏰ <b>시간:</b> {newSchedule.date} ({newSchedule.startTime} ~ {newSchedule.endTime})</div>
+                  <div>⏰ <b>일시:</b> {newSchedule.isRange && newSchedule.endDate && newSchedule.endDate > newSchedule.date ? `${newSchedule.date} ~ ${newSchedule.endDate}` : newSchedule.date} ({newSchedule.startTime} ~ {newSchedule.endTime})</div>
                 </div>
 
                 <div className="flex items-center space-x-2 pt-1">
@@ -4021,6 +4703,40 @@
                   </div>
 
                   <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">스티커 개수</label>
+                    <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-1.5 flex-1">
+                        <span className="text-base">🌟</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={9999}
+                          value={praiseForm.count || 1}
+                          onChange={(e) => setPraiseForm({ ...praiseForm, count: Math.max(1, parseInt(e.target.value) || 1) })}
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-black text-center focus:ring-2 focus:ring-amber-400"
+                        />
+                        <span className="text-xs font-bold text-slate-600">개</span>
+                      </div>
+                      <div className="flex items-center space-x-1 shrink-0">
+                        {[1, 2, 3, 5, 10].map((num) => (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => setPraiseForm({ ...praiseForm, count: num })}
+                            className={`px-2 py-1 rounded-lg text-xs font-bold border transition ${
+                              (praiseForm.count || 1) === num
+                                ? 'bg-amber-500 text-white border-amber-500 shadow-2xs'
+                                : 'bg-slate-50 hover:bg-amber-50 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            +{num}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">칭찬 이유/메시지 (선택)</label>
                     <input
                       type="text"
@@ -4059,7 +4775,7 @@
                       type="submit"
                       className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md"
                     >
-                      칭찬 스티커 선물하기 🎁
+                      칭찬 스티커 선물하기 {(praiseForm.count || 1) > 1 ? `(${praiseForm.count || 1}개) ` : ''}🎁
                     </button>
                   </div>
                 </form>
@@ -4218,7 +4934,7 @@
                         <input
                           type="number"
                           min={1}
-                          max={100}
+                          max={99999}
                           inputMode="numeric"
                           pattern="[0-9]*"
                           required
@@ -4268,12 +4984,141 @@
             </div>
           )}
 
+          {/* 신규: 독서 시간 기록 모달 */}
+          {isReadingModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-sm w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between pb-2 border-b border-amber-100">
+                  <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-1.5">
+                    <span>📖 독서 시간 기록하기</span>
+                  </h3>
+                  <button type="button" onClick={() => setIsReadingModalOpen(false)} className="text-xs font-bold text-slate-400">✕</button>
+                </div>
+
+                <form onSubmit={handleSaveReadingLog} className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">어린이 선택</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {KIDS_MEMBERS.map((kid) => (
+                        <button
+                          type="button"
+                          key={kid.id}
+                          onClick={() => setReadingForm({ ...readingForm, childId: kid.id })}
+                          className={`p-2.5 rounded-xl border text-left transition flex items-center space-x-2 ${
+                            readingForm.childId === kid.id
+                              ? `${kid.cardBg} ring-2 ${kid.ringColor} font-bold`
+                              : 'bg-white border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          <span className="text-xl">{kid.avatar}</span>
+                          <div>
+                            <div className="text-xs font-extrabold">{kid.name}</div>
+                            <div className="text-[10px] text-slate-500">{kid.role}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">독서 일자</label>
+                    <input
+                      type="date"
+                      required
+                      value={readingForm.date}
+                      onChange={(e) => setReadingForm({ ...readingForm, date: e.target.value })}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700">독서 시간 (분)</label>
+                      <span className="text-xs font-extrabold text-amber-600">
+                        {formatMinutesToHours(readingForm.minutes || 0)}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-base">⏱️</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={999}
+                          required
+                          value={readingForm.minutes}
+                          onChange={(e) => setReadingForm({ ...readingForm, minutes: Math.max(1, parseInt(e.target.value) || 0) })}
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-black text-center focus:ring-2 focus:ring-amber-400"
+                        />
+                        <span className="text-xs font-bold text-slate-600">분</span>
+                      </div>
+                      <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar py-0.5">
+                        {[15, 20, 30, 45, 60].map((mins) => (
+                          <button
+                            key={mins}
+                            type="button"
+                            onClick={() => setReadingForm({ ...readingForm, minutes: mins })}
+                            className={`px-2 py-1 rounded-lg text-xs font-bold border transition ${
+                              Number(readingForm.minutes) === mins
+                                ? 'bg-amber-500 text-white border-amber-500 shadow-2xs'
+                                : 'bg-slate-50 hover:bg-amber-50 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            +{mins}분
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">책 제목</label>
+                    <input
+                      type="text"
+                      value={readingForm.bookTitle}
+                      onChange={(e) => setReadingForm({ ...readingForm, bookTitle: e.target.value })}
+                      placeholder="예: 마법천자문, 어린 왕자, 위인전 등"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">한 줄 소감 / 쪽수 메모 (선택)</label>
+                    <input
+                      type="text"
+                      value={readingForm.notes}
+                      onChange={(e) => setReadingForm({ ...readingForm, notes: e.target.value })}
+                      placeholder="예: 30쪽까지 읽음, 주인공이 재미있었다!"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+
+                  <div className="flex items-center space-x-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsReadingModalOpen(false)}
+                      className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md"
+                    >
+                      독서 기록 저장 📚
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {/* 모바일 전용 하단 고정 네비게이션 바 */}
-          <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1 pb-[max(0.5rem,env(safe-area-inset-bottom,0.5rem))] flex items-center justify-around md:hidden shadow-lg shadow-slate-900/10">
+          <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1.5 py-1 pb-[max(0.5rem,env(safe-area-inset-bottom,0.5rem))] flex items-center justify-around md:hidden shadow-lg shadow-slate-900/10">
             <button
               type="button"
               onClick={() => { setMainTab('all'); triggerHaptic(10); }}
-              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition flex-1 ${
+              className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-2xl transition flex-1 ${
                 mainTab === 'all' ? 'text-indigo-600 font-black' : 'text-slate-400 font-semibold'
               }`}
             >
@@ -4283,7 +5128,7 @@
             <button
               type="button"
               onClick={() => { setMainTab('schedule'); triggerHaptic(10); }}
-              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition flex-1 ${
+              className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-2xl transition flex-1 ${
                 mainTab === 'schedule' ? 'text-indigo-600 font-black' : 'text-slate-400 font-semibold'
               }`}
             >
@@ -4293,7 +5138,7 @@
             <button
               type="button"
               onClick={() => { setMainTab('todo'); triggerHaptic(10); }}
-              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition flex-1 ${
+              className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-2xl transition flex-1 ${
                 mainTab === 'todo' ? 'text-emerald-600 font-black' : 'text-slate-400 font-semibold'
               }`}
             >
@@ -4302,8 +5147,18 @@
             </button>
             <button
               type="button"
+              onClick={() => { setMainTab('reading'); triggerHaptic(10); }}
+              className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-2xl transition flex-1 ${
+                mainTab === 'reading' ? 'text-amber-800 font-black' : 'text-slate-400 font-semibold'
+              }`}
+            >
+              <span className={`text-xl transition-transform ${mainTab === 'reading' ? 'scale-110' : ''}`}>📖</span>
+              <span className="text-[10px] tracking-tight mt-0.5">독서</span>
+            </button>
+            <button
+              type="button"
               onClick={() => { setMainTab('game'); triggerHaptic(10); }}
-              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition flex-1 ${
+              className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-2xl transition flex-1 ${
                 mainTab === 'game' ? 'text-violet-600 font-black' : 'text-slate-400 font-semibold'
               }`}
             >
@@ -4313,7 +5168,7 @@
             <button
               type="button"
               onClick={() => { setMainTab('praise'); triggerHaptic(10); }}
-              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition flex-1 ${
+              className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-2xl transition flex-1 ${
                 mainTab === 'praise' ? 'text-amber-600 font-black' : 'text-slate-400 font-semibold'
               }`}
             >
