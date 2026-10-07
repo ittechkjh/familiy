@@ -162,12 +162,12 @@
 
     // 신규: 주원·주아 독서 시간 누적 레벨 시스템 정의
     const READING_LEVELS = [
-      { level: 1, title: '책과 친해지는 중', icon: '📖', minMinutes: 0, maxMinutes: 300, desc: '첫 페이지를 활짝 열었어요!' },
-      { level: 2, title: '독서 꿈나무', icon: '🐛', minMinutes: 300, maxMinutes: 900, desc: '매일 읽는 습관이 쑥쑥!' },
-      { level: 3, title: '열정 독서왕', icon: '📚', minMinutes: 900, maxMinutes: 1800, desc: '책 속 모험에 푹 빠졌어요!' },
-      { level: 4, title: '지혜의 숲 탐험가', icon: '🦉', minMinutes: 1800, maxMinutes: 3600, desc: '상상력과 지혜가 퐁퐁!' },
-      { level: 5, title: '마스터 북리더', icon: '👑', minMinutes: 3600, maxMinutes: 6000, desc: '우리집 최고의 다독왕!' },
-      { level: 6, title: '독서 대마법사', icon: '🌟', minMinutes: 6000, maxMinutes: 999999, desc: '책으로 세상을 바꾸는 멋진 리더!' }
+      { level: 1, title: '책과 친해지는 중', icon: '📖', minMinutes: 0, maxMinutes: 300, desc: '첫 페이지를 활짝 열었어요!', rewardStickers: 0 },
+      { level: 2, title: '독서 꿈나무', icon: '🐛', minMinutes: 300, maxMinutes: 900, desc: '매일 읽는 습관이 쑥쑥!', rewardStickers: 5 },
+      { level: 3, title: '열정 독서왕', icon: '📚', minMinutes: 900, maxMinutes: 1800, desc: '책 속 모험에 푹 빠졌어요!', rewardStickers: 15 },
+      { level: 4, title: '지혜의 숲 탐험가', icon: '🦉', minMinutes: 1800, maxMinutes: 3600, desc: '상상력과 지혜가 퐁퐁!', rewardStickers: 30 },
+      { level: 5, title: '마스터 북리더', icon: '👑', minMinutes: 3600, maxMinutes: 6000, desc: '우리집 최고의 다독왕!', rewardStickers: 60 },
+      { level: 6, title: '독서 대마법사', icon: '🌟', minMinutes: 6000, maxMinutes: 999999, desc: '책으로 세상을 바꾸는 멋진 리더!', rewardStickers: 100 }
     ];
 
     const getReadingLevelInfo = (totalMinutes) => {
@@ -1321,7 +1321,7 @@
                         <span>"{kid.levelInfo.desc}"</span>
                         {kid.levelInfo.next && (
                           <span className="text-amber-200 font-bold">
-                            앞으로 {kid.levelInfo.remainingForNext}분 남음
+                            앞으로 {kid.levelInfo.remainingForNext}분 남음 {kid.levelInfo.next.rewardStickers > 0 ? `(달성 시 🌟 +${kid.levelInfo.next.rewardStickers}개)` : ''}
                           </span>
                         )}
                       </div>
@@ -1640,17 +1640,34 @@
                               : `${Math.round(lvl.minMinutes / 60)} ~ ${Math.round(lvl.maxMinutes / 60)}시간`}
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-300 mt-0.5">{lvl.desc}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <p className="text-[11px] text-slate-300 truncate">{lvl.desc}</p>
+                          {lvl.rewardStickers > 0 ? (
+                            <span className="shrink-0 ml-2 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] font-black flex items-center space-x-0.5 shadow-xs">
+                              <span>🌟</span>
+                              <span>칭찬스티커 {lvl.rewardStickers}개</span>
+                            </span>
+                          ) : (
+                            <span className="shrink-0 ml-2 text-[10px] text-slate-500 font-medium">기본 시작 등급</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div className="pt-2 text-center">
+                <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-400/30 text-amber-200 text-xs flex items-center space-x-2">
+                  <span className="text-base shrink-0">🎁</span>
+                  <p className="leading-tight text-[11px] font-medium">
+                    해당 독서 시간을 달성하여 <strong>레벨 업그레이드 시 등급별 칭찬 스티커</strong>가 자동으로 지급되고 기록에 남습니다!
+                  </p>
+                </div>
+
+                <div className="pt-1 text-center">
                   <button
                     type="button"
                     onClick={() => setIsLevelGuideOpen(false)}
-                    className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs"
+                    className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md"
                   >
                     확인 완료 닫기
                   </button>
@@ -3638,6 +3655,8 @@
       const [deletingPraiseLog, setDeletingPraiseLog] = useState(null);
       // 신규: 모든 기능 공통 2단계 삭제 확인 모달 상태 { title, message, details: [], onConfirm }
       const [genericDeleteTarget, setGenericDeleteTarget] = useState(null);
+      // 신규: 독서 레벨업 축하 및 칭찬 스티커 지급 모달 상태
+      const [levelUpCelebration, setLevelUpCelebration] = useState(null);
       const [isSubmitting, setIsSubmitting] = useState(false);
       const [toastMessage, setToastMessage] = useState(null);
 
@@ -4689,15 +4708,81 @@
           loggedBy: currentMember.name
         };
 
+        // 레벨업 판별 및 등급별 보상 칭찬 스티커 산출
+        const kidLogs = readingLogs.filter(l => l.childId === readingForm.childId);
+        const prevTotalMins = kidLogs.reduce((acc, l) => acc + (Number(l.minutes) || 0), 0);
+        const prevLevelInfo = getReadingLevelInfo(prevTotalMins);
+
+        const newTotalMins = prevTotalMins + mins;
+        const newLevelInfo = getReadingLevelInfo(newTotalMins);
+
+        const isLevelUp = newLevelInfo.level > prevLevelInfo.level;
+        const awardedLevels = [];
+        let totalAwardedStickers = 0;
+
+        if (isLevelUp) {
+          for (let lvl = prevLevelInfo.level + 1; lvl <= newLevelInfo.level; lvl++) {
+            const lvlConfig = READING_LEVELS.find(l => l.level === lvl);
+            if (lvlConfig && lvlConfig.rewardStickers > 0) {
+              awardedLevels.push(lvlConfig);
+              totalAwardedStickers += lvlConfig.rewardStickers;
+            }
+          }
+        }
+
         try {
           if (dbRef.current) {
             await dbRef.current.collection('reading_logs').add(logData);
+            // 레벨업 시 칭찬 스티커 자동 지급 및 DB 저장
+            for (const lvlConfig of awardedLevels) {
+              const praiseData = {
+                fromMemberId: currentMember.id,
+                fromMemberName: `${currentMember.name} (독서 레벨업)`,
+                toMemberId: kid.id,
+                toMemberName: kid.name,
+                stickerKey: 'crown',
+                stickerEmoji: '👑',
+                count: lvlConfig.rewardStickers,
+                reason: `🎉 독서 Lv.${lvlConfig.level} [${lvlConfig.title}] 승급 축하 선물! (${Math.round(lvlConfig.minMinutes / 60)}시간 달성)`,
+                createdAt: Date.now() + (lvlConfig.level * 10)
+              };
+              await dbRef.current.collection('praise_stickers').add(praiseData);
+            }
           } else {
             setReadingLogs(prev => [...prev, { id: 'rl_' + Date.now(), ...logData }]);
+            awardedLevels.forEach(lvlConfig => {
+              const praiseData = {
+                id: 'praise_' + Date.now() + '_' + lvlConfig.level,
+                fromMemberId: currentMember.id,
+                fromMemberName: `${currentMember.name} (독서 레벨업)`,
+                toMemberId: kid.id,
+                toMemberName: kid.name,
+                stickerKey: 'crown',
+                stickerEmoji: '👑',
+                count: lvlConfig.rewardStickers,
+                reason: `🎉 독서 Lv.${lvlConfig.level} [${lvlConfig.title}] 승급 축하 선물! (${Math.round(lvlConfig.minMinutes / 60)}시간 달성)`,
+                createdAt: Date.now() + (lvlConfig.level * 10)
+              };
+              setPraiseLogs(prev => [...prev, praiseData]);
+            });
           }
           setIsReadingModalOpen(false);
-          showToast(`📚 ${kid.name}의 독서 시간(${mins}분)이 기록되었습니다! 🎉`);
-          triggerHaptic([50, 70, 50]);
+
+          if (isLevelUp && totalAwardedStickers > 0) {
+            setLevelUpCelebration({
+              kidName: kid.name,
+              oldLevel: prevLevelInfo.level,
+              newLevel: newLevelInfo.level,
+              newTitle: newLevelInfo.title,
+              newIcon: newLevelInfo.icon,
+              stickers: totalAwardedStickers
+            });
+            showToast(`🎉 레벨업 축하합니다! ${kid.name}이(가) Lv.${newLevelInfo.level} [${newLevelInfo.title}] 승급! 칭찬스티커 +${totalAwardedStickers}개가 자동 지급되었습니다! 🌟`);
+            triggerHaptic([100, 100, 100, 100, 100]);
+          } else {
+            showToast(`📚 ${kid.name}의 독서 시간(${mins}분)이 기록되었습니다! 🎉`);
+            triggerHaptic([50, 70, 50]);
+          }
         } catch (err) {
           console.error(err);
           showToast("독서 기록 저장 중 오류가 발생했습니다.");
@@ -6376,6 +6461,44 @@
                     삭제 실행
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* 독서 레벨업 축하 & 칭찬 스티커 지급 모달 */}
+          {levelUpCelebration && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
+              <div className="bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl max-w-sm w-full p-6 text-center space-y-4 border border-amber-400/50 shadow-2xl relative overflow-hidden">
+                <div className="text-5xl animate-bounce">🎊</div>
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black text-amber-400 tracking-wider">LEVEL UP! 축하합니다</span>
+                  <h3 className="text-base font-black text-white">
+                    {levelUpCelebration.kidName} 레벨 업그레이드!
+                  </h3>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white/10 border border-white/15 space-y-2">
+                  <div className="text-4xl">{levelUpCelebration.newIcon}</div>
+                  <div className="text-base font-extrabold text-amber-300">
+                    Lv.{levelUpCelebration.newLevel} {levelUpCelebration.newTitle}
+                  </div>
+                  <div className="inline-flex items-center space-x-1 px-3 py-1 rounded-full bg-amber-400 text-amber-950 font-black text-xs shadow-md">
+                    <span>🌟</span>
+                    <span>칭찬 스티커 +{levelUpCelebration.stickers}개 지급 완료!</span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  독서 레벨업 보상으로 칭찬 스티커가 자동 충전되었으며, <strong>칭찬 스티커 내역</strong>에 기록되었습니다! 📚🎉
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => setLevelUpCelebration(null)}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-amber-950 font-black text-xs shadow-lg transition active:scale-95"
+                >
+                  확인 완료
+                </button>
               </div>
             </div>
           )}
