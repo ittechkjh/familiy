@@ -2375,6 +2375,9 @@
         return w.childId === wishFilter;
       });
 
+      // 하루 감정 구성원 필터 (전체 / 아빠 / 엄마 / 주원 / 주아)
+      const [moodMemberFilter, setMoodMemberFilter] = useState('all');
+
       const onWishSubmit = (e) => {
         e.preventDefault();
         if (!wishForm.title.trim()) return;
@@ -2795,8 +2798,32 @@
               ) : (
                 <div className="space-y-3">
                   {familyLetters.map((letter) => {
-                    // 비밀 편지 열람 권한: 작성자이거나 부모인 경우만
-                    const canViewSecret = !letter.isSecret || isParent || currentMemberId === letter.fromMemberId;
+                    // 수신인별 엄격한 열람 권한 검사
+                    const isAuthor = currentMemberId === letter.fromMemberId;
+                    let canViewLetter = false;
+                    let restrictedMsg = "🔒 작성자와 수신인만 읽을 수 있는 비밀 편지입니다.";
+
+                    if (isAuthor) {
+                      canViewLetter = true;
+                    } else if (letter.toRole === 'mom') {
+                      canViewLetter = currentMemberId === 'mom';
+                      restrictedMsg = "🔒 엄마에게만 보낸 편지입니다. (엄마와 작성자만 읽을 수 있어요)";
+                    } else if (letter.toRole === 'dad') {
+                      canViewLetter = currentMemberId === 'dad';
+                      restrictedMsg = "🔒 아빠에게만 보낸 편지입니다. (아빠와 작성자만 읽을 수 있어요)";
+                    } else {
+                      // toRole === 'parents' (엄마 & 아빠)
+                      canViewLetter = !letter.isSecret || isParent;
+                      restrictedMsg = "🔒 엄마, 아빠에게 보낸 비밀 편지입니다.";
+                    }
+
+                    // 답글 권한: 해당 편지의 지정 수신 부모만 작성 가능
+                    const canReply = (
+                      (letter.toRole === 'mom' && currentMemberId === 'mom') ||
+                      (letter.toRole === 'dad' && currentMemberId === 'dad') ||
+                      (letter.toRole === 'parents' && isParent)
+                    );
+
                     const fromMember = FAMILY_MEMBERS.find(m => m.id === letter.fromMemberId) || { name: letter.fromMemberName, avatar: '👦' };
 
                     return (
@@ -2812,11 +2839,11 @@
                                 <span className="text-slate-900">{letter.fromMemberName}</span>
                                 <span className="text-slate-400 font-normal">➔</span>
                                 <span className="text-pink-600">
-                                  {letter.toRole === 'mom' ? '👩 엄마에게' : letter.toRole === 'dad' ? '👨 아빠에게' : '👨‍👩‍👦 엄마 & 아빠에게'}
+                                  {letter.toRole === 'mom' ? '👩 엄마에게만' : letter.toRole === 'dad' ? '👨 아빠에게만' : '👨‍👩‍👦 엄마 & 아빠에게'}
                                 </span>
-                                {letter.isSecret && (
-                                  <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-bold">
-                                    🔒 비밀글
+                                {(letter.isSecret || letter.toRole === 'mom' || letter.toRole === 'dad') && (
+                                  <span className="text-[10px] bg-pink-100 text-pink-700 px-1.5 py-0.2 rounded font-bold">
+                                    🔒 전용/비밀
                                   </span>
                                 )}
                               </div>
@@ -2836,18 +2863,19 @@
                           )}
                         </div>
 
-                        {canViewSecret ? (
+                        {canViewLetter ? (
                           <p className="text-xs sm:text-sm text-slate-800 font-medium whitespace-pre-wrap leading-relaxed bg-pink-50/30 p-3 rounded-2xl border border-pink-100/60">
                             {letter.content}
                           </p>
                         ) : (
-                          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-400 italic">
-                            🔒 작성자와 엄마, 아빠만 읽을 수 있는 비밀 편지입니다.
+                          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500 font-medium italic flex items-center space-x-1.5">
+                            <span>🤫</span>
+                            <span>{restrictedMsg}</span>
                           </div>
                         )}
 
                         {/* 부모님의 따뜻한 답글 목록 */}
-                        {letter.replies && letter.replies.length > 0 && (
+                        {letter.replies && letter.replies.length > 0 && canViewLetter && (
                           <div className="mt-2 space-y-1.5 pl-3 border-l-2 border-pink-300">
                             {letter.replies.map((rep, idx) => (
                               <div key={idx} className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/60 text-xs space-y-0.5">
@@ -2864,8 +2892,8 @@
                           </div>
                         )}
 
-                        {/* 부모 전용 답글 달기 입력창 */}
-                        {isParent && canViewSecret && (
+                        {/* 대상 부모 전용 답글 달기 입력창 */}
+                        {canReply && (
                           <div className="pt-2 flex items-center space-x-2">
                             <input
                               type="text"
@@ -3006,64 +3034,144 @@
                 </div>
               </div>
 
-              {/* 전체 감정 일기 타임라인 */}
-              {dailyMoods.length === 0 ? (
-                <div className="text-center py-8 bg-white/70 rounded-2xl border border-dashed border-indigo-300/60 text-xs text-slate-400 font-bold space-y-1">
-                  <div className="text-2xl">😊</div>
-                  <div>아직 기록된 감정 일기가 없습니다.</div>
-                  <div className="text-[11px] text-slate-400 font-normal">오늘 나의 기분을 남겨 가족과 감정을 나눠보세요!</div>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  <div className="text-xs font-extrabold text-slate-700">📖 최근 감정 일기 피드</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-80 overflow-y-auto no-scrollbar">
-                    {dailyMoods.map((log) => {
-                      const moodOpt = MOOD_OPTIONS.find(o => o.key === log.moodKey) || MOOD_OPTIONS[0];
-                      const member = FAMILY_MEMBERS.find(m => m.id === log.memberId) || { name: log.memberName, avatar: '👤' };
+              {/* 날짜별 감정 일기 타임라인 (구성원 필터 및 일자별 그룹핑) */}
+              <div className="space-y-3 pt-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center space-x-1.5 text-xs font-black text-slate-800">
+                    <span>📖</span>
+                    <span>일자별 감정 일기 기록 ({dailyMoods.length}건)</span>
+                  </div>
 
-                      return (
-                        <div
-                          key={log.id}
-                          className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-start space-x-3 transition hover:border-indigo-300"
-                        >
-                          <div className="text-3xl shrink-0 p-2 bg-indigo-50/80 rounded-2xl">
-                            {moodOpt.emoji}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="font-extrabold text-slate-800 flex items-center space-x-1">
-                                <span>{member.avatar}</span>
-                                <span>{log.memberName || member.name}</span>
-                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold border ${moodOpt.bg}`}>
-                                  {moodOpt.label}
-                                </span>
-                              </span>
-                              <div className="flex items-center space-x-1.5 text-[10px] text-slate-400">
-                                <span>📅 {log.date}</span>
-                                {(isParent || currentMemberId === log.memberId) && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteDailyMood(log.id)}
-                                    className="text-slate-300 hover:text-rose-500 font-bold text-xs p-0.5 transition"
-                                    title="삭제"
-                                  >
-                                    ✕
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            {log.notes && (
-                              <p className="mt-1.5 text-xs text-slate-700 font-medium whitespace-pre-wrap bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                "{log.notes}"
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  {/* 구성원 필터 버튼 바 */}
+                  <div className="flex items-center space-x-1 bg-white p-1 rounded-xl border border-slate-200 text-xs overflow-x-auto no-scrollbar">
+                    <button
+                      type="button"
+                      onClick={() => setMoodMemberFilter('all')}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition shrink-0 ${
+                        moodMemberFilter === 'all' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      가족 전체
+                    </button>
+                    {FAMILY_MEMBERS.map(m => (
+                      <button
+                        type="button"
+                        key={m.id}
+                        onClick={() => setMoodMemberFilter(m.id)}
+                        className={`px-2 py-1 rounded-lg font-bold transition flex items-center space-x-1 shrink-0 ${
+                          moodMemberFilter === m.id ? `${m.activeBg} shadow-2xs` : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>{m.avatar}</span>
+                        <span>{m.name}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
+
+                {(() => {
+                  const filteredMoods = dailyMoods.filter(m => {
+                    if (moodMemberFilter === 'all') return true;
+                    return m.memberId === moodMemberFilter;
+                  });
+
+                  if (filteredMoods.length === 0) {
+                    return (
+                      <div className="text-center py-8 bg-white/70 rounded-2xl border border-dashed border-indigo-300/60 text-xs text-slate-400 font-bold space-y-1">
+                        <div className="text-2xl">😊</div>
+                        <div>조건에 맞는 감정 일기가 없습니다.</div>
+                        <div className="text-[11px] text-slate-400 font-normal">오늘 나의 기분을 남겨 가족과 감정을 나눠보세요!</div>
+                      </div>
+                    );
+                  }
+
+                  // 날짜별 그룹핑 (내림차순 정렬)
+                  const dates = Array.from(new Set(filteredMoods.map(m => m.date))).sort((a, b) => b.localeCompare(a));
+
+                  return (
+                    <div className="space-y-3.5 max-h-[460px] overflow-y-auto no-scrollbar pr-0.5">
+                      {dates.map((dateStr) => {
+                        const dayMoods = filteredMoods.filter(m => m.date === dateStr);
+                        const isToday = dateStr === todayStr;
+
+                        return (
+                          <div key={dateStr} className="bg-white rounded-2xl p-3.5 sm:p-4 border border-indigo-150/80 shadow-2xs space-y-2.5">
+                            {/* 날짜 헤더 */}
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                              <span className="text-xs font-black text-slate-900 flex items-center space-x-1.5">
+                                <span>📅</span>
+                                <span>{dateStr}</span>
+                                {isToday && (
+                                  <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.2 rounded-full font-extrabold border border-amber-200">
+                                    오늘
+                                  </span>
+                                )}
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-medium">
+                                {dayMoods.length}명의 가족이 기록함
+                              </span>
+                            </div>
+
+                            {/* 해당 날짜의 가족 감정 카드들 */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              {dayMoods.map((log) => {
+                                const moodOpt = MOOD_OPTIONS.find(o => o.key === log.moodKey) || MOOD_OPTIONS[0];
+                                const member = FAMILY_MEMBERS.find(m => m.id === log.memberId) || { name: log.memberName, avatar: '👤' };
+
+                                return (
+                                  <div
+                                    key={log.id}
+                                    className={`p-3 rounded-2xl border transition-all flex items-start space-x-2.5 ${
+                                      log.memberId === currentMemberId
+                                        ? 'bg-indigo-50/40 border-indigo-200'
+                                        : 'bg-slate-50/60 border-slate-200/80'
+                                    }`}
+                                  >
+                                    <div className="text-2xl shrink-0 p-1.5 bg-white rounded-xl shadow-2xs">
+                                      {moodOpt.emoji}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="font-extrabold text-slate-800 flex items-center space-x-1">
+                                          <span>{member.avatar}</span>
+                                          <span>{log.memberName || member.name}</span>
+                                          <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold border ${moodOpt.bg}`}>
+                                            {moodOpt.label}
+                                          </span>
+                                        </span>
+                                        <div className="flex items-center space-x-1 text-[10px] text-slate-400">
+                                          <span>{formatRelativeTime(log.updatedAt || log.createdAt)}</span>
+                                          {(isParent || currentMemberId === log.memberId) && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDeleteDailyMood(log)}
+                                              className="text-slate-300 hover:text-rose-500 font-bold text-xs p-0.5 transition"
+                                              title="삭제"
+                                            >
+                                              ✕
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {log.notes ? (
+                                        <p className="mt-1.5 text-xs text-slate-700 font-medium whitespace-pre-wrap bg-white p-2 rounded-xl border border-slate-100">
+                                          "{log.notes}"
+                                        </p>
+                                      ) : (
+                                        <p className="mt-1 text-[11px] text-slate-400 italic">남긴 메모가 없습니다.</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           )}
         </section>
@@ -3528,6 +3636,8 @@
       const [isResetPraiseConfirmOpen, setIsResetPraiseConfirmOpen] = useState(false);
       const [deletingReadingLog, setDeletingReadingLog] = useState(null);
       const [deletingPraiseLog, setDeletingPraiseLog] = useState(null);
+      // 신규: 모든 기능 공통 2단계 삭제 확인 모달 상태 { title, message, details: [], onConfirm }
+      const [genericDeleteTarget, setGenericDeleteTarget] = useState(null);
       const [isSubmitting, setIsSubmitting] = useState(false);
       const [toastMessage, setToastMessage] = useState(null);
 
@@ -3912,19 +4022,40 @@
         setIsGameTimeModalOpen(false);
       };
 
-      const handleDeleteGameLog = async (logId) => {
+      const handleDeleteGameLog = (logItemOrId) => {
         if (!isParent) {
           showToast("⚠️ 엄마, 아빠만 기록을 삭제할 수 있습니다.");
           return;
         }
-        try {
-          if (dbRef.current) {
-            await dbRef.current.collection('game_time_logs').doc(logId).delete();
-          } else {
-            setGameTimeLogs(prev => prev.filter(l => l.id !== logId));
+        const log = typeof logItemOrId === 'object' ? logItemOrId : gameTimeLogs.find(l => l.id === logItemOrId) || { id: logItemOrId };
+        const kid = FAMILY_MEMBERS.find(m => m.id === log.memberId) || { name: log.memberName || '어린이' };
+        const diffText = log.deltaMinutes !== undefined ? (log.deltaMinutes > 0 ? `+${log.deltaMinutes}분` : `${log.deltaMinutes}분`) : '';
+
+        setGenericDeleteTarget({
+          title: "게임 시간 기록을 삭제할까요?",
+          icon: "🎮",
+          warning: "삭제 시 게임 시간 변동 내역에서 영구 제거됩니다.",
+          details: [
+            { label: "대상 어린이", value: kid.name },
+            { label: "변동 내역", value: `${diffText} (${log.reason || '사유 없음'})` },
+            { label: "기록 일시", value: formatRelativeTime(log.createdAt) }
+          ],
+          onConfirm: async () => {
+            const logId = log.id;
+            try {
+              if (dbRef.current) {
+                await dbRef.current.collection('game_time_logs').doc(logId).delete();
+              } else {
+                setGameTimeLogs(prev => prev.filter(l => l.id !== logId));
+              }
+              showToast("게임 시간 기록이 삭제되었습니다.");
+              triggerHaptic([40, 50, 40]);
+            } catch (err) {
+              console.error(err);
+              showToast("기록 삭제 중 오류가 발생했습니다.");
+            }
           }
-          showToast("기록이 삭제되었습니다.");
-        } catch (err) { console.error(err); }
+        });
       };
 
       const handleLoginSubmit = (e) => {
@@ -4106,19 +4237,36 @@
         } catch (err) { console.error(err); }
       };
 
-      const handleDeleteSchedule = async (item) => {
+      const handleDeleteSchedule = (item) => {
         if (!canManageMemberSchedule(currentMember.id, item.memberId)) {
           showToast("⚠️ 이 일정을 삭제할 권한이 없습니다.");
           return;
         }
-        try {
-          if (dbRef.current) {
-            await dbRef.current.collection('schedules').doc(item.id).delete();
-          } else {
-            setSchedules(prev => prev.filter(s => s.id !== item.id));
+        const member = FAMILY_MEMBERS.find(m => m.id === item.memberId) || { name: '가족' };
+        setGenericDeleteTarget({
+          title: "일정을 삭제할까요?",
+          icon: "📅",
+          warning: "삭제된 일정은 캘린더에서 완전히 제거됩니다.",
+          details: [
+            { label: "일정명", value: item.title },
+            { label: "대상 가족", value: `${member.avatar} ${member.name}` },
+            { label: "일시", value: item.isRange ? `${item.date} ~ ${item.endDate}` : `${item.date} (${item.startTime || '종일'})` }
+          ],
+          onConfirm: async () => {
+            try {
+              if (dbRef.current) {
+                await dbRef.current.collection('schedules').doc(item.id).delete();
+              } else {
+                setSchedules(prev => prev.filter(s => s.id !== item.id));
+              }
+              showToast("일정이 삭제되었습니다.");
+              triggerHaptic([40, 50, 40]);
+            } catch (err) {
+              console.error(err);
+              showToast("일정 삭제 중 오류가 발생했습니다.");
+            }
           }
-          showToast("일정이 삭제되었습니다.");
-        } catch (err) { console.error(err); }
+        });
       };
 
       const handleCreateTodo = async (e) => {
@@ -4184,19 +4332,36 @@
         } catch (err) { console.error(err); }
       };
 
-      const handleDeleteTodo = async (todoItem) => {
+      const handleDeleteTodo = (todoItem) => {
         if (!isParent) {
           showToast("⚠️ 엄마, 아빠만 할 일을 삭제할 수 있습니다.");
           return;
         }
-        try {
-          if (dbRef.current) {
-            await dbRef.current.collection('todos').doc(todoItem.id).delete();
-          } else {
-            setTodos(prev => prev.filter(s => s.id !== todoItem.id));
+        const member = FAMILY_MEMBERS.find(m => m.id === todoItem.memberId) || { name: '어린이' };
+        setGenericDeleteTarget({
+          title: "할 일을 삭제할까요?",
+          icon: "✅",
+          warning: "삭제 시 할 일 체크리스트에서 제거됩니다.",
+          details: [
+            { label: "할 일 내용", value: todoItem.text },
+            { label: "대상 가족", value: `${member.avatar} ${member.name}` },
+            { label: "상태", value: todoItem.completed ? "완료됨 ✓" : "진행 중" }
+          ],
+          onConfirm: async () => {
+            try {
+              if (dbRef.current) {
+                await dbRef.current.collection('todos').doc(todoItem.id).delete();
+              } else {
+                setTodos(prev => prev.filter(s => s.id !== todoItem.id));
+              }
+              showToast("할 일이 삭제되었습니다.");
+              triggerHaptic([40, 50, 40]);
+            } catch (err) {
+              console.error(err);
+              showToast("할 일 삭제 중 오류가 발생했습니다.");
+            }
           }
-          showToast("할 일이 삭제되었습니다.");
-        } catch (err) { console.error(err); }
+        });
       };
 
       const handleCreatePraise = async (e) => {
@@ -4329,20 +4494,35 @@
         }
       };
 
-      const handleDeleteDDay = async (ddayId) => {
+      const handleDeleteDDay = (ddayId) => {
         if (!isParent) {
           showToast("⚠️ 엄마, 아빠만 기념일을 삭제할 수 있습니다.");
           return;
         }
-        try {
-          if (dbRef.current) {
-            try { await dbRef.current.collection('dday_events').doc(ddayId).delete(); } catch(e){}
+        const evt = ddayEvents.find(d => d.id === ddayId) || { id: ddayId, title: '기념일' };
+        setGenericDeleteTarget({
+          title: "기념일을 삭제할까요?",
+          icon: evt.icon || "🎂",
+          warning: "삭제 시 기념일 목록 및 D-Day 카운터에서 제거됩니다.",
+          details: [
+            { label: "기념일명", value: evt.title },
+            { label: "날짜", value: evt.date },
+            { label: "반복 여부", value: evt.isAnnual ? "매년 반복" : "1회성" }
+          ],
+          onConfirm: async () => {
+            try {
+              if (dbRef.current) {
+                try { await dbRef.current.collection('dday_events').doc(ddayId).delete(); } catch(e){}
+              }
+              setDDayEvents(prev => prev.filter(d => d.id !== ddayId));
+              showToast("기념일이 삭제되었습니다.");
+              triggerHaptic([40, 50, 40]);
+            } catch (err) {
+              console.error(err);
+              showToast("기념일 삭제 중 오류가 발생했습니다.");
+            }
           }
-          setDDayEvents(prev => prev.filter(d => d.id !== ddayId));
-          showToast("기념일이 삭제되었습니다.");
-        } catch (err) {
-          console.error(err);
-        }
+        });
       };
 
       // 칭찬 스티커 보상/교환소 핸들러
@@ -4381,20 +4561,34 @@
         }
       };
 
-      const handleDeleteReward = async (rewardId) => {
+      const handleDeleteReward = (rewardId) => {
         if (!isParent) {
           showToast("⚠️ 엄마, 아빠만 선물을 삭제할 수 있습니다.");
           return;
         }
-        try {
-          if (dbRef.current) {
-            try { await dbRef.current.collection('praise_rewards').doc(rewardId).delete(); } catch(e){}
+        const rwd = praiseRewards.find(r => r.id === rewardId) || { id: rewardId, title: '보상 선물' };
+        setGenericDeleteTarget({
+          title: "선물 보상 항목을 삭제할까요?",
+          icon: rwd.icon || "🎁",
+          warning: "삭제 시 칭찬 스티커 교환소 목록에서 사라집니다.",
+          details: [
+            { label: "선물 이름", value: rwd.title },
+            { label: "필요 스티커", value: `🌟 ${rwd.cost}개` }
+          ],
+          onConfirm: async () => {
+            try {
+              if (dbRef.current) {
+                try { await dbRef.current.collection('praise_rewards').doc(rewardId).delete(); } catch(e){}
+              }
+              setPraiseRewards(prev => prev.filter(r => r.id !== rewardId));
+              showToast("선물 보상 항목이 삭제되었습니다.");
+              triggerHaptic([40, 50, 40]);
+            } catch (err) {
+              console.error(err);
+              showToast("선물 삭제 중 오류가 발생했습니다.");
+            }
           }
-          setPraiseRewards(prev => prev.filter(r => r.id !== rewardId));
-          showToast("선물 보상 항목이 삭제되었습니다.");
-        } catch (err) {
-          console.error(err);
-        }
+        });
       };
 
       const handleRedeemReward = async (targetChildId, reward) => {
@@ -4428,21 +4622,36 @@
         }
       };
 
-      const handleDeleteRedeemLog = async (redeemId) => {
+      const handleDeleteRedeemLog = (redeemId) => {
         if (!isParent) {
           showToast("⚠️ 엄마, 아빠만 교환 내역을 취소할 수 있습니다.");
           return;
         }
-        try {
-          if (dbRef.current) {
-            await dbRef.current.collection('praise_redeems').doc(redeemId).delete();
-          } else {
-            setPraiseRedeems(prev => prev.filter(r => r.id !== redeemId));
+        const rdm = praiseRedeems.find(r => r.id === redeemId) || { id: redeemId, rewardTitle: '교환 내역' };
+        setGenericDeleteTarget({
+          title: "선물 교환 내역을 취소할까요?",
+          icon: rdm.rewardIcon || "↩️",
+          warning: "취소 시 아이의 칭찬 스티커가 즉시 환불 복구됩니다.",
+          details: [
+            { label: "교환 아이", value: rdm.memberName || "어린이" },
+            { label: "선물 이름", value: rdm.rewardTitle },
+            { label: "환불 스티커", value: `🌟 +${rdm.cost}개 환불` }
+          ],
+          onConfirm: async () => {
+            try {
+              if (dbRef.current) {
+                await dbRef.current.collection('praise_redeems').doc(redeemId).delete();
+              } else {
+                setPraiseRedeems(prev => prev.filter(r => r.id !== redeemId));
+              }
+              showToast("교환 내역이 취소되어 스티커가 환불되었습니다.");
+              triggerHaptic([40, 50, 40]);
+            } catch (err) {
+              console.error(err);
+              showToast("교환 취소 중 오류가 발생했습니다.");
+            }
           }
-          showToast("교환 내역이 취소되어 스티커가 환불되었습니다.");
-        } catch (err) {
-          console.error(err);
-        }
+        });
       };
 
       // 신규: 주원·주아 독서 시간 기록 핸들러 (엄마, 아빠 전용)
@@ -4606,19 +4815,32 @@
         }
       };
 
-      const handleDeleteWishItem = async (itemId) => {
-        try {
-          if (dbRef.current) {
-            await dbRef.current.collection('wishlist').doc(itemId).delete();
-          } else {
-            setWishlist(prev => prev.filter(w => w.id !== itemId));
+      const handleDeleteWishItem = (itemId) => {
+        const item = wishlist.find(w => w.id === itemId) || { id: itemId, title: '소원 물건' };
+        setGenericDeleteTarget({
+          title: "위시리스트 물건을 삭제할까요?",
+          icon: "🎁",
+          warning: "삭제 시 갖고 싶은 물건 목록에서 완전히 사라집니다.",
+          details: [
+            { label: "물건 이름", value: item.title },
+            { label: "신청한 아이", value: item.childName || "어린이" },
+            { label: "예상 가격", value: item.price || "미입력" }
+          ],
+          onConfirm: async () => {
+            try {
+              if (dbRef.current) {
+                await dbRef.current.collection('wishlist').doc(itemId).delete();
+              } else {
+                setWishlist(prev => prev.filter(w => w.id !== itemId));
+              }
+              showToast("소원 항목이 삭제되었습니다.");
+              triggerHaptic([40, 50, 40]);
+            } catch (err) {
+              console.error(err);
+              showToast("소원 삭제 중 오류가 발생했습니다.");
+            }
           }
-          showToast("소원 항목이 삭제되었습니다.");
-          triggerHaptic(20);
-        } catch (err) {
-          console.error(err);
-          showToast("소원 삭제 중 오류가 발생했습니다.");
-        }
+        });
       };
 
       // 신규: 엄마·아빠에게 하고 싶은 말 (편지) 핸들러
@@ -4675,19 +4897,32 @@
         }
       };
 
-      const handleDeleteFamilyLetter = async (letterId) => {
-        try {
-          if (dbRef.current) {
-            await dbRef.current.collection('family_letters').doc(letterId).delete();
-          } else {
-            setFamilyLetters(prev => prev.filter(l => l.id !== letterId));
+      const handleDeleteFamilyLetter = (letterId) => {
+        const letter = familyLetters.find(l => l.id === letterId) || { id: letterId, fromMemberName: '가족' };
+        setGenericDeleteTarget({
+          title: "사랑의 편지를 삭제할까요?",
+          icon: "💌",
+          warning: "삭제 시 대화 내용과 답글이 영구적으로 제거됩니다.",
+          details: [
+            { label: "보낸 사람", value: letter.fromMemberName },
+            { label: "받는 분", value: letter.toRole === 'mom' ? '엄마에게만' : letter.toRole === 'dad' ? '아빠에게만' : '엄마&아빠' },
+            { label: "작성 일시", value: formatRelativeTime(letter.createdAt) }
+          ],
+          onConfirm: async () => {
+            try {
+              if (dbRef.current) {
+                await dbRef.current.collection('family_letters').doc(letterId).delete();
+              } else {
+                setFamilyLetters(prev => prev.filter(l => l.id !== letterId));
+              }
+              showToast("편지가 삭제되었습니다.");
+              triggerHaptic([40, 50, 40]);
+            } catch (err) {
+              console.error(err);
+              showToast("편지 삭제 중 오류가 발생했습니다.");
+            }
           }
-          showToast("편지가 삭제되었습니다.");
-          triggerHaptic(20);
-        } catch (err) {
-          console.error(err);
-          showToast("편지 삭제 중 오류가 발생했습니다.");
-        }
+        });
       };
 
       // 신규: 하루 감정 일기 핸들러
@@ -4725,19 +4960,34 @@
         }
       };
 
-      const handleDeleteDailyMood = async (moodId) => {
-        try {
-          if (dbRef.current) {
-            await dbRef.current.collection('daily_moods').doc(moodId).delete();
-          } else {
-            setDailyMoods(prev => prev.filter(d => d.id !== moodId));
+      const handleDeleteDailyMood = (moodItemOrId) => {
+        const log = typeof moodItemOrId === 'object' ? moodItemOrId : dailyMoods.find(d => d.id === moodItemOrId) || { id: moodItemOrId };
+        const moodOpt = MOOD_OPTIONS.find(o => o.key === log.moodKey) || MOOD_OPTIONS[0];
+        setGenericDeleteTarget({
+          title: "감정 기록을 삭제할까요?",
+          icon: moodOpt.emoji || "😊",
+          warning: "삭제 시 하루 감정 타임라인 및 통계에서 제외됩니다.",
+          details: [
+            { label: "작성 가족", value: log.memberName || "가족" },
+            { label: "기록 날짜", value: log.date || "미확인" },
+            { label: "감정", value: `${moodOpt.emoji} ${moodOpt.label}` }
+          ],
+          onConfirm: async () => {
+            const moodId = log.id;
+            try {
+              if (dbRef.current) {
+                await dbRef.current.collection('daily_moods').doc(moodId).delete();
+              } else {
+                setDailyMoods(prev => prev.filter(d => d.id !== moodId));
+              }
+              showToast("감정 기록이 삭제되었습니다.");
+              triggerHaptic([40, 50, 40]);
+            } catch (err) {
+              console.error(err);
+              showToast("감정 기록 삭제 중 오류가 발생했습니다.");
+            }
           }
-          showToast("감정 기록이 삭제되었습니다.");
-          triggerHaptic(20);
-        } catch (err) {
-          console.error(err);
-          showToast("감정 기록 삭제 중 오류가 발생했습니다.");
-        }
+        });
       };
 
       const weekDays = useMemo(() => {
@@ -6121,6 +6371,54 @@
                   <button
                     type="button"
                     onClick={handleConfirmDeletePraise}
+                    className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition"
+                  >
+                    삭제 실행
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 모든 기능 공통 삭제 2단계 확인 모달 */}
+          {genericDeleteTarget && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/70 backdrop-blur-xs">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-sm w-full p-5 sm:p-6 text-center space-y-4 border border-slate-100 shadow-2xl">
+                <div className="text-3xl">{genericDeleteTarget.icon || '🗑️'}</div>
+                <h3 className="text-base font-extrabold text-slate-900">{genericDeleteTarget.title}</h3>
+
+                {genericDeleteTarget.details && genericDeleteTarget.details.length > 0 && (
+                  <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-left space-y-1.5 text-xs">
+                    {genericDeleteTarget.details.map((d, idx) => (
+                      <div key={idx} className="flex justify-between items-center">
+                        <span className="font-bold text-slate-600">{d.label}:</span>
+                        <span className="font-black text-slate-800 truncate max-w-[180px]">{d.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {genericDeleteTarget.warning && (
+                  <p className="text-[11px] text-rose-600 font-semibold leading-relaxed">
+                    ⚠️ {genericDeleteTarget.warning}
+                  </p>
+                )}
+
+                <div className="flex items-center space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setGenericDeleteTarget(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const fn = genericDeleteTarget.onConfirm;
+                      setGenericDeleteTarget(null);
+                      if (fn) await fn();
+                    }}
                     className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition"
                   >
                     삭제 실행
