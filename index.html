@@ -1087,6 +1087,22 @@
             }
           });
 
+          // 주간 최고 기록 계산 (월요일 기준 주차별 집계 중 최대치)
+          const weekAggMap = {};
+          kidLogs.forEach(l => {
+            if (!l.date) return;
+            const parts = l.date.split('-').map(Number);
+            const d = new Date(parts[0], parts[1] - 1, parts[2]);
+            const day = d.getDay();
+            const diff = day === 0 ? -6 : 1 - day;
+            const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff);
+            const weekKey = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
+            weekAggMap[weekKey] = (weekAggMap[weekKey] || 0) + (Number(l.minutes) || 0);
+          });
+          const weekTotals = Object.values(weekAggMap);
+          const bestWeekMinutes = weekTotals.length > 0 ? Math.max(...weekTotals) : weekMinutes;
+          const bestWeekFormatted = formatMinutesToHours(bestWeekMinutes);
+
           // 최근 읽은 책 로그 (최대 5건)
           const recentLogs = [...kidLogs].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
 
@@ -1098,6 +1114,8 @@
             weekLogs,
             weekMinutes,
             weekFormatted: formatMinutesToHours(weekMinutes),
+            bestWeekMinutes,
+            bestWeekFormatted,
             dailyMap,
             recentLogs
           };
@@ -1238,18 +1256,34 @@
                       </div>
                     </div>
 
-                    {/* 독서 시간 요약 */}
-                    <div className="grid grid-cols-2 gap-2 bg-black/20 p-2.5 rounded-xl border border-white/10 text-center">
+                    {/* 독서 시간 요약 (3분할: 총 누적 독서, 주간 최고 기록, 이번 주 독서) */}
+                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-black/25 p-2 sm:p-2.5 rounded-xl border border-white/10 text-center">
                       <div>
-                        <div className="text-[10px] text-slate-300 font-bold">📚 총 누적 독서</div>
-                        <div className="text-sm sm:text-base font-black text-amber-300 mt-0.5">
+                        <div className="text-[9px] sm:text-[10px] text-slate-300 font-bold flex items-center justify-center space-x-0.5">
+                          <span>📚</span>
+                          <span>총 누적 독서</span>
+                        </div>
+                        <div className="text-xs sm:text-sm font-black text-amber-300 mt-0.5 truncate">
                           {kid.totalFormatted}
                         </div>
                         <div className="text-[9px] text-slate-400">({kid.totalMinutes}분)</div>
                       </div>
                       <div className="border-l border-white/10">
-                        <div className="text-[10px] text-slate-300 font-bold">📅 이번 주 독서</div>
-                        <div className="text-sm sm:text-base font-black text-emerald-300 mt-0.5">
+                        <div className="text-[9px] sm:text-[10px] text-slate-300 font-bold flex items-center justify-center space-x-0.5">
+                          <span>🏅</span>
+                          <span>주간 최고 기록</span>
+                        </div>
+                        <div className="text-xs sm:text-sm font-black text-yellow-300 mt-0.5 truncate">
+                          {kid.bestWeekFormatted}
+                        </div>
+                        <div className="text-[9px] text-slate-400">({kid.bestWeekMinutes}분)</div>
+                      </div>
+                      <div className="border-l border-white/10">
+                        <div className="text-[9px] sm:text-[10px] text-slate-300 font-bold flex items-center justify-center space-x-0.5">
+                          <span>📅</span>
+                          <span>이번 주 독서</span>
+                        </div>
+                        <div className="text-xs sm:text-sm font-black text-emerald-300 mt-0.5 truncate">
                           {kid.weekFormatted}
                         </div>
                         <div className="text-[9px] text-slate-400">({kid.weekMinutes}분)</div>
