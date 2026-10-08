@@ -826,7 +826,7 @@
     }
 
     // 신규: 김주원, 김주아 전용 게임 시간 컴포넌트
-    function GameTimeSection({ isParent, gameTimes, gameTimeLogs, handleOpenGameTimeModal, handleDeleteGameLog }) {
+    function GameTimeSection({ isParent, gameTimes, gameTimeLogs, handleOpenGameTimeModal, handleDeleteGameLog, handleRequestResetGame }) {
       return (
         <section className="bg-gradient-to-br from-violet-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-4 sm:p-6 shadow-xl border border-indigo-500/20 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-white/10">
@@ -848,13 +848,24 @@
             </div>
 
             {isParent && (
-              <button
-                type="button"
-                onClick={() => handleOpenGameTimeModal('child1')}
-                className="px-4 py-2 text-xs font-extrabold rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white shadow-lg shadow-indigo-500/30 transition active:scale-95 shrink-0 self-start sm:self-auto"
-              >
-                ⏱️ 게임 시간 조정 / 설정
-              </button>
+              <div className="flex items-center space-x-1.5 shrink-0 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={handleRequestResetGame}
+                  className="px-3 py-2 text-xs font-extrabold rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition active:scale-95 flex items-center space-x-1"
+                  title="게임 시간 전체 리셋"
+                >
+                  <span>🧹</span>
+                  <span>게임 시간 리셋</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenGameTimeModal('child1')}
+                  className="px-4 py-2 text-xs font-extrabold rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white shadow-lg shadow-indigo-500/30 transition active:scale-95"
+                >
+                  ⏱️ 게임 시간 조정 / 설정
+                </button>
+              </div>
             )}
           </div>
 
@@ -1054,7 +1065,7 @@
     }
 
     // 신규: 주원·주아 독서 시간 기록, 1주일 단위 분석, 누적 명예의 전당 & 레벨 컴포넌트
-    function ReadingSection({ isParent, currentMember, readingLogs, handleOpenReadingModal, handleRequestDeleteReadingLog }) {
+    function ReadingSection({ isParent, currentMember, readingLogs, handleOpenReadingModal, handleRequestDeleteReadingLog, handleRequestResetReading }) {
       const [selectedWeekOffset, setSelectedWeekOffset] = useState(0);
       const [isLevelGuideOpen, setIsLevelGuideOpen] = useState(false);
       const [readingKidFilter, setReadingKidFilter] = useState('all');
@@ -1200,6 +1211,17 @@
               >
                 🏅 레벨 등급표
               </button>
+              {isParent && (
+                <button
+                  type="button"
+                  onClick={handleRequestResetReading}
+                  className="px-3 py-1.5 text-xs font-extrabold rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 transition active:scale-95 flex items-center space-x-1"
+                  title="독서 기록 전체 리셋"
+                >
+                  <span>🧹</span>
+                  <span>독서 기록 리셋</span>
+                </button>
+              )}
               {isParent && (
                 <button
                   type="button"
@@ -3657,6 +3679,9 @@
       const [genericDeleteTarget, setGenericDeleteTarget] = useState(null);
       // 신규: 독서 레벨업 축하 및 칭찬 스티커 지급 모달 상태
       const [levelUpCelebration, setLevelUpCelebration] = useState(null);
+      // 신규: 독서 기록 및 게임 시간 리셋 확인 모달 상태
+      const [resetReadingModal, setResetReadingModal] = useState(null);
+      const [resetGameModal, setResetGameModal] = useState(null);
       const [isSubmitting, setIsSubmitting] = useState(false);
       const [toastMessage, setToastMessage] = useState(null);
 
@@ -4876,6 +4901,120 @@
         }
       };
 
+      // 신규: 독서 기록 리셋 요청 및 실행 처리 함수 (확인 모달 연동)
+      const handleRequestResetReading = () => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 독서 기록을 리셋할 수 있습니다.");
+          return;
+        }
+        setResetReadingModal({ targetKidId: 'all' });
+      };
+
+      const handleConfirmResetReading = async (targetKidId = 'all') => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 독서 기록을 리셋할 수 있습니다.");
+          setResetReadingModal(null);
+          return;
+        }
+
+        try {
+          if (dbRef.current) {
+            const batch = dbRef.current.batch();
+            const snapshot = await dbRef.current.collection('reading_logs').get();
+            snapshot.forEach(doc => {
+              const data = doc.data();
+              if (targetKidId === 'all' || data.childId === targetKidId) {
+                batch.delete(doc.ref);
+              }
+            });
+
+            // 독서 레벨업으로 부여되었던 칭찬 스티커 및 레벨 조정 로그 정리
+            const praiseSnapshot = await dbRef.current.collection('praise_stickers').get();
+            praiseSnapshot.forEach(doc => {
+              const data = doc.data();
+              const isReadingPraise = data.fromMemberName && data.fromMemberName.includes('독서');
+              if (isReadingPraise && (targetKidId === 'all' || data.toMemberId === targetKidId)) {
+                batch.delete(doc.ref);
+              }
+            });
+
+            await batch.commit();
+          } else {
+            if (targetKidId === 'all') {
+              setReadingLogs([]);
+              setPraiseLogs(prev => prev.filter(p => !p.fromMemberName || !p.fromMemberName.includes('독서')));
+            } else {
+              setReadingLogs(prev => prev.filter(l => l.childId !== targetKidId));
+              setPraiseLogs(prev => prev.filter(p => !p.fromMemberName || !p.fromMemberName.includes('독서') || p.toMemberId !== targetKidId));
+            }
+          }
+
+          const targetName = targetKidId === 'child1' ? '주원이의' : targetKidId === 'child2' ? '주아의' : '주원·주아의';
+          showToast(`🧹 ${targetName} 모든 독서 기록과 누적 레벨이 리셋되었습니다.`);
+          triggerHaptic([60, 80, 60]);
+        } catch (err) {
+          console.error("독서 기록 리셋 오류:", err);
+          showToast("독서 기록 리셋 중 오류가 발생했습니다.");
+        } finally {
+          setResetReadingModal(null);
+        }
+      };
+
+      // 신규: 게임 시간 리셋 요청 및 실행 처리 함수 (확인 모달 연동)
+      const handleRequestResetGame = () => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 게임 시간을 리셋할 수 있습니다.");
+          return;
+        }
+        setResetGameModal({ targetKidId: 'all' });
+      };
+
+      const handleConfirmResetGame = async (targetKidId = 'all') => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 게임 시간을 리셋할 수 있습니다.");
+          setResetGameModal(null);
+          return;
+        }
+
+        try {
+          let updatedTimes = { ...gameTimes };
+          if (targetKidId === 'all') {
+            updatedTimes = { child1: 0, child2: 0 };
+          } else {
+            updatedTimes[targetKidId] = 0;
+          }
+
+          if (dbRef.current) {
+            await dbRef.current.collection('settings').doc('game_times').set(updatedTimes);
+            const batch = dbRef.current.batch();
+            const snapshot = await dbRef.current.collection('game_logs').get();
+            snapshot.forEach(doc => {
+              const data = doc.data();
+              if (targetKidId === 'all' || data.childId === targetKidId) {
+                batch.delete(doc.ref);
+              }
+            });
+            await batch.commit();
+          } else {
+            setGameTimes(updatedTimes);
+            if (targetKidId === 'all') {
+              setGameLogs([]);
+            } else {
+              setGameLogs(prev => prev.filter(l => l.childId !== targetKidId));
+            }
+          }
+
+          const targetName = targetKidId === 'child1' ? '주원이의' : targetKidId === 'child2' ? '주아의' : '주원·주아의';
+          showToast(`🧹 ${targetName} 게임 시간이 0분으로 리셋되었습니다.`);
+          triggerHaptic([60, 80, 60]);
+        } catch (err) {
+          console.error("게임 시간 리셋 오류:", err);
+          showToast("게임 시간 리셋 중 오류가 발생했습니다.");
+        } finally {
+          setResetGameModal(null);
+        }
+      };
+
       const sendStatusMessage = async (text, emoji) => {
         if (!text.trim()) {
           showToast("⚠️ 공유할 한 줄 현황을 입력해주세요!");
@@ -5488,6 +5627,7 @@
                   gameTimeLogs={gameTimeLogs}
                   handleOpenGameTimeModal={handleOpenGameTimeModal}
                   handleDeleteGameLog={handleDeleteGameLog}
+                  handleRequestResetGame={handleRequestResetGame}
                 />
 
                 {/* 신규: 주원·주아 독서 시간 & 명예의 전당 섹션 */}
@@ -5497,6 +5637,7 @@
                   readingLogs={readingLogs}
                   handleOpenReadingModal={handleOpenReadingModal}
                   handleRequestDeleteReadingLog={handleRequestDeleteReadingLog}
+                  handleRequestResetReading={handleRequestResetReading}
                 />
 
                 <PraiseSection
@@ -5546,6 +5687,7 @@
                 gameTimeLogs={gameTimeLogs}
                 handleOpenGameTimeModal={handleOpenGameTimeModal}
                 handleDeleteGameLog={handleDeleteGameLog}
+                handleRequestResetGame={handleRequestResetGame}
               />
             )}
 
@@ -5631,6 +5773,7 @@
                 readingLogs={readingLogs}
                 handleOpenReadingModal={handleOpenReadingModal}
                 handleRequestDeleteReadingLog={handleRequestDeleteReadingLog}
+                handleRequestResetReading={handleRequestResetReading}
               />
             )}
 
@@ -6376,6 +6519,162 @@
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* 독서 기록 리셋 확인 모달 */}
+          {resetReadingModal && isParent && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/70 backdrop-blur-xs">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-sm w-full p-5 sm:p-6 text-center space-y-4 border border-slate-100 shadow-2xl">
+                <div className="text-3xl">📚</div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-extrabold text-slate-900">독서 기록을 리셋할까요?</h3>
+                  <p className="text-xs text-slate-500">
+                    리셋할 대상을 선택해 주세요.
+                  </p>
+                </div>
+
+                {/* 대상 선택 탭 */}
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setResetReadingModal({ ...resetReadingModal, targetKidId: 'all' })}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition ${resetReadingModal.targetKidId === 'all' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    전체 리셋
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResetReadingModal({ ...resetReadingModal, targetKidId: 'child1' })}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition ${resetReadingModal.targetKidId === 'child1' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    주원만
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResetReadingModal({ ...resetReadingModal, targetKidId: 'child2' })}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition ${resetReadingModal.targetKidId === 'child2' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    주아만
+                  </button>
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 text-left space-y-1 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">리셋 대상:</span>
+                    <span className="font-black text-slate-900">
+                      {resetReadingModal.targetKidId === 'child1' ? '김주원' : resetReadingModal.targetKidId === 'child2' ? '김주아' : '주원 & 주아 전체'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">누적 레벨:</span>
+                    <span className="font-black text-amber-600">Lv.1 (0시간)로 초기화</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">연동 스티커:</span>
+                    <span className="font-medium text-slate-700">승급 칭찬 스티커 정리</span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-rose-600 font-semibold leading-relaxed">
+                  ⚠️ 선택한 대상의 모든 독서 시간 기록이 영구 삭제되며 Lv.1 기본 레벨로 초기화됩니다. 이 작업은 취소할 수 없습니다.
+                </p>
+
+                <div className="flex items-center space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setResetReadingModal(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmResetReading(resetReadingModal.targetKidId)}
+                    className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition"
+                  >
+                    리셋 실행
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 게임 시간 리셋 확인 모달 */}
+          {resetGameModal && isParent && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/70 backdrop-blur-xs">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-sm w-full p-5 sm:p-6 text-center space-y-4 border border-slate-100 shadow-2xl">
+                <div className="text-3xl">🎮</div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-extrabold text-slate-900">게임 시간을 리셋할까요?</h3>
+                  <p className="text-xs text-slate-500">
+                    리셋할 대상을 선택해 주세요.
+                  </p>
+                </div>
+
+                {/* 대상 선택 탭 */}
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setResetGameModal({ ...resetGameModal, targetKidId: 'all' })}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition ${resetGameModal.targetKidId === 'all' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    전체 리셋
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResetGameModal({ ...resetGameModal, targetKidId: 'child1' })}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition ${resetGameModal.targetKidId === 'child1' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    주원만
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResetGameModal({ ...resetGameModal, targetKidId: 'child2' })}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition ${resetGameModal.targetKidId === 'child2' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    주아만
+                  </button>
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 text-left space-y-1 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">리셋 대상:</span>
+                    <span className="font-black text-slate-900">
+                      {resetGameModal.targetKidId === 'child1' ? '김주원' : resetGameModal.targetKidId === 'child2' ? '김주아' : '주원 & 주아 전체'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">잔여 시간:</span>
+                    <span className="font-black text-amber-600">0분으로 초기화</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-600">변동 내역:</span>
+                    <span className="font-medium text-slate-700">과거 충전/차감 기록 정리</span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-rose-600 font-semibold leading-relaxed">
+                  ⚠️ 선택한 아이의 남은 게임 시간이 0분으로 초기화되며 과거 내역이 정리됩니다. 이 작업은 취소할 수 없습니다.
+                </p>
+
+                <div className="flex items-center space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setResetGameModal(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmResetGame(resetGameModal.targetKidId)}
+                    className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition"
+                  >
+                    리셋 실행
+                  </button>
+                </div>
               </div>
             </div>
           )}
