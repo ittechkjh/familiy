@@ -4164,6 +4164,13 @@
       { keywords: ['모란역', '모란'], lat: 37.4322, lng: 127.1290, label: '모란역' },
       { keywords: ['서현역', '분당'], lat: 37.3850, lng: 127.1233, label: '서현역' },
       { keywords: ['휘닉스파크', '평창휘닉스', '휘닉스 평창', '휘닉스'], lat: 37.5815, lng: 128.3245, label: '휘닉스 평창' },
+      { keywords: ['블루캐니언'], lat: 37.5802, lng: 128.3262, label: '휘닉스 평창 블루캐니언' },
+      { keywords: ['루지랜드'], lat: 37.5826, lng: 128.3220, label: '휘닉스 평창 루지랜드' },
+      { keywords: ['미가연', '봉평메밀미가연', '봉평미가연', '기풍로108', '기풍로'], lat: 37.60155, lng: 128.39344, label: '봉평메밀 미가연' },
+      { keywords: ['이효석문학관', '메밀꽃문화마을'], lat: 37.6050, lng: 128.3846, label: '이효석문학관' },
+      { keywords: ['월정사', '전나무숲길'], lat: 37.7325, lng: 128.5925, label: '오대산 월정사' },
+      { keywords: ['삼양목장'], lat: 37.7022, lng: 128.7183, label: '대관령 삼양목장' },
+      { keywords: ['하늘목장'], lat: 37.6974, lng: 128.7397, label: '대관령 하늘목장' },
       { keywords: ['용평리조트', '모나용평'], lat: 37.6444, lng: 128.6802, label: '모나용평' },
       { keywords: ['알펜시아'], lat: 37.6548, lng: 128.6720, label: '알펜시아 리조트' },
       { keywords: ['대관령양떼목장', '양떼목장'], lat: 37.6888, lng: 128.7513, label: '대관령양떼목장' },
@@ -4223,8 +4230,11 @@
       if (clean.includes('성남') || clean.includes('중원') || clean.includes('분당')) {
         return { lat: 37.4326, lng: 127.1408, name: '성남시 일대', source: 'region_fallback' };
       }
-      if (clean.includes('평창') || clean.includes('봉평')) {
-        return { lat: 37.5815, lng: 128.3245, name: '평창 일대', source: 'region_fallback' };
+      if (clean.includes('봉평')) {
+        return { lat: 37.6033, lng: 128.3811, name: '평창 봉평면 일대', source: 'region_fallback' };
+      }
+      if (clean.includes('평창')) {
+        return { lat: 37.3707, lng: 128.3902, name: '평창군 일대', source: 'region_fallback' };
       }
       if (clean.includes('강릉') || clean.includes('경포')) {
         return { lat: 37.7518, lng: 128.8760, name: '강릉 일대', source: 'region_fallback' };
@@ -4247,11 +4257,17 @@
       const mapContainerRef = useRef(null);
       const mapInstanceRef = useRef(null);
 
-      // 지도에 표시할 유효한 좌표를 가진 일정 필터링
+      // 지도에 표시할 유효한 좌표를 가진 일정 필터링 및 미세 보정
       const validPoints = useMemo(() => {
         return items.filter(item => {
           if (selectedDay !== 'all' && Number(item.day) !== Number(selectedDay)) return false;
           return typeof item.lat === 'number' && typeof item.lng === 'number' && !isNaN(item.lat) && !isNaN(item.lng);
+        }).map(item => {
+          const addr = (item.address || item.placeName || item.title || '');
+          if ((addr.includes('미가연') || addr.includes('봉평메밀')) && (item.lat === 37.5815 || item.lat === 37.56)) {
+            return { ...item, lat: 37.60155, lng: 128.39344 };
+          }
+          return item;
         });
       }, [items, selectedDay]);
 
@@ -4350,9 +4366,23 @@
 
         const latLngs = [];
         const markerGroup = [];
+        const renderedCoords = [];
 
         validPoints.forEach((point, index) => {
-          const latlng = [point.lat, point.lng];
+          let lat = point.lat;
+          let lng = point.lng;
+
+          // 동일하거나 극히 가까운 좌표로 마커가 포개져 2번, 3번 등이 가려지는 현상 완전 방지 (방사형 미세 오프셋 분리)
+          const duplicates = renderedCoords.filter(rc => Math.abs(rc.originLat - point.lat) < 0.0004 && Math.abs(rc.originLng - point.lng) < 0.0004);
+          if (duplicates.length > 0) {
+            const angle = (duplicates.length * (2 * Math.PI / 4)) + (Math.PI / 6);
+            const radius = 0.0012 * Math.ceil(duplicates.length / 4); // 약 100m 시각적 오프셋
+            lat = lat + (radius * Math.cos(angle));
+            lng = lng + (radius * Math.sin(angle));
+          }
+          renderedCoords.push({ lat, lng, originLat: point.lat, originLng: point.lng });
+
+          const latlng = [lat, lng];
           latLngs.push(latlng);
 
           const cat = TRAVEL_CATEGORIES.find(c => c.id === point.category) || TRAVEL_CATEGORIES[0];
@@ -4406,7 +4436,7 @@
             </div>
           `;
 
-          const marker = L.marker(latlng, { icon: customIcon }).addTo(map);
+          const marker = L.marker(latlng, { icon: customIcon, zIndexOffset: (index + 1) * 30 }).addTo(map);
           marker.bindPopup(popupContent, { maxWidth: 280 });
           markerGroup.push(marker);
         });
@@ -4653,9 +4683,7 @@
           return;
         }
         setEditingItem(null);
-        // 기본 좌표: 임의의 서울 좌표를 넣지 않고, 여행지 힌트에 맞춰 설정하거나 비워둠 (입력 시 자동 검색됨)
-        const defaultLat = currentTrip?.destination?.includes('제주') ? 33.38 : (currentTrip?.destination?.includes('평창') ? 37.5815 : '');
-        const defaultLng = currentTrip?.destination?.includes('제주') ? 126.55 : (currentTrip?.destination?.includes('평창') ? 128.3245 : '');
+        // 새 일정 등록 시 기본 좌표는 비워두어 입력한 장소명/주소로 정확히 자동 지오코딩되도록 처리
         setItemForm({
           day: selectedDay === 'all' ? (targetDay || 1) : Number(selectedDay),
           time: '12:00',
@@ -4665,8 +4693,8 @@
           address: '',
           cost: '',
           memo: '',
-          lat: defaultLat,
-          lng: defaultLng
+          lat: '',
+          lng: ''
         });
         setIsItemModalOpen(true);
       };
@@ -4735,14 +4763,19 @@
         let finalLat = itemForm.lat ? Number(itemForm.lat) : undefined;
         let finalLng = itemForm.lng ? Number(itemForm.lng) : undefined;
 
-        // 좌표가 비어있거나 기존 서울 기본좌표(37.56, 126.97)인데 주소가 성남/도서관 등 다른 곳인 경우 자동 지오코딩 보정
-        const isDefaultSeoul = (finalLat === 37.56 && finalLng === 126.97);
-        if (!finalLat || !finalLng || isDefaultSeoul) {
-          const query = itemForm.address || itemForm.placeName || itemForm.title;
+        // 좌표가 비어있거나, 이전 기본좌표(서울 기본 37.56 또는 평창휘닉스 기본 37.5815)인데 입력된 장소명이 다른 경우 최신 정밀 지오코딩
+        const query = itemForm.address || itemForm.placeName || itemForm.title;
+        const isPresetCollision = (finalLat === 37.56 && finalLng === 126.97) ||
+          (!query.includes('휘닉스') && finalLat === 37.5815 && finalLng === 128.3245);
+        if (!finalLat || !finalLng || isPresetCollision) {
           const found = await searchLocationCoordinates(query);
           if (found && found.lat && found.lng) {
             finalLat = found.lat;
             finalLng = found.lng;
+          } else if (!finalLat || !finalLng) {
+            // 주소 검색 실패 시에만 권역 기본 좌표 폴백 할당
+            finalLat = currentTrip?.destination?.includes('제주') ? 33.38 : (currentTrip?.destination?.includes('평창') ? 37.5815 : 37.56);
+            finalLng = currentTrip?.destination?.includes('제주') ? 126.55 : (currentTrip?.destination?.includes('평창') ? 128.3245 : 126.97);
           }
         }
 
@@ -6084,7 +6117,23 @@
       const [trips, setTrips] = useState(() => {
         try {
           const saved = localStorage.getItem('family_trips_backup');
-          return saved ? JSON.parse(saved) : DEFAULT_TRIPS;
+          const initial = saved ? JSON.parse(saved) : DEFAULT_TRIPS;
+          if (Array.isArray(initial)) {
+            initial.forEach(trip => {
+              if (Array.isArray(trip.items)) {
+                trip.items.forEach(item => {
+                  const addr = (item.address || item.placeName || item.title || '');
+                  if (addr.includes('미가연') || addr.includes('봉평메밀') || addr.includes('기풍로')) {
+                    if (item.lat === 37.5815 || item.lat === 37.56 || !item.lat) {
+                      item.lat = 37.60155;
+                      item.lng = 128.39344;
+                    }
+                  }
+                });
+              }
+            });
+          }
+          return initial;
         } catch (e) {
           return DEFAULT_TRIPS;
         }
@@ -6341,7 +6390,7 @@
               const list = [];
               snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
               if (list.length > 0) {
-                // 기존 저장된 데이터 중 성남/중원도서관 등에 서울 기본좌표(37.56, 126.97)가 남아있는 경우 실시간 좌표 보정
+                // 기존 저장된 데이터 중 성남/중원도서관 등에 서울 기본좌표(37.56, 126.97)가 남아있거나 미가연이 휘닉스파크 좌표(37.5815)로 겹친 경우 실시간 좌표 보정
                 list.forEach(trip => {
                   if (Array.isArray(trip.items)) {
                     trip.items.forEach(item => {
@@ -6350,9 +6399,16 @@
                         if (addr.includes('성남') || addr.includes('중원') || addr.includes('원터로')) {
                           item.lat = 37.4326;
                           item.lng = 127.1408;
-                        } else if (addr.includes('휘닉스') || addr.includes('평창')) {
+                        } else if (addr.includes('휘닉스')) {
                           item.lat = 37.5815;
                           item.lng = 128.3245;
+                        }
+                      }
+                      // 미가연/봉평메밀 항목이 휘닉스파크 좌표(37.5815) 또는 서울 좌표로 들어간 경우 실제 봉평 미가연 정밀 좌표로 자동 갱신
+                      if (addr.includes('미가연') || addr.includes('봉평메밀') || addr.includes('기풍로')) {
+                        if (item.lat === 37.5815 || item.lat === 37.56 || !item.lat) {
+                          item.lat = 37.60155;
+                          item.lng = 128.39344;
                         }
                       }
                     });
