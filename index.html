@@ -31,6 +31,20 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     body { -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+    @media print {
+      body * { visibility: hidden !important; }
+      #family-print-report, #family-print-report * { visibility: visible !important; }
+      #family-print-report {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        max-height: none !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 10px !important;
+      }
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900 selection:bg-indigo-100 min-h-screen">
@@ -7818,47 +7832,182 @@
                     </div>
                   </div>
 
-                  {/* 3. 😊 오늘 가족 하루 감정 체크 현황 */}
-                  <div className="p-3 rounded-2xl border border-indigo-200 bg-white space-y-1.5">
-                    <span className="font-black text-indigo-950 text-xs flex items-center space-x-1">
-                      <span>☀️</span>
-                      <span>오늘 하루 감정 출석부 ({getTodayString()})</span>
-                    </span>
+                  {/* 3. 😊 온 가족 하루 감정 일기 전체 기록 */}
+                  <div className="p-3.5 rounded-2xl border border-indigo-200 bg-white space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-indigo-100 pb-1.5">
+                      <span className="font-black text-indigo-950 text-xs flex items-center space-x-1">
+                        <span>😊</span>
+                        <span>온 가족 하루 감정 일기 기록</span>
+                      </span>
+                      <span className="text-[10px] text-indigo-700 font-bold">총 {dailyMoods.length}건 기록</span>
+                    </div>
+
+                    {/* 오늘자 출석부 미니 요약 */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                       {FAMILY_MEMBERS.map(m => {
                         const mood = dailyMoods.find(d => d.memberId === m.id && d.date === getTodayString());
                         const moodOpt = mood ? MOOD_OPTIONS.find(o => o.key === mood.moodKey) : null;
                         return (
-                          <div key={m.id} className="p-2 rounded-xl bg-slate-50 border border-slate-100 flex items-center space-x-1.5">
+                          <div key={m.id} className="p-1.5 rounded-xl bg-indigo-50/50 border border-indigo-100 flex items-center space-x-1.5">
                             <span className="text-base">{m.avatar}</span>
                             <div className="min-w-0 flex-1 text-[11px]">
                               <div className="font-bold text-slate-800 truncate">{m.name}</div>
                               <div className="text-[10px] text-indigo-700 font-extrabold truncate">
-                                {moodOpt ? `${moodOpt.emoji} ${moodOpt.label}` : '미작성'}
+                                {moodOpt ? `${moodOpt.emoji} ${moodOpt.label}` : '오늘 미작성'}
                               </div>
                             </div>
                           </div>
                         );
                       })}
                     </div>
+
+                    {/* 감정 일기 전체 상세 목록 */}
+                    {dailyMoods.length === 0 ? (
+                      <div className="text-center py-4 bg-slate-50 rounded-xl text-[11px] text-slate-400">
+                        기록된 감정 일기가 없습니다.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="text-[10px] font-black text-slate-500">📝 전체 일자별 감정 일기 상세 내역:</div>
+                        <div className="space-y-1.5 max-h-56 overflow-y-auto no-scrollbar pr-0.5">
+                          {[...dailyMoods].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((log) => {
+                            const moodOpt = MOOD_OPTIONS.find(o => o.key === log.moodKey) || MOOD_OPTIONS[0];
+                            const member = FAMILY_MEMBERS.find(m => m.id === log.memberId) || { name: log.memberName, avatar: '👤' };
+                            return (
+                              <div key={log.id} className="p-2 rounded-xl bg-slate-50/80 border border-slate-200/80 flex items-start space-x-2 text-[11px]">
+                                <span className="text-lg shrink-0">{moodOpt.emoji}</span>
+                                <div className="flex-1 min-w-0 space-y-0.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-extrabold text-slate-800 flex items-center space-x-1">
+                                      <span>{member.avatar}</span>
+                                      <span>{log.memberName || member.name}</span>
+                                      <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold border ${moodOpt.bg}`}>
+                                        {moodOpt.label}
+                                      </span>
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-semibold">{log.date}</span>
+                                  </div>
+                                  {log.notes ? (
+                                    <p className="text-slate-700 font-medium whitespace-pre-wrap bg-white p-1.5 rounded-lg border border-slate-100">
+                                      "{log.notes}"
+                                    </p>
+                                  ) : (
+                                    <p className="text-[10px] text-slate-400 italic">메모 없음</p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* 4. 🎁 갖고 싶은 소원 & 💌 마음의 편지 통계 */}
-                  <div className="p-3 rounded-2xl border border-pink-200 bg-pink-50/30 space-y-1.5">
-                    <div className="flex items-center justify-between">
+                  {/* 4. 💌 마음의 편지 & 가족 소통 대화록 전체 기록 */}
+                  <div className="p-3.5 rounded-2xl border border-pink-200 bg-pink-50/30 space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-pink-100 pb-1.5">
                       <span className="font-black text-pink-900 text-xs flex items-center space-x-1">
-                        <span>🎈</span>
-                        <span>가족 소통 & 소원 현황</span>
+                        <span>💌</span>
+                        <span>마음의 편지 & 가족 소통 대화록</span>
                       </span>
-                      <span className="text-[10px] text-pink-700 font-bold">
-                        소원 {wishlist.length}개 / 편지 {familyLetters.length}통
-                      </span>
+                      <span className="text-[10px] text-pink-700 font-bold">총 {familyLetters.length}통 기록</span>
                     </div>
-                    <div className="text-[11px] text-slate-600 bg-white p-2.5 rounded-xl border border-pink-100 leading-relaxed">
-                      💡 소원 선물 대기 중: <strong>{wishlist.filter(w => !w.isFulfilled).length}개</strong> | 완료된 선물: <strong>{wishlist.filter(w => w.isFulfilled).length}개</strong>
-                      <br />
-                      💌 부모님께 보낸 따뜻한 편지와 답글이 총 <strong>{familyLetters.length}통</strong> 기록되어 있습니다.
-                    </div>
+
+                    {familyLetters.length === 0 ? (
+                      <div className="text-center py-4 bg-white/80 rounded-xl text-[11px] text-slate-400">
+                        기록된 가족 편지가 없습니다.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-72 overflow-y-auto no-scrollbar pr-0.5">
+                        {[...familyLetters].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map((letter) => {
+                          const isAuthor = currentMemberId === letter.fromMemberId;
+                          let canViewLetter = false;
+
+                          if (isAuthor) {
+                            canViewLetter = true;
+                          } else if (letter.toRole === 'mom') {
+                            canViewLetter = currentMemberId === 'mom' || (!letter.isSecret && isParent);
+                          } else if (letter.toRole === 'dad') {
+                            canViewLetter = currentMemberId === 'dad' || (!letter.isSecret && isParent);
+                          } else if (letter.toRole === 'child1') {
+                            canViewLetter = currentMemberId === 'child1' || (!letter.isSecret && isParent);
+                          } else if (letter.toRole === 'child2') {
+                            canViewLetter = currentMemberId === 'child2' || (!letter.isSecret && isParent);
+                          } else if (letter.toRole === 'kids') {
+                            canViewLetter = true;
+                          } else {
+                            canViewLetter = !letter.isSecret || isParent;
+                          }
+
+                          const fromMember = FAMILY_MEMBERS.find(m => m.id === letter.fromMemberId) || { name: letter.fromMemberName, avatar: '👦' };
+
+                          const recipientText = (() => {
+                            switch (letter.toRole) {
+                              case 'mom': return letter.fromMemberId === 'dad' ? '👩 여보(엄마)에게' : '👩 엄마에게';
+                              case 'dad': return letter.fromMemberId === 'mom' ? '👨 여보(아빠)에게' : '👨 아빠에게';
+                              case 'child1': return '👦 주원이에게';
+                              case 'child2': return '👧 주아에게';
+                              case 'kids': return '👦👧 아이들 모두에게';
+                              default: return '👨‍👩‍👦 엄마 & 아빠에게';
+                            }
+                          })();
+
+                          return (
+                            <div key={letter.id} className="p-2.5 rounded-xl bg-white border border-pink-150 space-y-1.5 text-[11px]">
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                                <div className="flex items-center space-x-1.5 font-black">
+                                  <span>{fromMember.avatar}</span>
+                                  <span className="text-slate-900">{letter.fromMemberName}</span>
+                                  <span className="text-slate-400 font-normal">➔</span>
+                                  <span className="text-pink-600">{recipientText}</span>
+                                  {letter.isSecret && (
+                                    <span className="text-[9px] bg-pink-100 text-pink-700 px-1 py-0.2 rounded font-bold">
+                                      🔒 비밀 편지
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-slate-400">
+                                  {letter.createdAt ? new Date(letter.createdAt).toLocaleDateString([], { year: 'numeric', month: 'numeric', day: 'numeric' }) : ''}
+                                </span>
+                              </div>
+
+                              {canViewLetter ? (
+                                <p className="text-slate-800 font-medium whitespace-pre-wrap bg-pink-50/40 p-2 rounded-lg border border-pink-100/60 leading-relaxed">
+                                  {letter.content}
+                                </p>
+                              ) : (
+                                <p className="text-slate-400 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                  🔒 비밀 편지입니다. (작성자와 수신자만 열람 가능)
+                                </p>
+                              )}
+
+                              {/* 답글 목록 */}
+                              {canViewLetter && letter.replies && letter.replies.length > 0 && (
+                                <div className="pl-2.5 border-l-2 border-pink-300 space-y-1 pt-0.5">
+                                  {letter.replies.map((rep, idx) => {
+                                    const repAuthor = FAMILY_MEMBERS.find(m => m.id === rep.authorId) || { avatar: '💬' };
+                                    return (
+                                      <div key={idx} className="bg-amber-50/70 p-1.5 rounded-lg border border-amber-200/60 space-y-0.5">
+                                        <div className="flex items-center justify-between text-[10px] font-bold text-amber-900">
+                                          <span className="flex items-center space-x-1">
+                                            <span>{repAuthor.avatar}</span>
+                                            <span>{rep.authorName}의 답글:</span>
+                                          </span>
+                                          <span className="text-slate-400 text-[9px]">
+                                            {rep.createdAt ? new Date(rep.createdAt).toLocaleDateString([], { month: 'numeric', day: 'numeric' }) : ''}
+                                          </span>
+                                        </div>
+                                        <p className="text-slate-700 font-medium whitespace-pre-wrap">{rep.content}</p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
 
