@@ -4496,30 +4496,68 @@
               </div>
 
               {/* 여행 선택 셀렉트 및 새 여행 추가 버튼 */}
-              <div className="flex items-center space-x-2 self-start sm:self-auto">
-                {trips.length > 1 && (
-                  <select
-                    value={currentTrip?.id || ''}
-                    onChange={(e) => setSelectedTripId(e.target.value)}
-                    className="px-3 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-xl text-xs font-bold text-white border border-white/20 focus:outline-none"
-                  >
-                    {trips.map(t => (
-                      <option key={t.id} value={t.id} className="text-slate-900 font-bold">
-                        {t.coverEmoji || '✈️'} {t.title}
-                      </option>
-                    ))}
-                  </select>
+              <div className="flex items-center space-x-2 self-start sm:self-auto flex-wrap gap-y-1.5">
+                {trips.length > 0 && (
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[11px] font-bold text-emerald-100 hidden sm:inline">여행 목록({trips.length}):</span>
+                    <select
+                      value={currentTrip?.id || ''}
+                      onChange={(e) => {
+                        setSelectedTripId(e.target.value);
+                        triggerHaptic(15);
+                      }}
+                      className="px-3 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-xl text-xs font-bold text-white border border-white/20 focus:outline-none cursor-pointer"
+                    >
+                      {trips.map(t => (
+                        <option key={t.id} value={t.id} className="text-slate-900 font-bold">
+                          {t.coverEmoji || '✈️'} {t.title} ({t.items?.length || 0}개 일정)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
                 <button
                   type="button"
                   onClick={handleOpenNewTripModal}
                   className="px-3.5 py-2 rounded-xl bg-white text-emerald-800 font-extrabold text-xs shadow-md hover:bg-emerald-50 transition active:scale-95 flex items-center space-x-1"
+                  title="기존 여행 일정을 그대로 두고 새로운 여행 일정을 추가합니다"
                 >
                   <span>✨</span>
-                  <span>새 여행 만들기</span>
+                  <span>+ 새 여행 추가하기</span>
                 </button>
               </div>
             </div>
+
+            {/* 등록된 여행이 2개 이상일 때 편리하게 클릭할 수 있는 여행 퀵 스위처 칩 바 */}
+            {trips.length > 1 && (
+              <div className="pt-2 border-t border-white/15 flex items-center space-x-1.5 overflow-x-auto no-scrollbar">
+                <span className="text-[10px] font-extrabold text-emerald-200 shrink-0">저장된 여행 목록:</span>
+                {trips.map(t => {
+                  const isSelected = (currentTrip?.id === t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedTripId(t.id);
+                        triggerHaptic(10);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition shrink-0 flex items-center space-x-1 ${
+                        isSelected
+                          ? 'bg-white text-emerald-900 shadow-xs'
+                          : 'bg-white/15 text-white hover:bg-white/25'
+                      }`}
+                    >
+                      <span>{t.coverEmoji || '✈️'}</span>
+                      <span className="truncate max-w-[130px]">{t.title}</span>
+                      <span className={`text-[10px] px-1 rounded-full ${isSelected ? 'bg-emerald-100 text-emerald-800' : 'bg-white/20 text-white'}`}>
+                        {t.items?.length || 0}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* 뷰 모드 및 일차(Day) 필터 바 */}
@@ -4766,10 +4804,17 @@
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
               <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-200 text-slate-900">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                  <h3 className="text-base font-black text-slate-900 flex items-center space-x-1.5">
-                    <span>✈️</span>
-                    <span>{editingTrip ? '여행 기본 정보 수정' : '새 가족 여행 만들기'}</span>
-                  </h3>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 flex items-center space-x-1.5">
+                      <span>✈️</span>
+                      <span>{editingTrip ? '여행 기본 정보 수정' : '새 가족 여행 만들기'}</span>
+                    </h3>
+                    {!editingTrip && (
+                      <p className="text-[11px] text-emerald-700 font-bold mt-0.5">
+                        ✨ 새로 등록해도 기존에 입력된 다른 여행 일정은 삭제되지 않고 안전하게 보존됩니다.
+                      </p>
+                    )}
+                  </div>
                   <button type="button" onClick={() => setIsTripModalOpen(false)} className="text-slate-400 font-bold hover:text-slate-600">✕</button>
                 </div>
 
