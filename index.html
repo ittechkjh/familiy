@@ -4314,15 +4314,20 @@
 
         // 초기 지도 생성 (없으면 신규, 있으면 레이어 정리)
         if (!mapInstanceRef.current) {
-          const defaultCenter = validPoints.length > 0 ? [validPoints[0].lat, validPoints[0].lng] : [37.5815, 128.3245]; // 평창 기본
+          const defaultCenter = validPoints.length > 0 ? [validPoints[0].lat, validPoints[0].lng] : [37.5, 127.5];
           const map = L.map(mapContainerRef.current, {
             zoomControl: true,
-            scrollWheelZoom: true
-          }).setView(defaultCenter, 11);
+            scrollWheelZoom: true,
+            minZoom: 6,
+            maxZoom: 18,
+            worldCopyJump: false
+          }).setView(defaultCenter, 9);
 
-          // OpenStreetMap 공식 타일 (API 키 불필요, 100% 무료 무제한 타일)
+          // OpenStreetMap 공식 타일 (API 키 불필요, 100% 무료 무제한 타일, noWrap으로 세계 복제 방지)
           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
+            minZoom: 6,
+            maxZoom: 18,
+            noWrap: true,
             attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
           }).addTo(map);
 
@@ -4339,7 +4344,7 @@
         });
 
         if (validPoints.length === 0) {
-          map.setView([36.5, 127.8], 7); // 전국 기본 뷰
+          map.setView([37.5, 127.5], 8); // 수도권/강원 중심 뷰
           return;
         }
 
@@ -4417,14 +4422,33 @@
           }).addTo(map);
         }
 
-        // 모든 마커가 화면에 다 보이도록 줌/패닝 맞춤
-        const group = L.featureGroup(markerGroup);
-        map.fitBounds(group.getBounds().pad(0.18));
+        // 해당 지역 및 코스에 딱 맞춘 줌/센터 조정 (전세계 축소 방지 및 한국 지역 스케일 고정)
+        const applyRouteBounds = () => {
+          try {
+            map.invalidateSize();
+            if (markerGroup.length === 1) {
+              map.setView([validPoints[0].lat, validPoints[0].lng], 13);
+            } else if (markerGroup.length > 1) {
+              const group = L.featureGroup(markerGroup);
+              map.fitBounds(group.getBounds(), {
+                padding: [45, 45],
+                maxZoom: 13
+              });
+            }
+          } catch (e) {
+            console.warn("fitBounds retry skipped:", e);
+          }
+        };
 
-        // 창 크기 변경 시 렌더링 리사이즈 트리거
-        setTimeout(() => {
-          try { map.invalidateSize(); } catch (e) {}
-        }, 200);
+        // 초기 컨테이너 렌더링 타이밍 보정을 위해 즉시 및 순차 실행
+        applyRouteBounds();
+        const t1 = setTimeout(applyRouteBounds, 120);
+        const t2 = setTimeout(applyRouteBounds, 350);
+
+        return () => {
+          clearTimeout(t1);
+          clearTimeout(t2);
+        };
 
       }, [validPoints, selectedDay]);
 
