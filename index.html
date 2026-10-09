@@ -4284,11 +4284,10 @@
             scrollWheelZoom: true
           }).setView(defaultCenter, 11);
 
-          // 고화질 CartoDB Voyager 타일 (시인성이 높고 한글 지명 렌더링이 선명하며 세련된 파스텔톤 지도)
-          L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+          // OpenStreetMap 공식 타일 (API 키 불필요, 100% 무료 무제한 타일)
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
-            subdomains: 'abcd',
-            attribution: '© <a href="https://carto.com/" target="_blank">CARTO</a>, © OpenStreetMap'
+            attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
           }).addTo(map);
 
           mapInstanceRef.current = map;
