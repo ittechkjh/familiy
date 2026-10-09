@@ -27,6 +27,10 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
+  <!-- Leaflet 지도 CDN (무료 오픈스트리트맵 호환) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
   <style>
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -224,6 +228,132 @@
       { key: 'tired', emoji: '🥱', label: '피곤해요', bg: 'bg-slate-100 text-slate-800 border-slate-300' },
       { key: 'sad', emoji: '😢', label: '슬퍼요', bg: 'bg-blue-100 text-blue-800 border-blue-300' },
       { key: 'angry', emoji: '😡', label: '속상해요', bg: 'bg-red-100 text-red-800 border-red-300' }
+    ];
+
+    // 신규: 가족 여행 카테고리 정의
+    const TRAVEL_CATEGORIES = [
+      { id: 'food', label: '음식점/카페', emoji: '🍽️', color: 'bg-amber-100 text-amber-800 border-amber-300', dotColor: '#f59e0b' },
+      { id: 'stay', label: '숙박', emoji: '🏨', color: 'bg-indigo-100 text-indigo-800 border-indigo-300', dotColor: '#6366f1' },
+      { id: 'play', label: '놀거리/체험', emoji: '🎡', color: 'bg-pink-100 text-pink-800 border-pink-300', dotColor: '#ec4899' },
+      { id: 'sight', label: '볼거리/관광', emoji: '🏞️', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', dotColor: '#10b981' },
+      { id: 'transport', label: '이동/교통', emoji: '🚗', color: 'bg-blue-100 text-blue-800 border-blue-300', dotColor: '#3b82f6' },
+      { id: 'shop', label: '쇼핑/기념품', emoji: '🛍️', color: 'bg-purple-100 text-purple-800 border-purple-300', dotColor: '#a855f7' }
+    ];
+
+    // 신규: 가족 여행 초기 샘플 데이터 (제주도 2박 3일 힐링 여행)
+    const DEFAULT_TRIPS = [
+      {
+        id: 'trip_jeju_sample',
+        title: '🌴 2026 제주도 가족 힐링 여행',
+        destination: '제주특별자치도',
+        startDate: '2026-10-15',
+        endDate: '2026-10-17',
+        coverEmoji: '🌴',
+        memo: '주원이, 주아와 함께하는 신나는 제주도 맛집 & 테마파크 투어! 🍊',
+        createdAt: Date.now() - 86400000 * 2,
+        items: [
+          // 1일차
+          {
+            id: 'ti_1',
+            day: 1,
+            time: '10:30',
+            title: '제주국제공항 도착 & 렌터카 수령',
+            category: 'transport',
+            placeName: '제주국제공항',
+            address: '제주 제주시 공항로 2',
+            lat: 33.5113,
+            lng: 126.4928,
+            cost: '렌터카 완납',
+            memo: '카시트 2개 장착 확인하기!',
+            isDone: false
+          },
+          {
+            id: 'ti_2',
+            day: 1,
+            time: '12:00',
+            title: '점심 식사 - 제주 고기국수 맛집',
+            category: 'food',
+            placeName: '자매국수',
+            address: '제주 제주시 탑동로11길 6',
+            lat: 33.5186,
+            lng: 126.5262,
+            cost: '약 40,000원',
+            memo: '고기국수 2개 + 비빔국수 1개 + 돔베고기 주문',
+            isDone: false
+          },
+          {
+            id: 'ti_3',
+            day: 1,
+            time: '14:30',
+            title: '아르떼뮤지엄 제주 미디어아트 관람',
+            category: 'play',
+            placeName: '아르떼뮤지엄 제주',
+            address: '제주 제주시 애월읍 어림비로 478',
+            lat: 33.3986,
+            lng: 126.3486,
+            cost: '네이버 예약 완료',
+            memo: '아이들 실내 전시 및 인생 사진 스팟 📸',
+            isDone: false
+          },
+          {
+            id: 'ti_4',
+            day: 1,
+            time: '18:00',
+            title: '호텔 체크인 & 흑돼지 저녁',
+            category: 'stay',
+            placeName: '신화월드 호텔앤리조트',
+            address: '제주 서귀포시 안덕면 신화역사로304번길 38',
+            lat: 33.3072,
+            lng: 126.3164,
+            cost: '숙소 예약 완료',
+            memo: '수영장 가방 미리 챙겨두기 🏊',
+            isDone: false
+          },
+          // 2일차
+          {
+            id: 'ti_5',
+            day: 2,
+            time: '10:00',
+            title: '뽀로로 & 타요 테마파크 제주',
+            category: 'play',
+            placeName: '뽀로로앤타요 테마파크 제주',
+            address: '제주 서귀포시 안덕면 병악로 269',
+            lat: 33.2842,
+            lng: 126.3482,
+            cost: '자유이용권 4매',
+            memo: '주아와 주원이가 제일 기대하는 어트랙션 타기!',
+            isDone: false
+          },
+          {
+            id: 'ti_6',
+            day: 2,
+            time: '13:00',
+            title: '점심 - 서귀포 해물 통갈치조림',
+            category: 'food',
+            placeName: '색달식당 중문본점',
+            address: '제주 서귀포시 예래로 255-18',
+            lat: 33.2498,
+            lng: 126.4112,
+            cost: '약 100,000원',
+            memo: '통갈치구이 세트로 아이들 밥 먹이기 🐟',
+            isDone: false
+          },
+          {
+            id: 'ti_7',
+            day: 2,
+            time: '15:30',
+            title: '주상절리대 산책 & 바다 구경',
+            category: 'sight',
+            placeName: '대포주상절리',
+            address: '제주 서귀포시 이어도로 36-30',
+            lat: 33.2378,
+            lng: 126.4253,
+            cost: '입장료 8,000원',
+            memo: '멋진 절벽과 파도 구경하기 🌊',
+            isDone: false
+          }
+        ]
+      }
     ];
 
     const calculateDDay = (dateStr, isAnnual = false) => {
@@ -3666,6 +3796,901 @@
       );
     }
 
+    // ==================== 신규: 가족 여행 동선 지도 컴포넌트 (Leaflet 기반) ====================
+    function TravelMapView({ items = [], selectedDay = 'all' }) {
+      const mapContainerRef = useRef(null);
+      const mapInstanceRef = useRef(null);
+
+      // 지도에 표시할 유효한 좌표를 가진 일정 필터링
+      const validPoints = useMemo(() => {
+        return items.filter(item => {
+          if (selectedDay !== 'all' && Number(item.day) !== Number(selectedDay)) return false;
+          return typeof item.lat === 'number' && typeof item.lng === 'number' && !isNaN(item.lat) && !isNaN(item.lng);
+        });
+      }, [items, selectedDay]);
+
+      useEffect(() => {
+        if (!mapContainerRef.current) return;
+        if (typeof L === 'undefined') return;
+
+        // 초기 지도 생성 (없으면 신규, 있으면 레이어 정리)
+        if (!mapInstanceRef.current) {
+          const defaultCenter = validPoints.length > 0 ? [validPoints[0].lat, validPoints[0].lng] : [33.38, 126.55]; // 제주도 기본
+          const map = L.map(mapContainerRef.current, {
+            zoomControl: true,
+            scrollWheelZoom: true
+          }).setView(defaultCenter, 11);
+
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+          }).addTo(map);
+
+          mapInstanceRef.current = map;
+        }
+
+        const map = mapInstanceRef.current;
+
+        // 이전 마커/폴리라인 레이어 제거
+        map.eachLayer((layer) => {
+          if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+            map.removeLayer(layer);
+          }
+        });
+
+        if (validPoints.length === 0) {
+          map.setView([36.5, 127.8], 7); // 전국 기본 뷰
+          return;
+        }
+
+        const latLngs = [];
+        const markerGroup = [];
+
+        validPoints.forEach((point, index) => {
+          const latlng = [point.lat, point.lng];
+          latLngs.push(latlng);
+
+          const cat = TRAVEL_CATEGORIES.find(c => c.id === point.category) || TRAVEL_CATEGORIES[0];
+          const badgeColor = cat.dotColor || '#4f46e5';
+
+          // 번호와 이모지가 적힌 커스텀 마커 HTML
+          const customHtml = `
+            <div style="background-color: ${badgeColor}; width: 34px; height: 34px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 13px;">
+              ${index + 1}
+            </div>
+          `;
+
+          const customIcon = L.divIcon({
+            html: customHtml,
+            className: 'custom-trip-marker',
+            iconSize: [34, 34],
+            iconAnchor: [17, 17],
+            popupAnchor: [0, -17]
+          });
+
+          const naviQuery = encodeURIComponent(point.placeName || point.address || point.title);
+          const popupContent = `
+            <div style="min-width: 180px; padding: 2px; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">
+              <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
+                <span style="font-size: 16px;">${cat.emoji}</span>
+                <span style="font-weight: 800; font-size: 12px; color: #1e293b;">${point.day || 1}일차 - ${index + 1}번째 코스</span>
+              </div>
+              <h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 800; color: #0f172a;">${point.title}</h4>
+              <p style="margin: 0 0 2px 0; font-size: 11px; color: #475569;">⏰ ${point.time || '시간 미지정'} | 📍 ${point.placeName || point.address || '장소명 없음'}</p>
+              ${point.memo ? `<p style="margin: 4px 0; padding: 4px; background: #f8fafc; border-radius: 6px; font-size: 10px; color: #64748b;">💬 ${point.memo}</p>` : ''}
+              <div style="margin-top: 8px; display: flex; gap: 4px;">
+                <a href="https://map.kakao.com/link/search/${naviQuery}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background: #fee500; color: #191919; text-decoration: none; padding: 4px 6px; border-radius: 6px; font-size: 10px; font-weight: 800;">
+                  카카오맵
+                </a>
+                <a href="https://map.naver.com/v5/search/${naviQuery}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background: #03c75a; color: white; text-decoration: none; padding: 4px 6px; border-radius: 6px; font-size: 10px; font-weight: 800;">
+                  네이버 지도
+                </a>
+              </div>
+            </div>
+          `;
+
+          const marker = L.marker(latlng, { icon: customIcon }).addTo(map);
+          marker.bindPopup(popupContent);
+          markerGroup.push(marker);
+        });
+
+        // 이동 동선 연결선 (Polyline)
+        if (latLngs.length > 1) {
+          L.polyline(latLngs, {
+            color: '#4f46e5',
+            weight: 4,
+            opacity: 0.85,
+            dashArray: '8, 8',
+            smoothFactor: 1
+          }).addTo(map);
+        }
+
+        // 모든 마커가 화면에 다 보이도록 줌/패닝 맞춤
+        const group = L.featureGroup(markerGroup);
+        map.fitBounds(group.getBounds().pad(0.15));
+
+        // 창 크기 변경 시 렌더링 리사이즈 트리거
+        setTimeout(() => {
+          try { map.invalidateSize(); } catch (e) {}
+        }, 200);
+
+      }, [validPoints, selectedDay]);
+
+      return (
+        <div className="relative w-full h-80 sm:h-96 rounded-2xl overflow-hidden border border-indigo-200/80 shadow-inner z-0">
+          <div ref={mapContainerRef} className="w-full h-full" />
+          <div className="absolute top-2.5 right-2.5 z-[1000] bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm text-[11px] font-extrabold text-slate-700 flex items-center space-x-1">
+            <span>🗺️</span>
+            <span>이동 동선 {validPoints.length}곳 연결됨</span>
+          </div>
+          {validPoints.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-50/80 backdrop-blur-xs z-[1001] text-xs text-slate-500 font-bold p-4 text-center">
+              <div>
+                <p className="text-2xl mb-1">📍</p>
+                <p>선택한 일차에 등록된 위치(장소) 정보가 없습니다.</p>
+                <p className="text-[11px] text-slate-400 mt-1">일정 등록 시 장소명을 입력하고 지도에 표시해보세요!</p>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ==================== 신규: 가족 여행 플래너 메인 섹션 ====================
+    function TravelSection({
+      trips = [],
+      selectedTripId,
+      setSelectedTripId,
+      currentMember,
+      isParent,
+      handleSaveTrip,
+      handleDeleteTrip,
+      handleSaveTripItem,
+      handleDeleteTripItem,
+      handleToggleTripItemDone
+    }) {
+      const [viewMode, setViewMode] = useState('both'); // 'both', 'timetable', 'map'
+      const [selectedDay, setSelectedDay] = useState('all'); // 'all', 1, 2, 3...
+      const [isTripModalOpen, setIsTripModalOpen] = useState(false);
+      const [editingTrip, setEditingTrip] = useState(null);
+      const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+      const [editingItem, setEditingItem] = useState(null);
+
+      // 여행 생성/수정 폼 상태
+      const [tripForm, setTripForm] = useState({
+        title: '',
+        destination: '',
+        startDate: getTodayString(),
+        endDate: shiftDateString(getTodayString(), 2),
+        coverEmoji: '🌴',
+        memo: ''
+      });
+
+      // 일정 항목 생성/수정 폼 상태
+      const [itemForm, setItemForm] = useState({
+        day: 1,
+        time: '10:00',
+        title: '',
+        category: 'food',
+        placeName: '',
+        address: '',
+        cost: '',
+        memo: '',
+        lat: '',
+        lng: ''
+      });
+
+      // 현재 선택된 여행 객체
+      const currentTrip = useMemo(() => {
+        if (!selectedTripId && trips.length > 0) return trips[0];
+        return trips.find(t => t.id === selectedTripId) || trips[0] || null;
+      }, [trips, selectedTripId]);
+
+      // 여행 기간에 따른 일차(Day) 배열 계산
+      const tripDays = useMemo(() => {
+        if (!currentTrip || !currentTrip.startDate || !currentTrip.endDate) return [1, 2, 3];
+        const start = new Date(currentTrip.startDate.replace(/-/g, '/'));
+        const end = new Date(currentTrip.endDate.replace(/-/g, '/'));
+        const diffTime = Math.max(0, end.getTime() - start.getTime());
+        const diffDays = Math.min(14, Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1);
+        const days = [];
+        for (let i = 1; i <= Math.max(1, diffDays); i++) {
+          days.push(i);
+        }
+        return days;
+      }, [currentTrip]);
+
+      // 현재 일차 필터가 적용된 일정 목록
+      const displayedItems = useMemo(() => {
+        if (!currentTrip || !currentTrip.items) return [];
+        let items = [...currentTrip.items];
+        if (selectedDay !== 'all') {
+          items = items.filter(i => Number(i.day) === Number(selectedDay));
+        }
+        return items.sort((a, b) => {
+          if ((a.day || 1) !== (b.day || 1)) return (a.day || 1) - (b.day || 1);
+          return (a.time || '').localeCompare(b.time || '');
+        });
+      }, [currentTrip, selectedDay]);
+
+      // 새 여행 모달 열기
+      const handleOpenNewTripModal = () => {
+        setEditingTrip(null);
+        setTripForm({
+          title: '🌴 우리 가족 힐링 여행',
+          destination: '제주도 / 강원도 / 부산 등',
+          startDate: getTodayString(),
+          endDate: shiftDateString(getTodayString(), 2),
+          coverEmoji: '🌴',
+          memo: '가족 모두가 행복한 추억 만들기!'
+        });
+        setIsTripModalOpen(true);
+      };
+
+      // 여행 수정 모달 열기
+      const handleOpenEditTripModal = (trip) => {
+        setEditingTrip(trip);
+        setTripForm({
+          title: trip.title,
+          destination: trip.destination || '',
+          startDate: trip.startDate || getTodayString(),
+          endDate: trip.endDate || getTodayString(),
+          coverEmoji: trip.coverEmoji || '✈️',
+          memo: trip.memo || ''
+        });
+        setIsTripModalOpen(true);
+      };
+
+      // 여행 저장 제출
+      const onTripSubmit = (e) => {
+        e.preventDefault();
+        if (!tripForm.title.trim()) return;
+        const tripData = {
+          ...(editingTrip || {}),
+          ...tripForm,
+          id: editingTrip?.id || ('trip_' + Date.now()),
+          items: editingTrip?.items || []
+        };
+        handleSaveTrip(tripData);
+        setIsTripModalOpen(false);
+      };
+
+      // 일정 항목 모달 열기
+      const handleOpenAddItemModal = (targetDay = 1) => {
+        setEditingItem(null);
+        setItemForm({
+          day: selectedDay === 'all' ? (targetDay || 1) : Number(selectedDay),
+          time: '12:00',
+          title: '',
+          category: 'food',
+          placeName: '',
+          address: '',
+          cost: '',
+          memo: '',
+          lat: currentTrip?.destination?.includes('제주') ? 33.38 : 37.56,
+          lng: currentTrip?.destination?.includes('제주') ? 126.55 : 126.97
+        });
+        setIsItemModalOpen(true);
+      };
+
+      // 일정 항목 수정 모달 열기
+      const handleOpenEditItemModal = (item) => {
+        setEditingItem(item);
+        setItemForm({
+          day: item.day || 1,
+          time: item.time || '10:00',
+          title: item.title || '',
+          category: item.category || 'food',
+          placeName: item.placeName || '',
+          address: item.address || '',
+          cost: item.cost || '',
+          memo: item.memo || '',
+          lat: item.lat || '',
+          lng: item.lng || ''
+        });
+        setIsItemModalOpen(true);
+      };
+
+      // 일정 항목 저장 제출
+      const onItemSubmit = (e) => {
+        e.preventDefault();
+        if (!itemForm.title.trim() || !currentTrip) return;
+        const itemData = {
+          ...(editingItem || {}),
+          ...itemForm,
+          day: Number(itemForm.day) || 1,
+          lat: itemForm.lat ? Number(itemForm.lat) : undefined,
+          lng: itemForm.lng ? Number(itemForm.lng) : undefined
+        };
+        handleSaveTripItem(currentTrip.id, itemData);
+        setIsItemModalOpen(false);
+      };
+
+      return (
+        <div className="space-y-4">
+          {/* 상단 여행 선택 및 새 여행 만들기 카드 */}
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 rounded-3xl p-4 sm:p-6 text-white shadow-lg space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className="text-2xl">{currentTrip?.coverEmoji || '✈️'}</span>
+                  <h2 className="text-lg sm:text-xl font-black tracking-tight">{currentTrip?.title || '가족 여행 플래너'}</h2>
+                  {currentTrip && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditTripModal(currentTrip)}
+                      className="p-1 text-white/80 hover:text-white transition"
+                      title="여행 기본정보 수정"
+                    >
+                      ✏️
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-emerald-100 flex items-center space-x-2">
+                  <span>📍 {currentTrip?.destination || '여행지 미정'}</span>
+                  <span>•</span>
+                  <span>📅 {currentTrip?.startDate} ~ {currentTrip?.endDate}</span>
+                  {currentTrip && <span>({tripDays.length}일간의 여정)</span>}
+                </p>
+                {currentTrip?.memo && (
+                  <p className="text-[11px] text-emerald-100/90 italic pt-0.5">"{currentTrip.memo}"</p>
+                )}
+              </div>
+
+              {/* 여행 선택 셀렉트 및 새 여행 추가 버튼 */}
+              <div className="flex items-center space-x-2 self-start sm:self-auto">
+                {trips.length > 1 && (
+                  <select
+                    value={currentTrip?.id || ''}
+                    onChange={(e) => setSelectedTripId(e.target.value)}
+                    className="px-3 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-xl text-xs font-bold text-white border border-white/20 focus:outline-none"
+                  >
+                    {trips.map(t => (
+                      <option key={t.id} value={t.id} className="text-slate-900 font-bold">
+                        {t.coverEmoji || '✈️'} {t.title}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  type="button"
+                  onClick={handleOpenNewTripModal}
+                  className="px-3.5 py-2 rounded-xl bg-white text-emerald-800 font-extrabold text-xs shadow-md hover:bg-emerald-50 transition active:scale-95 flex items-center space-x-1"
+                >
+                  <span>✨</span>
+                  <span>새 여행 만들기</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 뷰 모드 및 일차(Day) 필터 바 */}
+          <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-2xs space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+              {/* 일차 탭 버튼 (전체 / 1일차 / 2일차 ...) */}
+              <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar py-0.5">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDay('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition shrink-0 ${
+                    selectedDay === 'all' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  전체 일정 ({currentTrip?.items?.length || 0})
+                </button>
+                {tripDays.map((d) => {
+                  const count = (currentTrip?.items || []).filter(i => Number(i.day) === d).length;
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setSelectedDay(d)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition shrink-0 flex items-center space-x-1 ${
+                        selectedDay === d ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>Day {d}</span>
+                      <span className={`text-[10px] px-1 rounded-full ${selectedDay === d ? 'bg-white/30 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 뷰 전환 모드 (타임테이블 / 지도 / 둘 다 보기) */}
+              <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-xl shrink-0 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('both')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                    viewMode === 'both' ? 'bg-white text-emerald-700 shadow-2xs' : 'text-slate-500'
+                  }`}
+                >
+                  📱 통합 뷰
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('timetable')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                    viewMode === 'timetable' ? 'bg-white text-emerald-700 shadow-2xs' : 'text-slate-500'
+                  }`}
+                >
+                  ⏱️ 타임테이블
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('map')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                    viewMode === 'map' ? 'bg-white text-emerald-700 shadow-2xs' : 'text-slate-500'
+                  }`}
+                >
+                  🗺️ 이동 동선 지도
+                </button>
+              </div>
+            </div>
+
+            {/* 일정 추가 바로가기 버튼 */}
+            <div className="flex items-center justify-between text-xs pt-0.5">
+              <span className="text-slate-500 font-medium">
+                {selectedDay === 'all' ? '전체 일정 타임라인' : `${selectedDay}일차 일정표 & 이동 경로`}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleOpenAddItemModal(selectedDay === 'all' ? 1 : Number(selectedDay))}
+                className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-extrabold text-xs transition active:scale-95 flex items-center space-x-1"
+              >
+                <span>➕</span>
+                <span>{selectedDay === 'all' ? '일정 등록' : `${selectedDay}일차 일정 추가`}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 지도 뷰 (viewMode === 'both' 또는 'map'일 때 표시) */}
+          {(viewMode === 'both' || viewMode === 'map') && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between px-1 text-xs font-black text-slate-800">
+                <span className="flex items-center space-x-1">
+                  <span>🗺️</span>
+                  <span>가족 이동 동선 지도 (순서별 코스 연결)</span>
+                </span>
+                <span className="text-[11px] text-slate-400 font-normal">마커를 터치하면 맛집/관광지 정보와 길찾기가 열립니다</span>
+              </div>
+              <TravelMapView items={currentTrip?.items || []} selectedDay={selectedDay} />
+            </div>
+          )}
+
+          {/* 타임테이블 뷰 (viewMode === 'both' 또는 'timetable'일 때 표시) */}
+          {(viewMode === 'both' || viewMode === 'timetable') && (
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-xs sm:text-sm font-extrabold text-slate-900 flex items-center space-x-1.5">
+                  <span>⏱️</span>
+                  <span>시간대별 타임테이블 ({displayedItems.length}곳)</span>
+                </span>
+                <span className="text-[11px] text-slate-400">카테고리: 🍽️맛집, 🏨숙박, 🎡놀거리, 🏞️볼거리, 🚗교통</span>
+              </div>
+
+              {displayedItems.length === 0 ? (
+                <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs text-slate-400 space-y-2">
+                  <div className="text-3xl">🌴</div>
+                  <div className="font-bold text-slate-600">등록된 일정이 없습니다.</div>
+                  <div className="text-[11px] text-slate-400">위의 [+ 일정 추가] 버튼을 눌러 맛집, 호텔, 볼거리를 등록해보세요!</div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenAddItemModal(selectedDay === 'all' ? 1 : Number(selectedDay))}
+                    className="mt-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition"
+                  >
+                    + 첫 번째 일정 추가하기
+                  </button>
+                </div>
+              ) : (
+                <div className="relative pl-6 sm:pl-8 space-y-3.5 before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-emerald-200">
+                  {displayedItems.map((item, idx) => {
+                    const cat = TRAVEL_CATEGORIES.find(c => c.id === item.category) || TRAVEL_CATEGORIES[0];
+                    const naviQuery = encodeURIComponent(item.placeName || item.address || item.title);
+
+                    return (
+                      <div key={item.id} className="relative group">
+                        {/* 타임라인 왼쪽 동그라미 핀 */}
+                        <div
+                          style={{ backgroundColor: cat.dotColor || '#059669' }}
+                          className="absolute -left-6 sm:-left-8 top-3 w-5 h-5 rounded-full border-2 border-white shadow-xs flex items-center justify-center text-[10px] text-white font-black"
+                        >
+                          {idx + 1}
+                        </div>
+
+                        {/* 타임테이블 카드 */}
+                        <div className={`p-3.5 sm:p-4 rounded-2xl border transition-all space-y-2 ${
+                          item.isDone ? 'bg-slate-50 border-slate-200 opacity-70' : 'bg-white border-slate-200 hover:border-emerald-300 shadow-2xs'
+                        }`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-1">
+                              <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                                <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold border ${cat.color}`}>
+                                  {cat.emoji} {cat.label}
+                                </span>
+                                <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-150">
+                                  Day {item.day} • ⏰ {item.time || '시간 미지정'}
+                                </span>
+                                {item.cost && (
+                                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                                    💰 {item.cost}
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className={`text-sm sm:text-base font-extrabold ${item.isDone ? 'line-through text-slate-400' : 'text-slate-900'} leading-snug`}>
+                                {item.title}
+                              </h3>
+                            </div>
+
+                            {/* 우측 조작 버튼들 */}
+                            <div className="flex items-center space-x-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleTripItemDone(currentTrip.id, item.id)}
+                                className={`px-2 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-0.5 ${
+                                  item.isDone ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                                title="방문 완료 체크"
+                              >
+                                <span>{item.isDone ? '✅ 완료' : '미완료'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditItemModal(item)}
+                                className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg transition"
+                                title="수정"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTripItem(currentTrip.id, item.id)}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition"
+                                title="삭제"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 장소 및 주소 */}
+                          {(item.placeName || item.address) && (
+                            <div className="text-xs text-slate-600 flex items-center space-x-1.5 flex-wrap bg-slate-50 p-2 rounded-xl border border-slate-100">
+                              <span className="font-bold text-slate-800">📍 {item.placeName || '장소명 없음'}</span>
+                              {item.address && <span className="text-slate-400 text-[11px]">({item.address})</span>}
+                            </div>
+                          )}
+
+                          {/* 메모 */}
+                          {item.memo && (
+                            <p className="text-xs text-slate-600 whitespace-pre-wrap bg-emerald-50/40 p-2 rounded-xl border border-emerald-100 leading-relaxed">
+                              💬 "{item.memo}"
+                            </p>
+                          )}
+
+                          {/* 하단 길찾기 내비게이션 바로가기 바 */}
+                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                            <span className="text-slate-400">길찾기 바로가기:</span>
+                            <div className="flex items-center space-x-1.5">
+                              <a
+                                href={`https://map.kakao.com/link/search/${naviQuery}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-1 rounded-lg bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-extrabold transition flex items-center space-x-1"
+                              >
+                                <span>🟡</span>
+                                <span>카카오맵</span>
+                              </a>
+                              <a
+                                href={`https://map.naver.com/v5/search/${naviQuery}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-extrabold transition flex items-center space-x-1"
+                              >
+                                <span>🟢</span>
+                                <span>네이버 지도</span>
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ==================== 1. 여행 기본정보 생성/수정 모달 ==================== */}
+          {isTripModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
+              <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-200 text-slate-900">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h3 className="text-base font-black text-slate-900 flex items-center space-x-1.5">
+                    <span>✈️</span>
+                    <span>{editingTrip ? '여행 기본 정보 수정' : '새 가족 여행 만들기'}</span>
+                  </h3>
+                  <button type="button" onClick={() => setIsTripModalOpen(false)} className="text-slate-400 font-bold hover:text-slate-600">✕</button>
+                </div>
+
+                <form onSubmit={onTripSubmit} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">여행 이름 *</label>
+                    <input
+                      type="text"
+                      required
+                      value={tripForm.title}
+                      onChange={(e) => setTripForm({ ...tripForm, title: e.target.value })}
+                      placeholder="예: 2026 제주도 가족 힐링 여행, 강원도 속초 맛집 투어"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">여행지 *</label>
+                      <input
+                        type="text"
+                        required
+                        value={tripForm.destination}
+                        onChange={(e) => setTripForm({ ...tripForm, destination: e.target.value })}
+                        placeholder="예: 제주도, 부산, 강릉"
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-emerald-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">대표 이모지</label>
+                      <select
+                        value={tripForm.coverEmoji}
+                        onChange={(e) => setTripForm({ ...tripForm, coverEmoji: e.target.value })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                      >
+                        <option value="🌴">🌴 제주/휴양</option>
+                        <option value="✈️">✈️ 비행기/해외</option>
+                        <option value="🏖️">🏖️ 바다/해변</option>
+                        <option value="🏕️">🏕️ 캠핑/자연</option>
+                        <option value="🎡">🎡 테마파크</option>
+                        <option value="🏙️">🏙️ 도시/호캉스</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">여행 시작일 *</label>
+                      <input
+                        type="date"
+                        required
+                        value={tripForm.startDate}
+                        onChange={(e) => setTripForm({ ...tripForm, startDate: e.target.value })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">여행 종료일 *</label>
+                      <input
+                        type="date"
+                        required
+                        value={tripForm.endDate}
+                        onChange={(e) => setTripForm({ ...tripForm, endDate: e.target.value })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">여행 테마 및 다짐 메모</label>
+                    <textarea
+                      rows={2}
+                      value={tripForm.memo}
+                      onChange={(e) => setTripForm({ ...tripForm, memo: e.target.value })}
+                      placeholder="예: 아이들과 사진 많이 찍고 맛있는 음식 마음껏 먹기!"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2">
+                    {editingTrip && trips.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsTripModalOpen(false);
+                          handleDeleteTrip(editingTrip.id);
+                        }}
+                        className="px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 font-bold text-xs"
+                      >
+                        여행 삭제
+                      </button>
+                    )}
+                    <div className="flex items-center space-x-2 ml-auto">
+                      <button
+                        type="button"
+                        onClick={() => setIsTripModalOpen(false)}
+                        className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs"
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md transition"
+                      >
+                        저장하기
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ==================== 2. 여행 일정 항목 생성/수정 모달 ==================== */}
+          {isItemModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
+              <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-200 text-slate-900 max-h-[92vh] overflow-y-auto">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h3 className="text-base font-black text-slate-900 flex items-center space-x-1.5">
+                    <span>📍</span>
+                    <span>{editingItem ? '여행 일정 항목 수정' : '새 여행 일정 추가'}</span>
+                  </h3>
+                  <button type="button" onClick={() => setIsItemModalOpen(false)} className="text-slate-400 font-bold hover:text-slate-600">✕</button>
+                </div>
+
+                <form onSubmit={onItemSubmit} className="space-y-3 text-xs">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">방문 일차 *</label>
+                      <select
+                        value={itemForm.day}
+                        onChange={(e) => setItemForm({ ...itemForm, day: Number(e.target.value) })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                      >
+                        {tripDays.map(d => (
+                          <option key={d} value={d}>Day {d} ({d}일차)</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">예정 시간</label>
+                      <input
+                        type="time"
+                        value={itemForm.time}
+                        onChange={(e) => setItemForm({ ...itemForm, time: e.target.value })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">카테고리 *</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {TRAVEL_CATEGORIES.map(cat => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setItemForm({ ...itemForm, category: cat.id })}
+                          className={`p-2 rounded-xl border text-center transition font-bold flex items-center justify-center space-x-1 ${
+                            itemForm.category === cat.id ? 'bg-emerald-600 text-white shadow-2xs border-emerald-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span>{cat.emoji}</span>
+                          <span className="text-[11px] truncate">{cat.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">일정 제목 *</label>
+                    <input
+                      type="text"
+                      required
+                      value={itemForm.title}
+                      onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })}
+                      placeholder="예: 점심 식사 - 흑돼지 맛집, 테마파크 자유이용권 타기"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">장소명 / 상호명</label>
+                      <input
+                        type="text"
+                        value={itemForm.placeName}
+                        onChange={(e) => setItemForm({ ...itemForm, placeName: e.target.value })}
+                        placeholder="예: 신화월드, 자매국수"
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">예상 비용 / 예약 상태</label>
+                      <input
+                        type="text"
+                        value={itemForm.cost}
+                        onChange={(e) => setItemForm({ ...itemForm, cost: e.target.value })}
+                        placeholder="예: 약 50,000원, 사전예약 완료"
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">상세 주소 (길찾기용)</label>
+                    <input
+                      type="text"
+                      value={itemForm.address}
+                      onChange={(e) => setItemForm({ ...itemForm, address: e.target.value })}
+                      placeholder="예: 제주 제주시 공항로 2"
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                    />
+                  </div>
+
+                  {/* 지도 좌표 지정 (위도/경도) */}
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                    <span className="block text-[11px] font-extrabold text-slate-700">📍 지도 동선용 좌표 (선택)</span>
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div>
+                        <span className="text-slate-400">위도(Lat):</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={itemForm.lat}
+                          onChange={(e) => setItemForm({ ...itemForm, lat: e.target.value })}
+                          placeholder="예: 33.511"
+                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-slate-400">경도(Lng):</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={itemForm.lng}
+                          onChange={(e) => setItemForm({ ...itemForm, lng: e.target.value })}
+                          placeholder="예: 126.492"
+                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400">좌표를 비워두셔도 카카오맵/네이버 지도 길찾기 버튼으로 바로 연결됩니다.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">메모 및 팁</label>
+                    <textarea
+                      rows={2}
+                      value={itemForm.memo}
+                      onChange={(e) => setItemForm({ ...itemForm, memo: e.target.value })}
+                      placeholder="예: 주아 유모차 반입 가능, 대기 시간 있을 수 있으니 일찍 출발"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end space-x-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsItemModalOpen(false)}
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md transition"
+                    >
+                      {editingItem ? '수정 완료' : '일정 추가하기'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function PraiseSection({
       isParent,
       currentMemberId,
@@ -4110,6 +5135,16 @@
       const [wishlist, setWishlist] = useState([]);
       const [familyLetters, setFamilyLetters] = useState([]);
       const [dailyMoods, setDailyMoods] = useState([]);
+      // 신규: 가족 여행 플래너 상태
+      const [trips, setTrips] = useState(() => {
+        try {
+          const saved = localStorage.getItem('family_trips_backup');
+          return saved ? JSON.parse(saved) : DEFAULT_TRIPS;
+        } catch (e) {
+          return DEFAULT_TRIPS;
+        }
+      });
+      const [selectedTripId, setSelectedTripId] = useState(() => DEFAULT_TRIPS[0]?.id || '');
 
       const [myStatusInput, setMyStatusInput] = useState('');
 
@@ -4355,6 +5390,17 @@
               list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
               setDailyMoods(list);
             }, (err) => console.warn("daily_moods snapshot error:", err));
+
+            // 신규: 가족 여행 플래너 동기화
+            db.collection('family_trips').onSnapshot((snapshot) => {
+              const list = [];
+              snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+              if (list.length > 0) {
+                list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                setTrips(list);
+                try { localStorage.setItem('family_trips_backup', JSON.stringify(list)); } catch (e) {}
+              }
+            }, (err) => console.warn("family_trips snapshot error:", err));
 
           } catch (error) {
             console.error(error);
@@ -5760,6 +6806,176 @@
         });
       };
 
+      // ==================== 신규: 가족 여행 플래너 핸들러 ====================
+      const handleSaveTrip = async (tripData) => {
+        try {
+          const tripId = tripData.id || ('trip_' + Date.now());
+          const fullData = {
+            ...tripData,
+            id: tripId,
+            updatedAt: Date.now(),
+            createdAt: tripData.createdAt || Date.now(),
+            items: tripData.items || []
+          };
+
+          if (dbRef.current) {
+            await dbRef.current.collection('family_trips').doc(tripId).set(fullData, { merge: true });
+          } else {
+            setTrips(prev => {
+              const exists = prev.some(t => t.id === tripId);
+              const next = exists ? prev.map(t => t.id === tripId ? fullData : t) : [fullData, ...prev];
+              try { localStorage.setItem('family_trips_backup', JSON.stringify(next)); } catch (e) {}
+              return next;
+            });
+          }
+          setSelectedTripId(tripId);
+          showToast(`여행 '${tripData.title}' 일정이 저장되었습니다! ✈️`);
+          triggerHaptic([30, 50, 30]);
+        } catch (err) {
+          console.error(err);
+          showToast("여행 저장 중 오류가 발생했습니다.");
+        }
+      };
+
+      const handleDeleteTrip = (tripId) => {
+        const targetTrip = trips.find(t => t.id === tripId);
+        if (!targetTrip) return;
+        setGenericDeleteTarget({
+          title: "여행 계획을 삭제할까요?",
+          icon: "✈️",
+          warning: "삭제 시 등록된 모든 일자별 타임테이블과 지도 동선 데이터가 사라집니다.",
+          details: [
+            { label: "여행 이름", value: targetTrip.title },
+            { label: "여행지", value: targetTrip.destination || "미지정" },
+            { label: "여행 기간", value: `${targetTrip.startDate || ''} ~ ${targetTrip.endDate || ''}` }
+          ],
+          onConfirm: async () => {
+            try {
+              if (dbRef.current) {
+                await dbRef.current.collection('family_trips').doc(tripId).delete();
+              } else {
+                setTrips(prev => {
+                  const next = prev.filter(t => t.id !== tripId);
+                  try { localStorage.setItem('family_trips_backup', JSON.stringify(next)); } catch (e) {}
+                  return next;
+                });
+              }
+              const remaining = trips.filter(t => t.id !== tripId);
+              if (remaining.length > 0) {
+                setSelectedTripId(remaining[0].id);
+              }
+              showToast("여행 계획이 삭제되었습니다.");
+              triggerHaptic([40, 50, 40]);
+            } catch (err) {
+              console.error(err);
+              showToast("여행 삭제 중 오류가 발생했습니다.");
+            }
+          }
+        });
+      };
+
+      const handleSaveTripItem = async (tripId, itemData) => {
+        const currentTrip = trips.find(t => t.id === tripId);
+        if (!currentTrip) return;
+
+        const itemId = itemData.id || ('ti_' + Date.now());
+        const newItem = { ...itemData, id: itemId };
+        const existingItems = currentTrip.items || [];
+        const isEdit = existingItems.some(i => i.id === itemId);
+        const updatedItems = isEdit
+          ? existingItems.map(i => i.id === itemId ? newItem : i)
+          : [...existingItems, newItem];
+
+        // 시간순 정렬
+        updatedItems.sort((a, b) => {
+          if ((a.day || 1) !== (b.day || 1)) return (a.day || 1) - (b.day || 1);
+          return (a.time || '').localeCompare(b.time || '');
+        });
+
+        const updatedTrip = { ...currentTrip, items: updatedItems, updatedAt: Date.now() };
+
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('family_trips').doc(tripId).set(updatedTrip, { merge: true });
+          } else {
+            setTrips(prev => {
+              const next = prev.map(t => t.id === tripId ? updatedTrip : t);
+              try { localStorage.setItem('family_trips_backup', JSON.stringify(next)); } catch (e) {}
+              return next;
+            });
+          }
+          showToast(`'${newItem.title}' 일정이 등록되었습니다! 📍`);
+          triggerHaptic(25);
+        } catch (err) {
+          console.error(err);
+          showToast("일정 저장 중 오류가 발생했습니다.");
+        }
+      };
+
+      const handleDeleteTripItem = (tripId, itemId) => {
+        const currentTrip = trips.find(t => t.id === tripId);
+        if (!currentTrip) return;
+        const targetItem = (currentTrip.items || []).find(i => i.id === itemId);
+        if (!targetItem) return;
+
+        setGenericDeleteTarget({
+          title: "여행 일정을 삭제할까요?",
+          icon: "🗑️",
+          warning: "해당 일정이 타임테이블 및 지도 동선에서 제거됩니다.",
+          details: [
+            { label: "일정명", value: targetItem.title },
+            { label: "방문 일차 / 시간", value: `${targetItem.day || 1}일차 (${targetItem.time || '시간 미지정'})` },
+            { label: "장소", value: targetItem.placeName || targetItem.address || "미지정" }
+          ],
+          onConfirm: async () => {
+            const updatedItems = (currentTrip.items || []).filter(i => i.id !== itemId);
+            const updatedTrip = { ...currentTrip, items: updatedItems, updatedAt: Date.now() };
+
+            try {
+              if (dbRef.current) {
+                await dbRef.current.collection('family_trips').doc(tripId).set(updatedTrip, { merge: true });
+              } else {
+                setTrips(prev => {
+                  const next = prev.map(t => t.id === tripId ? updatedTrip : t);
+                  try { localStorage.setItem('family_trips_backup', JSON.stringify(next)); } catch (e) {}
+                  return next;
+                });
+              }
+              showToast("일정이 삭제되었습니다.");
+              triggerHaptic([40, 50, 40]);
+            } catch (err) {
+              console.error(err);
+              showToast("일정 삭제 중 오류가 발생했습니다.");
+            }
+          }
+        });
+      };
+
+      const handleToggleTripItemDone = async (tripId, itemId) => {
+        const currentTrip = trips.find(t => t.id === tripId);
+        if (!currentTrip) return;
+        const updatedItems = (currentTrip.items || []).map(i => {
+          if (i.id === itemId) return { ...i, isDone: !i.isDone };
+          return i;
+        });
+        const updatedTrip = { ...currentTrip, items: updatedItems, updatedAt: Date.now() };
+
+        try {
+          if (dbRef.current) {
+            await dbRef.current.collection('family_trips').doc(tripId).set(updatedTrip, { merge: true });
+          } else {
+            setTrips(prev => {
+              const next = prev.map(t => t.id === tripId ? updatedTrip : t);
+              try { localStorage.setItem('family_trips_backup', JSON.stringify(next)); } catch (e) {}
+              return next;
+            });
+          }
+          triggerHaptic(20);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
       const weekDays = useMemo(() => {
         const parts = selectedDate.split('-').map(Number);
         const curr = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
@@ -6064,6 +7280,22 @@
                   </span>
                 )}
               </button>
+              <button
+                type="button"
+                onClick={() => setMainTab('trip')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
+                  mainTab === 'trip' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span>✈️ 가족 여행</span>
+                {trips.length > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    mainTab === 'trip' ? 'bg-white text-emerald-700' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {trips.length}
+                  </span>
+                )}
+              </button>
             </nav>
 
             {mainTab === 'all' && (
@@ -6302,6 +7534,22 @@
                 handleDeleteFamilyLetter={handleDeleteFamilyLetter}
                 handleSaveDailyMood={handleSaveDailyMood}
                 handleDeleteDailyMood={handleDeleteDailyMood}
+              />
+            )}
+
+            {/* 신규: 전용 가족 여행 플래너 탭 */}
+            {mainTab === 'trip' && (
+              <TravelSection
+                trips={trips}
+                selectedTripId={selectedTripId}
+                setSelectedTripId={setSelectedTripId}
+                currentMember={currentMember}
+                isParent={isParent}
+                handleSaveTrip={handleSaveTrip}
+                handleDeleteTrip={handleDeleteTrip}
+                handleSaveTripItem={handleSaveTripItem}
+                handleDeleteTripItem={handleDeleteTripItem}
+                handleToggleTripItemDone={handleToggleTripItemDone}
               />
             )}
           </main>
@@ -8321,6 +9569,16 @@
               ) : wishlist.filter(w => !w.isFulfilled).length > 0 && (
                 <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-pink-500 animate-ping" />
               )}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMainTab('trip'); triggerHaptic(10); }}
+              className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-2xl transition flex-1 ${
+                mainTab === 'trip' ? 'text-emerald-600 font-black' : 'text-slate-400 font-semibold'
+              }`}
+            >
+              <span className={`text-xl transition-transform ${mainTab === 'trip' ? 'scale-110' : ''}`}>✈️</span>
+              <span className="text-[10px] tracking-tight mt-0.5">여행</span>
             </button>
           </nav>
 
