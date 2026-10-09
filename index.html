@@ -393,6 +393,117 @@
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
+    // 초등학생 학년별 추천도서 100선 & 매월(1~12월) 테마 큐레이션 데이터
+    // grade: 'low'(1~2학년, 34권), 'mid'(3~4학년, 33권), 'high'(5~6학년, 33권)
+    // month: 1~12 (매월 해당 월에 맞춘 테마 큐레이션 추천도서로 자동 하이라이트)
+    const RECOMMENDED_BOOKS_100 = [
+      // === [1~2학년 (저학년, 34권)] ===
+      { id: 'b_low_01', grade: 'low', gradeLabel: '1~2학년', month: 1, title: '강아지 똥', author: '권정생', publisher: '길벗어린이', desc: '세상에서 가장 보잘것없어 보여도 누군가에게는 꼭 필요한 따뜻한 생명의 이야기' },
+      { id: 'b_low_02', grade: 'low', gradeLabel: '1~2학년', month: 1, title: '구름빵', author: '백희나', publisher: '한솔수북', desc: '비 오는 날 아침, 나뭇가지에 걸린 앙증맞은 구름으로 만든 날아다니는 빵' },
+      { id: 'b_low_03', grade: 'low', gradeLabel: '1~2학년', month: 2, title: '알사탕', author: '백희나', publisher: '책읽는곰', desc: '동동이가 신비한 알사탕을 먹고 듣게 되는 소파, 강아지, 아빠의 속마음' },
+      { id: 'b_low_04', grade: 'low', gradeLabel: '1~2학년', month: 2, title: '장수탕 선녀님', author: '백희나', publisher: '책읽는곰', desc: '오래된 목욕탕에서 만난 요술 할머니 선녀님과의 유쾌하고 시원한 목욕' },
+      { id: 'b_low_05', grade: 'low', gradeLabel: '1~2학년', month: 3, title: '틀려도 괜찮아', author: '마키타 신지', publisher: '토토북', desc: '새 학기 교실에서 틀릴까 봐 두려워하는 아이들에게 자신감을 주는 책' },
+      { id: 'b_low_06', grade: 'low', gradeLabel: '1~2학년', month: 3, title: '지각대장 존', author: '존 버닝햄', publisher: '비룡소', desc: '학교 가는 길에 악어와 사자를 만났다는 존과 매번 믿지 않는 선생님 이야기' },
+      { id: 'b_low_07', grade: 'low', gradeLabel: '1~2학년', month: 3, title: '책 먹는 여우', author: '프란치스카 비어만', publisher: '주니어김영사', desc: '소금과 후추를 뿌려 책을 맛있게 꿀꺽 먹어 치우는 지혜로운 여우 아저씨' },
+      { id: 'b_low_08', grade: 'low', gradeLabel: '1~2학년', month: 4, title: '수박 수영장', author: '안녕달', publisher: '창비', desc: '무더운 여름 햇살 아래 거대한 수박이 쩌억 갈라지며 열리는 시원한 수영장' },
+      { id: 'b_low_09', grade: 'low', gradeLabel: '1~2학년', month: 4, title: '똥벼락', author: '김회경', publisher: '사계절', desc: '정승 댁 머슴 돌쇠가 얻은 똥 이야기와 옛 조상들의 친환경 농경 지혜' },
+      { id: 'b_low_10', grade: 'low', gradeLabel: '1~2학년', month: 4, title: '만희네 집', author: '권윤덕', publisher: '길벗어린이', desc: '따뜻한 온기와 정이 넘치는 정겨운 할머니 댁 한옥에서의 일상' },
+      { id: 'b_low_11', grade: 'low', gradeLabel: '1~2학년', month: 5, title: '까막눈 삼디기', author: '원유순', publisher: '웅진주니어', desc: '글자를 몰라 놀림받던 삼디기가 마음씨 착한 연보라를 만나 한글을 배우는 감동 동화' },
+      { id: 'b_low_12', grade: 'low', gradeLabel: '1~2학년', month: 5, title: '엄마 마중', author: '이태준', publisher: '보림', desc: '전차 정류장에서 바람을 맞으며 엄마를 간절히 기다리는 아기의 순수한 마음' },
+      { id: 'b_low_13', grade: 'low', gradeLabel: '1~2학년', month: 5, title: '지각 이유도 가지가지', author: '고미 타로', publisher: '비룡소', desc: '재치 넘치고 기상천외한 상상력으로 지각한 이유를 풀어내는 재미있는 그림책' },
+      { id: 'b_low_14', grade: 'low', gradeLabel: '1~2학년', month: 6, title: '화요일의 두꺼비', author: '러셀 에릭슨', publisher: '사계절', desc: '올빼미에게 잡혀 화요일에 잡아먹힐 위기에 처한 워턴 두꺼비의 우정 이야기' },
+      { id: 'b_low_15', grade: 'low', gradeLabel: '1~2학년', month: 6, title: '팥죽 할머니와 호랑이', author: '서정오', publisher: '보리', desc: '할머니를 잡아먹으려는 욕심쟁이 호랑이를 혼내주는 알밤, 맷돌, 지게의 통쾌한 협동' },
+      { id: 'b_low_16', grade: 'low', gradeLabel: '1~2학년', month: 6, title: '괴물들이 사는 나라', author: '모리스 샌닥', publisher: '시공주니어', desc: '방 안에서 바다가 펼쳐지고 괴물들의 왕이 된 맥스의 환상적인 모험' },
+      { id: 'b_low_17', grade: 'low', gradeLabel: '1~2학년', month: 7, title: '무지개 물고기', author: '마르쿠스 피스터', publisher: '시공주니어', desc: '반짝이는 비늘을 친구들과 나누며 진정한 행복과 우정을 깨닫는 물고기' },
+      { id: 'b_low_18', grade: 'low', gradeLabel: '1~2학년', month: 7, title: '줄무늬가 생겼어요', author: '데이비드 섀넌', publisher: '비룡소', desc: '남의 시선만 신경 쓰다 온몸에 무지개 줄무늬가 돋아난 카밀라의 솔직한 고백' },
+      { id: 'b_low_19', grade: 'low', gradeLabel: '1~2학년', month: 7, title: '감기 걸린 물고기', author: '박정섭', publisher: '사계절', desc: '아귀의 거짓 소문 하나로 서로를 의심하고 갈라서는 물고기 떼의 흥미진진한 우화' },
+      { id: 'b_low_20', grade: 'low', gradeLabel: '1~2학년', month: 8, title: '당나귀 실베스터와 요술 조약돌', author: '윌리엄 스타이그', publisher: '비룡소', desc: '소원을 들어주는 조약돌 때문에 바위가 되어버린 당나귀와 부모님의 사랑' },
+      { id: 'b_low_21', grade: 'low', gradeLabel: '1~2학년', month: 8, title: '아주아주 특별한 집', author: '루스 크라우스', publisher: '시공주니어', desc: '아침부터 밤까지 마음껏 뛰놀고 상상할 수 있는 나만의 신나는 상상 놀이터' },
+      { id: 'b_low_22', grade: 'low', gradeLabel: '1~2학년', month: 8, title: '아낌없이 주는 나무', author: '쉘 실버스타인', publisher: '시공주니어', desc: '소년을 위해 자신의 모든 것을 내어주며 끝까지 곁을 지키는 헌신적인 사랑' },
+      { id: 'b_low_23', grade: 'low', gradeLabel: '1~2학년', month: 9, title: '소나기밥 코선생', author: '이금이', publisher: '푸른책들', desc: '순박한 시골 아이들의 따스한 정과 웃음이 넘치는 유쾌한 저학년 동화' },
+      { id: 'b_low_24', grade: 'low', gradeLabel: '1~2학년', month: 9, title: '행복한 청소부', author: '모니카 페트', publisher: '풀빛', desc: '거리의 표지판을 닦으며 작가와 음악가의 예술을 진심으로 공부한 청소부 아저씨' },
+      { id: 'b_low_25', grade: 'low', gradeLabel: '1~2학년', month: 9, title: '손 큰 할머니의 만두 만들기', author: '채인선', publisher: '재미마주', desc: '설날을 맞아 온 숲속 동물들과 다 함께 빚어내는 세상에서 가장 커다란 만두' },
+      { id: 'b_low_26', grade: 'low', gradeLabel: '1~2학년', month: 10, title: '눈물바다', author: '서현', publisher: '사계절', desc: '억울하고 속상했던 하루를 펑펑 쏟아낸 눈물바다 속에서 훌훌 털어버리는 마법' },
+      { id: 'b_low_27', grade: 'low', gradeLabel: '1~2학년', month: 10, title: '팥빙수의 전설', author: '이지은', publisher: '웅진주니어', desc: '눈 호랑이에게 맛있는 단팥과 떡을 던져주다 우연히 탄생하게 된 달콤한 팥빙수' },
+      { id: 'b_low_28', grade: 'low', gradeLabel: '1~2학년', month: 10, title: '친구 하나 만드실래요?', author: '마츠오카 다츠히데', publisher: '비룡소', desc: '조금 서툴러도 먼저 다가가 인사하며 새로운 친구를 사귀는 법을 배우는 책' },
+      { id: 'b_low_29', grade: 'low', gradeLabel: '1~2학년', month: 11, title: '동물원', author: '이수지', publisher: '비룡소', desc: '삭막한 동물원 우리 너머, 아이의 눈에만 펼쳐지는 환상적이고 자유로운 숲' },
+      { id: 'b_low_30', grade: 'low', gradeLabel: '1~2학년', month: 11, title: '파도야 놀자', author: '이수지', publisher: '비룡소', desc: '바닷가 파도와 밀고 당기며 자연과 하나가 되어 교감하는 아이의 사랑스러운 몸짓' },
+      { id: 'b_low_31', grade: 'low', gradeLabel: '1~2학년', month: 11, title: '지혜로운 멧돼지가 되기 위한 지침서', author: '권정민', publisher: '보림', desc: '인간의 도시 개발로 터전을 잃어가는 멧돼지가 살아남기 위해 터득한 생존 비법' },
+      { id: 'b_low_32', grade: 'low', gradeLabel: '1~2학년', month: 12, title: '눈사람 아저씨', author: '레이먼드 브릭스', publisher: '마루벌', desc: '한겨울 밤 살아서 움직이는 눈사람과 소년의 신비롭고 애틋한 겨울 비행' },
+      { id: 'b_low_33', grade: 'low', gradeLabel: '1~2학년', month: 12, title: '세상에서 가장 큰 케이크', author: '안성헌', publisher: '한솔수북', desc: '모두가 함께 모여 정성껏 재료를 모아 나누어 먹는 가슴 벅찬 초대형 축제 케이크' },
+      { id: 'b_low_34', grade: 'low', gradeLabel: '1~2학년', month: 12, title: '내 귀는 당나귀 귀', author: '보리 편집부', publisher: '보리', desc: '대나무 숲에 바람이 불 때마다 울려 퍼지는 옛이야기 속 진실과 비밀의 해학' },
+
+      // === [3~4학년 (중학년, 33권)] ===
+      { id: 'b_mid_01', grade: 'mid', gradeLabel: '3~4학년', month: 1, title: '아홉 살 마음 사전', author: '박성우', publisher: '창비', desc: '마음속에서 일어나는 80가지 감정을 생생하고 적절한 어휘로 표현하는 감정 사전' },
+      { id: 'b_mid_02', grade: 'mid', gradeLabel: '3~4학년', month: 1, title: '나쁜 어린이 표', author: '황선미', publisher: '웅진주니어', desc: '선생님의 노란 스티커를 받지 않으려다 억울해진 건우의 마음속 솔직한 고백' },
+      { id: 'b_mid_03', grade: 'mid', gradeLabel: '3~4학년', month: 2, title: '마당을 나온 암탉', author: '황선미', publisher: '사계절', desc: '양계장을 탈출해 야생에서 청둥오리 초록이를 길러낸 잎싹의 위대한 모성애와 자유' },
+      { id: 'b_mid_04', grade: 'mid', gradeLabel: '3~4학년', month: 2, title: '불량 한석봉', author: '원유순', publisher: '파랑새', desc: '공부보다 만화가 좋은 석봉이가 자신의 숨겨진 재능을 찾고 인정받는 이야기' },
+      { id: 'b_mid_05', grade: 'mid', gradeLabel: '3~4학년', month: 3, title: '찰리와 초콜릿 공장', author: '로알드 달', publisher: '시공주니어', desc: '비밀에 싸인 윌리 웡카의 초콜릿 공장에 초대받은 다섯 아이들의 기상천외한 모험' },
+      { id: 'b_mid_06', grade: 'mid', gradeLabel: '3~4학년', month: 3, title: '마틸다', author: '로알드 달', publisher: '시공주니어', desc: '놀라운 천재 소녀 마틸다가 악독한 트런치불 교장에게 맞서는 통쾌한 초능력 활약' },
+      { id: 'b_mid_07', grade: 'mid', gradeLabel: '3~4학년', month: 3, title: '13층 나무 집', author: '앤디 그리피스', publisher: '시공주니어', desc: '투명 수영장, 식인 상어 수조, 무한 마시멜로 기계가 있는 상상력 폭발 나무 집' },
+      { id: 'b_mid_08', grade: 'mid', gradeLabel: '3~4학년', month: 4, title: '푸른 사자 와니니', author: '이현', publisher: '창비', desc: '무리에서 쫓겨난 어린 암사자 와니니가 아프리카 초원에서 겪는 눈부신 성장기' },
+      { id: 'b_mid_09', grade: 'mid', gradeLabel: '3~4학년', month: 4, title: '초원으로 간 멍멍이', author: '허은미', publisher: '사계절', desc: '도시의 답답함을 벗어나 광활한 대자연을 질주하는 반려견의 건강한 생명력' },
+      { id: 'b_mid_10', grade: 'mid', gradeLabel: '3~4학년', month: 4, title: '만화로 보는 그리스 로마 신화 1', author: '토마스 불핀치 원작', publisher: '가나출판사', desc: '올림포스 열두 신들과 영웅들의 흥미진진한 지혜와 용기가 담긴 서양 고전' },
+      { id: 'b_mid_11', grade: 'mid', gradeLabel: '3~4학년', month: 5, title: '고양이 해결사 깜냥 1', author: '홍민정', publisher: '창비', desc: '비 오는 날 아파트 경비실을 찾아온 당돌하고 똑똑한 떠돌이 고양이의 활약' },
+      { id: 'b_mid_12', grade: 'mid', gradeLabel: '3~4학년', month: 5, title: '어린 왕자', author: '앙투안 드 생텍쥐페리', publisher: '열린책들', desc: '사막에 불시착한 조종사가 만난 소혹성 B612의 순수한 소년과 길들임의 의미' },
+      { id: 'b_mid_13', grade: 'mid', gradeLabel: '3~4학년', month: 5, title: '에밀과 탐정들', author: '에리히 케스트너', publisher: '시공주니어', desc: '기차에서 돈을 도둑맞은 에밀과 베를린 소년 탐정단의 끈질긴 추격전' },
+      { id: 'b_mid_14', grade: 'mid', gradeLabel: '3~4학년', month: 6, title: '용선생의 시끌벅적 한국사 1', author: '사회평론 역사연구소', publisher: '사회평론', desc: '선사 시대부터 알기 쉽게 지도와 사진으로 생생하게 풀어낸 어린이 필수 역사서' },
+      { id: 'b_mid_15', grade: 'mid', gradeLabel: '3~4학년', month: 6, title: '만화 삼국지 1', author: '이문열 평역/이희재 그림', publisher: '아이세움', desc: '유비, 관우, 장비의 도원결의와 난세를 헤쳐 나가는 영웅들의 거대한 서사' },
+      { id: 'b_mid_16', grade: 'mid', gradeLabel: '3~4학년', month: 6, title: '수학 귀신', author: '한스 마그누스 엔첸스베르거', publisher: '비룡소', desc: '수학을 질색하던 로베르트가 꿈속에서 만난 수학 귀신과 함께 떠나는 신비한 수의 세계' },
+      { id: 'b_mid_17', grade: 'mid', gradeLabel: '3~4학년', month: 7, title: '초등학생을 위한 생각하는 힘 인문학', author: '김경묵', publisher: '주니어김영사', desc: '세상을 바라보는 깊은 시선과 나와 타인을 이해하는 철학적 사고의 첫걸음' },
+      { id: 'b_mid_18', grade: 'mid', gradeLabel: '3~4학년', month: 7, title: '책 먹는 여우와 이야기 도둑', author: '프란치스카 비어만', publisher: '주니어김영사', desc: '소설가가 된 여우 아저씨의 책과 서고를 호시탐탐 노리는 수상한 도둑의 추격전' },
+      { id: 'b_mid_19', grade: 'mid', gradeLabel: '3~4학년', month: 7, title: '내 이름은 삐삐 롱스타킹', author: '아스트리드 린드그렌', publisher: '시공주니어', desc: '양말을 짝짝이로 신고 말도 번쩍 들어 올리는 세상에서 제일 힘센 소녀의 모험' },
+      { id: 'b_mid_20', grade: 'mid', gradeLabel: '3~4학년', month: 8, title: '초등 필수 과학동화: 지구를 살려라', author: '신현배', publisher: '보배로운책', desc: '기후 위기와 환경 오염으로부터 우리의 보금자리 지구를 지키는 탐구 이야기' },
+      { id: 'b_mid_21', grade: 'mid', gradeLabel: '3~4학년', month: 8, title: '우리들의 일그러진 영웅', author: '이문열', publisher: '다림', desc: '시골 초등학교 5학년 학급에서 벌어지는 엄석대의 권력과 그에 맞선 한병태의 갈등' },
+      { id: 'b_mid_22', grade: 'mid', gradeLabel: '3~4학년', month: 8, title: '샬롯의 거미줄', author: 'E.B. 화이트', publisher: '시공주니어', desc: '아기 돼지 윌버의 생명을 구하기 위해 거미줄에 기적의 글자를 새긴 샬롯의 우정' },
+      { id: 'b_mid_23', grade: 'mid', gradeLabel: '3~4학년', month: 9, title: '오세암', author: '정채봉', publisher: '창비', desc: '눈먼 누나 감이와 티 없이 맑은 길손이가 설악산 오세암에서 꽃피운 영원한 사랑' },
+      { id: 'b_mid_24', grade: 'mid', gradeLabel: '3~4학년', month: 9, title: '초정리 편지', author: '배유안', publisher: '창비', desc: '세종대왕이 눈병 치료차 머물던 초정리에서 훈민정음을 배운 석수의 감동 실화 바탕 동화' },
+      { id: 'b_mid_25', grade: 'mid', gradeLabel: '3~4학년', month: 9, title: '도깨비 감투', author: '신동헌', publisher: '바다어린이', desc: '쓰기만 하면 몸이 감쪽같이 사라지는 요술 감투를 주운 인간의 욕망과 유쾌한 교훈' },
+      { id: 'b_mid_26', grade: 'mid', gradeLabel: '3~4학년', month: 10, title: '마법천자문 1: 불어라 바람 풍', author: '스튜디오 시리얼', publisher: '아울북', desc: '손오공과 함께 호쾌한 모험을 즐기며 저절로 쏙쏙 익히는 한자 학습 만화' },
+      { id: 'b_mid_27', grade: 'mid', gradeLabel: '3~4학년', month: 10, title: '비밀의 화원', author: '프랜시스 호지슨 버넷', publisher: '시공주니어', desc: '버려진 정원을 가꾸며 얼어붙었던 메리와 콜린의 몸과 마음이 치유되는 기적' },
+      { id: 'b_mid_28', grade: 'mid', gradeLabel: '3~4학년', month: 10, title: '소리 질러, 운동장', author: '진형민', publisher: '창비', desc: '교장선생님의 일방적인 야구부 창단에 맞서 막야구부를 결성한 아이들의 통쾌한 운동장' },
+      { id: 'b_mid_29', grade: 'mid', gradeLabel: '3~4학년', month: 11, title: '똥택이', author: '김원석', publisher: '아이앤북', desc: '환경을 아끼고 소중한 흙의 가치를 지키기 위해 노력하는 아이들의 정겨운 동심' },
+      { id: 'b_mid_30', grade: 'mid', gradeLabel: '3~4학년', month: 11, title: '지구 온난화와 북극곰의 눈물', author: '장 루이 에티엔', publisher: '웅진주니어', desc: '녹아내리는 빙하 위에서 살아가는 북극 동물들을 통해 배우는 지구 환경의 미래' },
+      { id: 'b_mid_31', grade: 'mid', gradeLabel: '3~4학년', month: 11, title: '지하철을 타고서', author: '고대영', publisher: '길벗어린이', desc: '처음으로 둘이서 지하철을 타고 외할머니 댁으로 찾아가는 지원이와 병관이의 긴장과 모험' },
+      { id: 'b_mid_32', grade: 'mid', gradeLabel: '3~4학년', month: 12, title: '빨간 머리 앤', author: '루시 모드 몽고메리', publisher: '인디고', desc: '초록 지붕 집으로 입양된 긍정 에너지 넘치는 고아 소녀 앤의 눈부신 성장 스토리' },
+      { id: 'b_mid_33', grade: 'mid', gradeLabel: '3~4학년', month: 12, title: '키다리 아저씨', author: '진 웹스터', publisher: '시공주니어', desc: '고아원을 후원해 준 정체 모를 은인에게 발랄한 주디가 보낸 솔직하고 다정한 편지들' },
+
+      // === [5~6학년 (고학년, 33권)] ===
+      { id: 'b_high_01', grade: 'high', gradeLabel: '5~6학년', month: 1, title: '자전거 도둑', author: '박완서', publisher: '다림', desc: '수남이의 자전거 사건을 통해 바라본 물질만능주의 사회와 인간성의 소중함' },
+      { id: 'b_high_02', grade: 'high', gradeLabel: '5~6학년', month: 1, title: '몽실언니', author: '권정생', publisher: '창비', desc: '전쟁의 상처와 모진 가난 속에서도 동생을 업고 꿋꿋하게 살아낸 위대한 한국 여성사' },
+      { id: 'b_high_03', grade: 'high', gradeLabel: '5~6학년', month: 2, title: '시간을 파는 상점', author: '김선영', publisher: '자음과모음', desc: '크로노스라는 닉네임으로 인터넷 상점을 열어 의뢰인들의 시간을 연결해 주는 온조' },
+      { id: 'b_high_04', grade: 'high', gradeLabel: '5~6학년', month: 2, title: '페인트', author: '이희영', publisher: '창비', desc: '국가가 아이를 키우는 미래 사회, 청소년이 직접 부모 면접을 통해 부모를 선택하는 이야기' },
+      { id: 'b_high_05', grade: 'high', gradeLabel: '5~6학년', month: 3, title: '아몬드', author: '손원평', publisher: '창비', desc: '감정을 느끼지 못하는 편도체가 작은 소년 윤재와 분노로 가득 찬 곤이의 특별한 우정' },
+      { id: 'b_high_06', grade: 'high', gradeLabel: '5~6학년', month: 3, title: '모모', author: '미하엘 엔데', publisher: '비룡소', desc: '시간을 훔쳐 가는 회색 신사들에 맞서 사람들에게 소중한 마음의 여유를 되찾아주는 소녀 모모' },
+      { id: 'b_high_07', grade: 'high', gradeLabel: '5~6학년', month: 3, title: '나의 라임오렌지나무', author: 'J.M. 바스콘셀로스', publisher: '동녘', desc: '가난하지만 풍부한 감성을 가진 소년 제제와 뽀르뚜까 아저씨의 가슴 아프고 따뜻한 사랑' },
+      { id: 'b_high_08', grade: 'high', gradeLabel: '5~6학년', month: 4, title: '해리 포터와 마법사의 돌', author: 'J.K. 롤링', publisher: '문학수첩', desc: '호그와트 마법학교에 입학한 소년 해리 포터의 비밀과 볼드모트에 맞선 거대한 서사시' },
+      { id: 'b_high_09', grade: 'high', gradeLabel: '5~6학년', month: 4, title: '어린이 백범일지', author: '김구 원작', publisher: '돌베개', desc: '오직 우리나라가 아름답고 문화가 융성한 독립국이 되길 염원했던 백범 김구 선생의 생애' },
+      { id: 'b_high_10', grade: 'high', gradeLabel: '5~6학년', month: 4, title: '박씨전', author: '작자 미상', publisher: '보리', desc: '병자호란의 치욕을 뛰어난 도술과 지혜로 극복해 낸 조선시대 여성 영웅 소설' },
+      { id: 'b_high_11', grade: 'high', gradeLabel: '5~6학년', month: 5, title: '홍길동전', author: '허균', publisher: '창비', desc: '적서차별에 저항하며 활빈당을 이끌고 율도국을 세운 조선 최초의 한글 사회 비판 소설' },
+      { id: 'b_high_12', grade: 'high', gradeLabel: '5~6학년', month: 5, title: '난중일기', author: '이순신', publisher: '서해문집', desc: '임진왜란의 치열한 전장 속에서 성웅 이순신 장군이 남긴 고뇌와 불패의 충의' },
+      { id: 'b_high_13', grade: 'high', gradeLabel: '5~6학년', month: 5, title: '안네의 일기', author: '안네 프랑크', publisher: '민음사', desc: '나치의 탄압을 피해 암스테르담 비밀 은신처에서 써 내려간 한 소녀의 용기와 꿈' },
+      { id: 'b_high_14', grade: 'high', gradeLabel: '5~6학년', month: 6, title: '동물 농장', author: '조지 오웰', publisher: '민음사', desc: '인간의 억압에서 벗어난 농장의 동물들이 권력과 독재에 어떻게 물들어가는지 풍자한 걸작' },
+      { id: 'b_high_15', grade: 'high', gradeLabel: '5~6학년', month: 6, title: '1984', author: '조지 오웰', publisher: '민음사', desc: '빅 브라더의 감시와 통제 사회 속에서 진실과 자유를 갈망하는 인간의 투쟁' },
+      { id: 'b_high_16', grade: 'high', gradeLabel: '5~6학년', month: 6, title: '우주로 가는 계단', author: '전수경', publisher: '창비', desc: '사고로 가족을 잃은 지수가 물리학과 우주의 다차원 공간을 통해 상처를 치유하는 SF 동화' },
+      { id: 'b_high_17', grade: 'high', gradeLabel: '5~6학년', month: 7, title: '지킬 박사와 하이드', author: '로버트 루이스 스티븐슨', publisher: '열린책들', desc: '선과 악이라는 인간 내면의 두 얼굴과 절제되지 않은 본능이 초래하는 파멸' },
+      { id: 'b_high_18', grade: 'high', gradeLabel: '5~6학년', month: 7, title: '정의란 무엇인가 (청소년판)', author: '마이클 샌델', publisher: '김영사', desc: '공리주의, 자유주의, 공동체주의를 아우르며 올바른 선택이 무엇인지 묻는 정의론 입문' },
+      { id: 'b_high_19', grade: 'high', gradeLabel: '5~6학년', month: 7, title: '사피엔스 (청소년 그래픽 히스토리)', author: '유발 하라리', publisher: '김영사', desc: '인지혁명부터 현대 인공지능까지, 유인원이 지구의 지배자가 된 인류 역사의 대항해' },
+      { id: 'b_high_20', grade: 'high', gradeLabel: '5~6학년', month: 8, title: '클래식 한국 단편 문학 1: 봄봄/동백꽃', author: '김유정', publisher: '시공주니어', desc: '점순이와의 순박한 사랑과 데릴사위의 해학이 넘치는 1930년대 한국 농촌의 정취' },
+      { id: 'b_high_21', grade: 'high', gradeLabel: '5~6학년', month: 8, title: '메밀꽃 필 무렵', author: '이효석', publisher: '다림', desc: '달빛 아래 하얗게 흐드러진 메밀밭 길을 걸으며 떠올리는 장돌뱅이의 아련한 옛사랑' },
+      { id: 'b_high_22', grade: 'high', gradeLabel: '5~6학년', month: 8, title: '수난이대', author: '하근찬', publisher: '창비', desc: '일제강점기에 팔을 잃은 아버지와 6·25 전쟁에서 다리를 잃은 아들의 눈물겨운 부자애' },
+      { id: 'b_high_23', grade: 'high', gradeLabel: '5~6학년', month: 9, title: '연암 박지원의 열하일기', author: '박지원 원작/리베르', publisher: '리베르', desc: '청나라의 선진 문물을 목격하며 조선의 실용적인 개혁을 역설한 연암의 명문 기행록' },
+      { id: 'b_high_24', grade: 'high', gradeLabel: '5~6학년', month: 9, title: '목민심서 (청소년을 위한)', author: '정약용 원작', publisher: '사계절', desc: '백성을 사랑하고 청렴하게 백성을 다스려야 하는 공직자의 도리와 다산의 애민사상' },
+      { id: 'b_high_25', grade: 'high', gradeLabel: '5~6학년', month: 9, title: '어린이를 위한 세계사 편력', author: '자와할랄 네루', publisher: '자음과모음', desc: '인도의 지도자 네루가 감옥에서 딸 인디라 간디에게 보낸 균형 잡힌 세계사 편지' },
+      { id: 'b_high_26', grade: 'high', gradeLabel: '5~6학년', month: 10, title: '파브르 곤충기', author: '장 앙리 파브르', publisher: '웅진주니어', desc: '자연을 관찰하며 곤충들의 신비로운 생태와 본능을 과학적이고 서정적으로 기록한 역작' },
+      { id: 'b_high_27', grade: 'high', gradeLabel: '5~6학년', month: 10, title: '코스모스 (청소년을 위한)', author: '칼 세이건 원작', publisher: '사이언스북스', desc: '광활한 우주 속 티끌 같은 지구에서 탄생한 인류의 지적 호기심과 우주 탐사의 역사' },
+      { id: 'b_high_28', grade: 'high', gradeLabel: '5~6학년', month: 10, title: '생각의 탄생', author: '로버트 루트번스타인', publisher: '에코의서재', desc: '관찰, 형상화, 유추 등 다빈치와 아인슈타인이 세상을 바꾼 창의적 발상 도구 13가지' },
+      { id: 'b_high_29', grade: 'high', gradeLabel: '5~6학년', month: 11, title: '침묵의 봄', author: '레이첼 카슨', publisher: '에코리브르', desc: '무분별한 살충제 남용이 새들의 노랫소리를 앗아가는 환경 재앙을 경고한 환경학의 고전' },
+      { id: 'b_high_30', grade: 'high', gradeLabel: '5~6학년', month: 11, title: '어린이를 위한 인공지능 윤리', author: '김명주', publisher: '팜파스', desc: 'AI와 자율주행, 생성형 모델 시대에 미래 인류가 꼭 지켜야 할 가치와 윤리적 질문' },
+      { id: 'b_high_31', grade: 'high', gradeLabel: '5~6학년', month: 11, title: '멋진 헛간', author: '안도현', publisher: '문학동네', desc: '자연과 생명의 숭고한 숨결을 시적이고 감성적인 언어로 담아낸 아름다운 성장 동화' },
+      { id: 'b_high_32', grade: 'high', gradeLabel: '5~6학년', month: 12, title: '크리스마스 캐럴', author: '찰스 디킨스', publisher: '시공주니어', desc: '구두쇠 스크루지 영감이 세 유령을 만나 진정한 나눔과 사랑의 축복을 깨닫는 명작' },
+      { id: 'b_high_33', grade: 'high', gradeLabel: '5~6학년', month: 12, title: '눈길', author: '이청준', publisher: '열림원', desc: '눈 덮인 새벽길 아들을 배웅하며 차마 발길을 돌리지 못하던 어머니의 가슴 시린 사랑' }
+    ];
+
     // 모바일 터치 및 인터랙션 피드백 (진동)
     const triggerHaptic = (pattern = 20) => {
       try {
@@ -1218,6 +1329,9 @@
       const [bookshelfFilter, setBookshelfFilter] = useState('all');
       const [readingKidFilter, setReadingKidFilter] = useState('all');
       const [readingSearchQuery, setReadingSearchQuery] = useState('');
+      const [isRecommendedBooksOpen, setIsRecommendedBooksOpen] = useState(false);
+      const [recommendedGradeFilter, setRecommendedGradeFilter] = useState('all'); // 'all', 'low', 'mid', 'high', 'month'
+      const [recommendedSearchQuery, setRecommendedSearchQuery] = useState('');
 
       // 기준 주의 월요일 ~ 일요일 7일 계산
       const weekDays = useMemo(() => {
@@ -1395,6 +1509,15 @@
                 className="px-3 py-1.5 text-xs font-bold rounded-xl bg-white/10 hover:bg-white/20 text-amber-200 border border-white/15 transition active:scale-95"
               >
                 🏅 레벨 등급표
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRecommendedBooksOpen(true)}
+                className="px-3 py-1.5 text-xs font-bold rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 transition active:scale-95 flex items-center space-x-1"
+                title="초등학생 학년별 추천도서 100선 및 이달의 추천 보기"
+              >
+                <span>🌟</span>
+                <span>추천도서 100선</span>
               </button>
               <button
                 type="button"
@@ -2017,6 +2140,241 @@
                     className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition"
                   >
                     책장 닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 6. 초등학생 학년별 추천도서 100선 & 이달의 테마 큐레이션 모달 */}
+          {isRecommendedBooksOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+              <div className="bg-slate-900 text-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 space-y-4 border border-indigo-500/30 shadow-2xl max-h-[92vh] flex flex-col">
+                {/* 헤더 */}
+                <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-indigo-300 flex items-center space-x-2">
+                      <span>📚</span>
+                      <span>초등 학년별 추천도서 100선</span>
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                        {new Date().getMonth() + 1}월 테마 업데이트 🌟
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      초등 1~6학년 추천도서 100권과 매월 새로운 테마 도서를 확인하고 바로 독서 기록에 담아보세요!
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsRecommendedBooksOpen(false)}
+                    className="text-xs font-bold text-slate-400 hover:text-white p-1 rounded-lg bg-white/5 hover:bg-white/10 transition"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* 이달의 테마 추천 배너 */}
+                <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-950/70 via-purple-950/60 to-slate-900 border border-indigo-400/30 shrink-0 flex items-center justify-between">
+                  <div className="flex items-center space-x-2.5">
+                    <span className="text-2xl">🗓️</span>
+                    <div>
+                      <div className="text-xs font-black text-indigo-200">
+                        지금은 {new Date().getMonth() + 1}월! 이달의 추천도서 컬렉션
+                      </div>
+                      <div className="text-[10px] text-indigo-300/80">
+                        매달 1일마다 새로운 테마 도서가 자동으로 추천됩니다.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecommendedGradeFilter(recommendedGradeFilter === 'month' ? 'all' : 'month');
+                      triggerHaptic(10);
+                    }}
+                    className={`px-2.5 py-1 text-[11px] font-black rounded-xl border transition ${
+                      recommendedGradeFilter === 'month'
+                        ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md'
+                        : 'bg-indigo-600/30 text-indigo-200 border-indigo-400/40 hover:bg-indigo-600/50'
+                    }`}
+                  >
+                    {recommendedGradeFilter === 'month' ? '전체 보기' : `🌟 ${new Date().getMonth() + 1}월 추천만 보기`}
+                  </button>
+                </div>
+
+                {/* 학년 필터 & 검색바 */}
+                <div className="space-y-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { id: 'all', label: '전체 (100권)' },
+                      { id: 'month', label: `🌟 ${new Date().getMonth() + 1}월 테마 도서` },
+                      { id: 'low', label: '🐣 1~2학년 (저학년, 34권)' },
+                      { id: 'mid', label: '🌿 3~4학년 (중학년, 33권)' },
+                      { id: 'high', label: '🦅 5~6학년 (고학년, 33권)' }
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => {
+                          setRecommendedGradeFilter(f.id);
+                          triggerHaptic(10);
+                        }}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-xl border transition ${
+                          recommendedGradeFilter === f.id
+                            ? 'bg-indigo-500 text-white border-indigo-400 shadow-xs'
+                            : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
+                    <input
+                      type="text"
+                      value={recommendedSearchQuery}
+                      onChange={(e) => setRecommendedSearchQuery(e.target.value)}
+                      placeholder="도서명, 저자, 출판사, 키워드로 검색..."
+                      className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-400 transition"
+                    />
+                    {recommendedSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setRecommendedSearchQuery('')}
+                        className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-white"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 도서 카드 리스트 */}
+                <div className="overflow-y-auto pr-1 space-y-2.5 min-h-[240px] flex-1 no-scrollbar">
+                  {(() => {
+                    const curMonth = new Date().getMonth() + 1;
+                    const filtered = RECOMMENDED_BOOKS_100.filter(book => {
+                      if (recommendedGradeFilter === 'month' && book.month !== curMonth) return false;
+                      if (recommendedGradeFilter !== 'all' && recommendedGradeFilter !== 'month' && book.grade !== recommendedGradeFilter) return false;
+                      if (recommendedSearchQuery.trim()) {
+                        const q = recommendedSearchQuery.toLowerCase();
+                        const match = book.title.toLowerCase().includes(q) ||
+                                      book.author.toLowerCase().includes(q) ||
+                                      book.publisher.toLowerCase().includes(q) ||
+                                      book.desc.toLowerCase().includes(q);
+                        if (!match) return false;
+                      }
+                      return true;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="py-12 text-center text-slate-400 text-xs space-y-1">
+                          <p className="text-2xl">🔍</p>
+                          <p>검색 조건에 맞는 도서가 없습니다.</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {filtered.map(book => {
+                          // 주원이, 주아가 이 책을 읽었는지 확인
+                          const completedLogs = readingLogs.filter(l => l.isCompleted && l.bookTitle && l.bookTitle.includes(book.title));
+                          const isReadByChild1 = completedLogs.some(l => l.childId === 'child1');
+                          const isReadByChild2 = completedLogs.some(l => l.childId === 'child2');
+                          const isThisMonth = book.month === curMonth;
+
+                          return (
+                            <div
+                              key={book.id}
+                              className={`p-3 rounded-2xl border transition flex flex-col justify-between ${
+                                isThisMonth
+                                  ? 'bg-gradient-to-br from-indigo-950/60 to-slate-800/80 border-indigo-400/40 shadow-xs'
+                                  : 'bg-white/5 border-white/10 hover:border-white/20'
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                                  <span className="font-extrabold px-1.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                                    {book.gradeLabel}
+                                  </span>
+                                  {isThisMonth && (
+                                    <span className="font-black px-1.5 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                                      🌟 {curMonth}월 테마
+                                    </span>
+                                  )}
+                                </div>
+                                <h4 className="text-xs font-black text-white leading-snug line-clamp-1">
+                                  📖 {book.title}
+                                </h4>
+                                <div className="text-[11px] text-slate-300 mt-0.5 flex items-center space-x-1.5">
+                                  <span>✍️ {book.author}</span>
+                                  <span className="text-slate-500">|</span>
+                                  <span className="text-slate-400">{book.publisher}</span>
+                                </div>
+                                <p className="mt-1.5 text-[10.5px] text-slate-300 bg-slate-900/60 p-2 rounded-xl border border-white/5 line-clamp-2 leading-relaxed">
+                                  {book.desc}
+                                </p>
+                              </div>
+
+                              <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between">
+                                {/* 완독 상태 배지 */}
+                                <div className="flex items-center space-x-1 text-[10px]">
+                                  {isReadByChild1 || isReadByChild2 ? (
+                                    <div className="flex items-center space-x-1">
+                                      {isReadByChild1 && (
+                                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                                          👦 주원 완독
+                                        </span>
+                                      )}
+                                      {isReadByChild2 && (
+                                        <span className="px-1.5 py-0.5 rounded-md bg-pink-500/20 text-pink-300 font-bold border border-pink-500/30">
+                                          👧 주아 완독
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-500 font-medium">📖 도전 준비 중</span>
+                                  )}
+                                </div>
+
+                                {/* 원클릭 독서 기록 버튼 (부모용) */}
+                                {isParent ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleOpenReadingModal('child1', book.title);
+                                      triggerHaptic(15);
+                                    }}
+                                    className="px-2.5 py-1 text-[11px] font-black rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 transition active:scale-95 shadow-xs flex items-center space-x-1"
+                                    title="이 책을 읽은 기록으로 바로 작성하기"
+                                  >
+                                    <span>✍️</span>
+                                    <span>기록하기</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-amber-300/80 font-bold">✨ 추천 도서</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* 하단 닫기 버튼 */}
+                <div className="pt-2 text-center border-t border-slate-800 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsRecommendedBooksOpen(false)}
+                    className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs shadow-md transition"
+                  >
+                    추천도서 닫기
                   </button>
                 </div>
               </div>
@@ -6231,7 +6589,7 @@
       };
 
       // 신규: 주원·주아 독서 시간 기록 핸들러 (엄마, 아빠 전용)
-      const handleOpenReadingModal = (childId = 'child1') => {
+      const handleOpenReadingModal = (childId = 'child1', defaultBookTitle = '') => {
         if (!isParent) {
           showToast("⚠️ 엄마, 아빠만 독서 시간을 기록할 수 있습니다.");
           return;
@@ -6240,7 +6598,7 @@
           childId: childId || 'child1',
           date: getTodayString(),
           minutes: 30,
-          bookTitle: '',
+          bookTitle: defaultBookTitle || '',
           notes: '',
           isCompleted: false
         });
