@@ -34,6 +34,7 @@
     @media print {
       body * { visibility: hidden !important; }
       #family-print-report, #family-print-report * { visibility: visible !important; }
+      .no-print { display: none !important; }
       #family-print-report {
         position: absolute !important;
         left: 0 !important;
@@ -4155,8 +4156,11 @@
       const [todoForm, setTodoForm] = useState({ text: '', memberId: 'child1', category: 'study' });
       const [praiseForm, setPraiseForm] = useState({ toMemberId: 'child1', stickerKey: 'star', reason: '', count: 1 });
 
-      // 신규: 전체 가족 기록 PDF 보고서 모달 상태
+      // 신규: 전체 가족 기록 PDF 보고서 모달 및 기간 필터 상태
       const [isPdfReportOpen, setIsPdfReportOpen] = useState(false);
+      const [reportPeriodPreset, setReportPeriodPreset] = useState('all'); // 'all', '7d', '30d', 'thisMonth', 'custom'
+      const [reportStartDate, setReportStartDate] = useState('');
+      const [reportEndDate, setReportEndDate] = useState('');
 
       // 신규: 상단 네비게이션용 미확인 편지 수 계산
       const appUnreadLetterCount = useMemo(() => {
@@ -7740,7 +7744,160 @@
                   </button>
                 </div>
 
-                {/* 인쇄 전용 리포트 본문 (프린트 대상) */}
+                {/* 기간 설정 바 (화면 전용, 인쇄 시 no-print로 자동 숨김) */}
+                <div className="no-print p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="font-extrabold text-slate-800 flex items-center space-x-1.5">
+                      <span>📅</span>
+                      <span>추출 기간 설정:</span>
+                    </span>
+
+                    {/* 빠른 기간 프리셋 버튼들 */}
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReportPeriodPreset('all');
+                          setReportStartDate('');
+                          setReportEndDate('');
+                        }}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition text-[11px] ${
+                          reportPeriodPreset === 'all'
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        전체 기간
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReportPeriodPreset('7d');
+                          setReportStartDate(shiftDateString(getTodayString(), -6));
+                          setReportEndDate(getTodayString());
+                        }}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition text-[11px] ${
+                          reportPeriodPreset === '7d'
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        최근 7일
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReportPeriodPreset('30d');
+                          setReportStartDate(shiftDateString(getTodayString(), -29));
+                          setReportEndDate(getTodayString());
+                        }}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition text-[11px] ${
+                          reportPeriodPreset === '30d'
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        최근 30일
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = new Date();
+                          const y = today.getFullYear();
+                          const m = String(today.getMonth() + 1).padStart(2, '0');
+                          setReportPeriodPreset('thisMonth');
+                          setReportStartDate(`${y}-${m}-01`);
+                          setReportEndDate(getTodayString());
+                        }}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition text-[11px] ${
+                          reportPeriodPreset === 'thisMonth'
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        이번 달
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReportPeriodPreset('custom')}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition text-[11px] ${
+                          reportPeriodPreset === 'custom'
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        직접 설정
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 직접 날짜 선택 입력 필드 */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-200/60 text-[11px]">
+                    <span className="text-slate-500 font-bold">시작일:</span>
+                    <input
+                      type="date"
+                      value={reportStartDate}
+                      onChange={(e) => {
+                        setReportStartDate(e.target.value);
+                        setReportPeriodPreset('custom');
+                      }}
+                      className="px-2 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-700"
+                    />
+                    <span className="text-slate-400">~</span>
+                    <span className="text-slate-500 font-bold">종료일:</span>
+                    <input
+                      type="date"
+                      value={reportEndDate}
+                      onChange={(e) => {
+                        setReportEndDate(e.target.value);
+                        setReportPeriodPreset('custom');
+                      }}
+                      className="px-2 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-700"
+                    />
+                    {(reportStartDate || reportEndDate) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReportPeriodPreset('all');
+                          setReportStartDate('');
+                          setReportEndDate('');
+                        }}
+                        className="text-[10px] text-rose-500 hover:underline font-bold ml-1"
+                      >
+                        초기화
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {(() => {
+                  // 기간 필터링 로직 (독서, 감정, 편지)
+                  const filteredReadingLogs = readingLogs.filter(log => {
+                    const d = log.date || (log.createdAt ? new Date(log.createdAt).toISOString().slice(0, 10) : '');
+                    if (reportStartDate && d && d < reportStartDate) return false;
+                    if (reportEndDate && d && d > reportEndDate) return false;
+                    return true;
+                  });
+
+                  const filteredDailyMoods = dailyMoods.filter(log => {
+                    const d = log.date || (log.createdAt ? new Date(log.createdAt).toISOString().slice(0, 10) : '');
+                    if (reportStartDate && d && d < reportStartDate) return false;
+                    if (reportEndDate && d && d > reportEndDate) return false;
+                    return true;
+                  });
+
+                  const filteredFamilyLetters = familyLetters.filter(letter => {
+                    const d = letter.createdAt ? new Date(letter.createdAt).toISOString().slice(0, 10) : '';
+                    if (reportStartDate && d && d < reportStartDate) return false;
+                    if (reportEndDate && d && d > reportEndDate) return false;
+                    return true;
+                  });
+
+                  const periodLabel = (reportStartDate || reportEndDate)
+                    ? `${reportStartDate || '시작'} ~ ${reportEndDate || '종료'}`
+                    : '전체 기간';
+
+                  return (
                 <div id="family-print-report" className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
                   {/* 리포트 헤더 */}
                   <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-150 flex items-center justify-between">
@@ -7750,7 +7907,7 @@
                         <span>우리 가족 행복 성장 리포트</span>
                       </h2>
                       <p className="text-[11px] text-indigo-700 mt-0.5">
-                        발행일: {getTodayString()} | 확인자: {currentMember.name} ({currentMember.role})
+                        발행일: {getTodayString()} | 추출 기간: <strong>{periodLabel}</strong> | 확인자: {currentMember.name} ({currentMember.role})
                       </p>
                     </div>
                     <span className="px-3 py-1 rounded-full bg-white text-indigo-700 border border-indigo-200 font-extrabold text-[11px] shadow-2xs">
@@ -7765,15 +7922,20 @@
                         <span>📖</span>
                         <span>독서 활동 및 완독 도서 상세 기록</span>
                       </span>
-                      <span className="text-[10px] text-amber-800 font-bold">총 {readingLogs.length}건 기록</span>
+                      <span className="text-[10px] text-amber-800 font-bold">
+                        {periodLabel} 기준 총 {filteredReadingLogs.length}건
+                      </span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {KIDS_MEMBERS.map(kid => {
-                        const kidLogs = readingLogs.filter(l => l.childId === kid.id);
+                        const kidLogs = filteredReadingLogs.filter(l => l.childId === kid.id);
                         const totalMins = kidLogs.reduce((acc, l) => acc + (Number(l.minutes) || 0), 0);
-                        const lvlInfo = getReadingLevelInfo(totalMins);
                         const completedBooks = kidLogs.filter(l => l.isCompleted && l.bookTitle);
+                        // 누적 전체 시간 기준 레벨
+                        const allKidLogs = readingLogs.filter(l => l.childId === kid.id);
+                        const allMins = allKidLogs.reduce((acc, l) => acc + (Number(l.minutes) || 0), 0);
+                        const lvlInfo = getReadingLevelInfo(allMins);
 
                         return (
                           <div key={kid.id} className="p-2.5 rounded-xl bg-white border border-amber-200 space-y-1">
@@ -7785,7 +7947,7 @@
                               <span className="text-amber-700 font-black">Lv.{lvlInfo.level} {lvlInfo.title}</span>
                             </div>
                             <div className="text-[11px] text-slate-600 flex items-center justify-between">
-                              <span>누적 독서: <strong>{formatMinutesToHours(totalMins)}</strong></span>
+                              <span>해당 기간 독서: <strong>{formatMinutesToHours(totalMins)}</strong></span>
                               <span>완독: <strong className="text-emerald-600">{completedBooks.length}권</strong></span>
                             </div>
                           </div>
@@ -7794,15 +7956,15 @@
                     </div>
 
                     {/* 전체 독서 활동 및 책 이름 상세 기록 리스트 */}
-                    {readingLogs.length === 0 ? (
+                    {filteredReadingLogs.length === 0 ? (
                       <div className="text-center py-3 bg-white/70 rounded-xl text-[11px] text-slate-400">
-                        기록된 독서 활동이 없습니다.
+                        해당 기간에 기록된 독서 활동이 없습니다.
                       </div>
                     ) : (
                       <div className="space-y-1.5 pt-1">
-                        <div className="text-[10px] font-black text-amber-900">📚 독서 기록 및 읽은 책 상세 내역:</div>
+                        <div className="text-[10px] font-black text-amber-900">📚 독서 기록 및 읽은 책 상세 내역 ({filteredReadingLogs.length}건):</div>
                         <div className="space-y-1.5 max-h-60 overflow-y-auto no-scrollbar pr-0.5">
-                          {[...readingLogs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map((log, idx) => {
+                          {[...filteredReadingLogs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map((log, idx) => {
                             const kid = KIDS_MEMBERS.find(k => k.id === log.childId) || { name: log.childName || '어린이', avatar: '👶' };
                             return (
                               <div key={log.id || idx} className="p-2 rounded-xl bg-white border border-amber-200/90 flex flex-col space-y-1 text-[11px]">
@@ -7878,7 +8040,9 @@
                         <span>😊</span>
                         <span>온 가족 하루 감정 일기 기록</span>
                       </span>
-                      <span className="text-[10px] text-indigo-700 font-bold">총 {dailyMoods.length}건 기록</span>
+                      <span className="text-[10px] text-indigo-700 font-bold">
+                        {periodLabel} 기준 총 {filteredDailyMoods.length}건
+                      </span>
                     </div>
 
                     {/* 오늘자 출석부 미니 요약 */}
@@ -7901,15 +8065,15 @@
                     </div>
 
                     {/* 감정 일기 전체 상세 목록 */}
-                    {dailyMoods.length === 0 ? (
+                    {filteredDailyMoods.length === 0 ? (
                       <div className="text-center py-4 bg-slate-50 rounded-xl text-[11px] text-slate-400">
-                        기록된 감정 일기가 없습니다.
+                        해당 기간에 기록된 감정 일기가 없습니다.
                       </div>
                     ) : (
                       <div className="space-y-1.5 pt-1">
-                        <div className="text-[10px] font-black text-slate-500">📝 전체 일자별 감정 일기 상세 내역:</div>
+                        <div className="text-[10px] font-black text-slate-500">📝 해당 기간 감정 일기 상세 내역 ({filteredDailyMoods.length}건):</div>
                         <div className="space-y-1.5 max-h-56 overflow-y-auto no-scrollbar pr-0.5">
-                          {[...dailyMoods].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((log) => {
+                          {[...filteredDailyMoods].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((log) => {
                             const moodOpt = MOOD_OPTIONS.find(o => o.key === log.moodKey) || MOOD_OPTIONS[0];
                             const member = FAMILY_MEMBERS.find(m => m.id === log.memberId) || { name: log.memberName, avatar: '👤' };
                             return (
@@ -7949,16 +8113,18 @@
                         <span>💌</span>
                         <span>마음의 편지 & 가족 소통 대화록</span>
                       </span>
-                      <span className="text-[10px] text-pink-700 font-bold">총 {familyLetters.length}통 기록</span>
+                      <span className="text-[10px] text-pink-700 font-bold">
+                        {periodLabel} 기준 총 {filteredFamilyLetters.length}통
+                      </span>
                     </div>
 
-                    {familyLetters.length === 0 ? (
+                    {filteredFamilyLetters.length === 0 ? (
                       <div className="text-center py-4 bg-white/80 rounded-xl text-[11px] text-slate-400">
-                        기록된 가족 편지가 없습니다.
+                        해당 기간에 기록된 가족 편지가 없습니다.
                       </div>
                     ) : (
                       <div className="space-y-2 max-h-72 overflow-y-auto no-scrollbar pr-0.5">
-                        {[...familyLetters].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map((letter) => {
+                        {[...filteredFamilyLetters].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map((letter) => {
                           const isAuthor = currentMemberId === letter.fromMemberId;
                           let canViewLetter = false;
 
@@ -8049,6 +8215,8 @@
                     )}
                   </div>
                 </div>
+                  );
+                })()}
 
                 {/* 모달 푸터 액션 버튼 */}
                 <div className="pt-3 border-t border-slate-200 flex items-center space-x-2">
