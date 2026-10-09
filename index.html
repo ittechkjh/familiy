@@ -4313,6 +4313,7 @@
       const [editingTrip, setEditingTrip] = useState(null);
       const [isItemModalOpen, setIsItemModalOpen] = useState(false);
       const [editingItem, setEditingItem] = useState(null);
+      const [isTripPdfModalOpen, setIsTripPdfModalOpen] = useState(false);
 
       // 여행 생성/수정 폼 상태
       const [tripForm, setTripForm] = useState({
@@ -4371,8 +4372,12 @@
         });
       }, [currentTrip, selectedDay]);
 
-      // 새 여행 모달 열기
+      // 새 여행 모달 열기 (엄마, 아빠 전용)
       const handleOpenNewTripModal = () => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 새로운 여행을 등록할 수 있습니다.");
+          return;
+        }
         setEditingTrip(null);
         setTripForm({
           title: '🌴 우리 가족 힐링 여행',
@@ -4385,8 +4390,12 @@
         setIsTripModalOpen(true);
       };
 
-      // 여행 수정 모달 열기
+      // 여행 수정 모달 열기 (엄마, 아빠 전용)
       const handleOpenEditTripModal = (trip) => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 여행 정보를 수정할 수 있습니다.");
+          return;
+        }
         setEditingTrip(trip);
         setTripForm({
           title: trip.title,
@@ -4399,9 +4408,13 @@
         setIsTripModalOpen(true);
       };
 
-      // 여행 저장 제출
+      // 여행 저장 제출 (엄마, 아빠 전용)
       const onTripSubmit = (e) => {
         e.preventDefault();
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 여행을 저장할 수 있습니다.");
+          return;
+        }
         if (!tripForm.title.trim()) return;
         const tripData = {
           ...(editingTrip || {}),
@@ -4413,8 +4426,12 @@
         setIsTripModalOpen(false);
       };
 
-      // 일정 항목 모달 열기
+      // 일정 항목 모달 열기 (엄마, 아빠 전용)
       const handleOpenAddItemModal = (targetDay = 1) => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 여행 일정을 등록할 수 있습니다.");
+          return;
+        }
         setEditingItem(null);
         setItemForm({
           day: selectedDay === 'all' ? (targetDay || 1) : Number(selectedDay),
@@ -4431,8 +4448,12 @@
         setIsItemModalOpen(true);
       };
 
-      // 일정 항목 수정 모달 열기
+      // 일정 항목 수정 모달 열기 (엄마, 아빠 전용)
       const handleOpenEditItemModal = (item) => {
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 여행 일정을 수정할 수 있습니다.");
+          return;
+        }
         setEditingItem(item);
         setItemForm({
           day: item.day || 1,
@@ -4449,9 +4470,13 @@
         setIsItemModalOpen(true);
       };
 
-      // 일정 항목 저장 제출
+      // 일정 항목 저장 제출 (엄마, 아빠 전용)
       const onItemSubmit = (e) => {
         e.preventDefault();
+        if (!isParent) {
+          showToast("⚠️ 엄마, 아빠만 여행 일정을 등록할 수 있습니다.");
+          return;
+        }
         if (!itemForm.title.trim() || !currentTrip) return;
         const itemData = {
           ...(editingItem || {}),
@@ -4473,7 +4498,7 @@
                 <div className="flex items-center space-x-2">
                   <span className="text-2xl">{currentTrip?.coverEmoji || '✈️'}</span>
                   <h2 className="text-lg sm:text-xl font-black tracking-tight">{currentTrip?.title || '가족 여행 플래너'}</h2>
-                  {currentTrip && (
+                  {currentTrip && isParent && (
                     <button
                       type="button"
                       onClick={() => handleOpenEditTripModal(currentTrip)}
@@ -4482,6 +4507,11 @@
                     >
                       ✏️
                     </button>
+                  )}
+                  {!isParent && (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-white/20 text-emerald-100 border border-white/25">
+                      👀 보기 전용
+                    </span>
                   )}
                 </div>
                 <p className="text-xs text-emerald-100 flex items-center space-x-2">
@@ -4495,7 +4525,7 @@
                 )}
               </div>
 
-              {/* 여행 선택 셀렉트 및 새 여행 추가 버튼 */}
+              {/* 여행 선택 셀렉트, PDF 다운로드 및 새 여행 추가 버튼 */}
               <div className="flex items-center space-x-2 self-start sm:self-auto flex-wrap gap-y-1.5">
                 {trips.length > 0 && (
                   <div className="flex items-center space-x-1.5">
@@ -4516,15 +4546,31 @@
                     </select>
                   </div>
                 )}
+                {/* 📄 여행 일정 PDF 다운로드 버튼 (온 가족 누구나 다운로드 가능) */}
                 <button
                   type="button"
-                  onClick={handleOpenNewTripModal}
-                  className="px-3.5 py-2 rounded-xl bg-white text-emerald-800 font-extrabold text-xs shadow-md hover:bg-emerald-50 transition active:scale-95 flex items-center space-x-1"
-                  title="기존 여행 일정을 그대로 두고 새로운 여행 일정을 추가합니다"
+                  onClick={() => {
+                    setIsTripPdfModalOpen(true);
+                    triggerHaptic(15);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/30 text-white font-extrabold text-xs shadow-xs transition active:scale-95 flex items-center space-x-1"
+                  title="현재 선택된 여행 일정을 PDF 보고서로 확인하고 저장합니다"
                 >
-                  <span>✨</span>
-                  <span>+ 새 여행 추가하기</span>
+                  <span>📄</span>
+                  <span>여행 PDF 받기</span>
                 </button>
+                {/* 엄마, 아빠 전용: 새 여행 추가하기 버튼 */}
+                {isParent && (
+                  <button
+                    type="button"
+                    onClick={handleOpenNewTripModal}
+                    className="px-3.5 py-2 rounded-xl bg-white text-emerald-800 font-extrabold text-xs shadow-md hover:bg-emerald-50 transition active:scale-95 flex items-center space-x-1"
+                    title="기존 여행 일정을 그대로 두고 새로운 여행 일정을 추가합니다"
+                  >
+                    <span>✨</span>
+                    <span>+ 새 여행 추가하기</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -4626,19 +4672,25 @@
               </div>
             </div>
 
-            {/* 일정 추가 바로가기 버튼 */}
+            {/* 일정 추가 바로가기 버튼 (엄마, 아빠 전용) */}
             <div className="flex items-center justify-between text-xs pt-0.5">
               <span className="text-slate-500 font-medium">
                 {selectedDay === 'all' ? '전체 일정 타임라인' : `${selectedDay}일차 일정표 & 이동 경로`}
               </span>
-              <button
-                type="button"
-                onClick={() => handleOpenAddItemModal(selectedDay === 'all' ? 1 : Number(selectedDay))}
-                className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-extrabold text-xs transition active:scale-95 flex items-center space-x-1"
-              >
-                <span>➕</span>
-                <span>{selectedDay === 'all' ? '일정 등록' : `${selectedDay}일차 일정 추가`}</span>
-              </button>
+              {isParent ? (
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddItemModal(selectedDay === 'all' ? 1 : Number(selectedDay))}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-extrabold text-xs transition active:scale-95 flex items-center space-x-1"
+                >
+                  <span>➕</span>
+                  <span>{selectedDay === 'all' ? '일정 등록' : `${selectedDay}일차 일정 추가`}</span>
+                </button>
+              ) : (
+                <span className="text-[11px] font-bold text-slate-400">
+                  👀 자녀 보기 모드
+                </span>
+              )}
             </div>
           </div>
 
@@ -4671,14 +4723,20 @@
                 <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs text-slate-400 space-y-2">
                   <div className="text-3xl">🌴</div>
                   <div className="font-bold text-slate-600">등록된 일정이 없습니다.</div>
-                  <div className="text-[11px] text-slate-400">위의 [+ 일정 추가] 버튼을 눌러 맛집, 호텔, 볼거리를 등록해보세요!</div>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenAddItemModal(selectedDay === 'all' ? 1 : Number(selectedDay))}
-                    className="mt-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition"
-                  >
-                    + 첫 번째 일정 추가하기
-                  </button>
+                  <div className="text-[11px] text-slate-400">
+                    {isParent
+                      ? '위의 [+ 일정 추가] 버튼을 눌러 맛집, 호텔, 볼거리를 등록해보세요!'
+                      : '아직 부모님이 등록한 일정이 없습니다.'}
+                  </div>
+                  {isParent && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAddItemModal(selectedDay === 'all' ? 1 : Number(selectedDay))}
+                      className="mt-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition"
+                    >
+                      + 첫 번째 일정 추가하기
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="relative pl-6 sm:pl-8 space-y-3.5 before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-emerald-200">
@@ -4732,22 +4790,26 @@
                               >
                                 <span>{item.isDone ? '✅ 완료' : '미완료'}</span>
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditItemModal(item)}
-                                className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg transition"
-                                title="수정"
-                              >
-                                ✏️
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTripItem(currentTrip.id, item.id)}
-                                className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition"
-                                title="삭제"
-                              >
-                                🗑️
-                              </button>
+                              {isParent && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditItemModal(item)}
+                                    className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg transition"
+                                    title="수정"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteTripItem(currentTrip.id, item.id)}
+                                    className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition"
+                                    title="삭제"
+                                  >
+                                    🗑️
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
 
@@ -5087,6 +5149,154 @@
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* ==================== 3. 여행 일정 전용 PDF 보고서 및 인쇄 모달 ==================== */}
+          {isTripPdfModalOpen && currentTrip && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+              <div className="bg-white rounded-3xl max-w-3xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 text-slate-900 max-h-[92vh] flex flex-col">
+                {/* 모달 상단 헤더 (화면용) */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-2xl">📄</span>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-black text-slate-900">
+                        {currentTrip.title} 일정표 (PDF 보고서)
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        여행 일정과 시간대별 타임테이블, 맛집, 숙박, 볼거리 코스를 PDF로 저장하거나 인쇄하세요.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsTripPdfModalOpen(false)}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* 인쇄 및 PDF 다운로드용 여행 일정 리포트 본문 */}
+                <div id="trip-printable-report" className="overflow-y-auto my-3 p-4 sm:p-6 bg-slate-50/70 rounded-2xl border border-slate-200 space-y-5 flex-1">
+                  {/* 리포트 헤더 배너 */}
+                  <div className="bg-gradient-to-r from-emerald-600 to-teal-700 rounded-2xl p-5 text-white space-y-2.5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-3xl">{currentTrip.coverEmoji || '✈️'}</span>
+                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/20 border border-white/25">
+                        가족 여행 플래너 리포트
+                      </span>
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-black tracking-tight">{currentTrip.title}</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-emerald-100 pt-1 border-t border-white/15">
+                      <div><strong className="text-white">📍 여행지:</strong> {currentTrip.destination || '미정'}</div>
+                      <div><strong className="text-white">📅 여행 기간:</strong> {currentTrip.startDate} ~ {currentTrip.endDate}</div>
+                      <div><strong className="text-white">⏳ 총 일정:</strong> {tripDays.length}일간의 여정</div>
+                    </div>
+                    {currentTrip.memo && (
+                      <div className="text-xs bg-white/15 p-2.5 rounded-xl text-emerald-50 italic">
+                        "{currentTrip.memo}"
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 일차별 타임테이블 표 / 목록 */}
+                  <div className="space-y-4">
+                    {tripDays.map((d) => {
+                      const dayItems = (currentTrip.items || []).filter(i => Number(i.day) === d);
+                      return (
+                        <div key={d} className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs space-y-3">
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                            <span className="text-sm font-black text-emerald-800 flex items-center space-x-1.5">
+                              <span>🚩</span>
+                              <span>Day {d} 일정 ({dayItems.length}곳)</span>
+                            </span>
+                            <span className="text-xs text-slate-400">
+                              {shiftDateString(currentTrip.startDate, d - 1)}
+                            </span>
+                          </div>
+
+                          {dayItems.length === 0 ? (
+                            <p className="text-xs text-slate-400 py-3 text-center">등록된 일정이 없습니다.</p>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs text-left border-collapse">
+                                <thead>
+                                  <tr className="border-b border-slate-100 text-slate-400 text-[11px] bg-slate-50/50">
+                                    <th className="py-2 px-2.5 font-bold">시간</th>
+                                    <th className="py-2 px-2.5 font-bold">구분</th>
+                                    <th className="py-2 px-2.5 font-bold">일정명 / 장소</th>
+                                    <th className="py-2 px-2.5 font-bold">상세 주소 및 메모</th>
+                                    <th className="py-2 px-2.5 font-bold text-right">예상 비용</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {dayItems.map((item, idx) => {
+                                    const cat = TRAVEL_CATEGORIES.find(c => c.id === item.category) || TRAVEL_CATEGORIES[0];
+                                    return (
+                                      <tr key={item.id} className="hover:bg-slate-50/80 transition">
+                                        <td className="py-2.5 px-2.5 font-mono font-black text-slate-800 whitespace-nowrap">
+                                          ⏰ {item.time || '미지정'}
+                                        </td>
+                                        <td className="py-2.5 px-2.5 whitespace-nowrap">
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold border ${cat.color}`}>
+                                            {cat.emoji} {cat.label}
+                                          </span>
+                                        </td>
+                                        <td className="py-2.5 px-2.5 font-extrabold text-slate-900">
+                                          <div>{item.title}</div>
+                                          {item.placeName && (
+                                            <div className="text-[11px] text-slate-500 font-normal">📍 {item.placeName}</div>
+                                          )}
+                                        </td>
+                                        <td className="py-2.5 px-2.5 text-slate-600 text-[11px]">
+                                          {item.address && <div>{item.address}</div>}
+                                          {item.memo && <div className="text-emerald-700 italic">"{item.memo}"</div>}
+                                        </td>
+                                        <td className="py-2.5 px-2.5 text-right font-bold text-slate-700 whitespace-nowrap">
+                                          {item.cost || '-'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* 리포트 하단 푸터 안내 */}
+                  <div className="pt-3 text-center text-[10px] text-slate-400 border-t border-slate-200">
+                    생성일시: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()} • 행복이 가득한 우리 가족 플래너 🏡
+                  </div>
+                </div>
+
+                {/* 모달 푸터 버튼 */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsTripPdfModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition"
+                  >
+                    닫기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic(20);
+                      window.print();
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-200 transition active:scale-95 flex items-center space-x-1.5"
+                  >
+                    <span>🖨️</span>
+                    <span>여행 일정 인쇄 / PDF 다운로드</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
