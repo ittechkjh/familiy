@@ -4281,9 +4281,21 @@
         const sName = encodeURIComponent(start.placeName || start.title || '출발지');
         const eName = encodeURIComponent(end.placeName || end.title || '도착지');
 
-        // 네이버 지도 공식 웹 길찾기 (출발지, 도착지 위경도 및 명칭이 채워져 자동차 경로가 즉시 계산됨)
-        const naverUrl = `https://map.naver.com/index.nhn?menu=route&sname=${sName}&slng=${start.lng}&slat=${start.lat}&ename=${eName}&elng=${end.lng}&elat=${end.lat}&pathType=0&showMap=true`;
-        
+        // WGS84(위경도) -> 네이버 지도 내부 Web Mercator(EPSG:3857 미터) 투영 좌표 변환 함수
+        const toMercator = (lng, lat) => {
+          const x = (lng * 20037508.34) / 180;
+          let y = Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) / (Math.PI / 180);
+          y = (y * 20037508.34) / 180;
+          return { x: x.toFixed(7), y: y.toFixed(7) };
+        };
+
+        const startM = toMercator(start.lng, start.lat);
+        const endM = toMercator(end.lng, end.lat);
+
+        // 네이버 지도 최신 웹 길찾기 URL:
+        // https://map.naver.com/p/directions/{startMercX},{startMercY},{startName},,{type}/{endMercX},{endMercY},{endName},,{type}/-/car
+        const naverUrl = `https://map.naver.com/p/directions/${startM.x},${startM.y},${sName},,ADDRESS_POI/${endM.x},${endM.y},${eName},,ADDRESS_POI/-/car`;
+
         // 카카오맵 공식 길찾기 (from -> to)
         const kakaoUrl = `https://map.kakao.com/link/from/${sName},${start.lat},${start.lng}/to/${eName},${end.lat},${end.lng}`;
 
