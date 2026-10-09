@@ -4305,20 +4305,51 @@
           return { x: x.toFixed(7), y: y.toFixed(7) };
         };
 
-        const startM = toMercator(start.lng, start.lat);
-        const endM = toMercator(end.lng, end.lat);
+        // 2개 이상 코스: 네이버 지도는 최대 5개 경유지를 지원하므로 모든 지점(출발->경유지1..5->도착)을 세그먼트로 생성
+        const naverSegments = validPoints.slice(0, 7).map(pt => {
+          const m = toMercator(pt.lng, pt.lat);
+          const name = encodeURIComponent(pt.placeName || pt.title || '장소');
+          return `${m.x},${m.y},${name},,ADDRESS_POI`;
+        });
+        const naverUrl = `https://map.naver.com/p/directions/${naverSegments.join('/')}/-/car`;
 
-        // 네이버 지도 최신 웹 길찾기 URL:
-        // https://map.naver.com/p/directions/{startMercX},{startMercY},{startName},,{type}/{endMercX},{endMercY},{endName},,{type}/-/car
-        const naverUrl = `https://map.naver.com/p/directions/${startM.x},${startM.y},${sName},,ADDRESS_POI/${endM.x},${endM.y},${eName},,ADDRESS_POI/-/car`;
-
-        // 카카오맵 공식 길찾기 (from -> to)
+        // 카카오맵의 경우:
+        // 1) 전체 출발->도착 링크
+        const start = validPoints[0];
+        const end = validPoints[validPoints.length - 1];
+        const sName = encodeURIComponent(start.placeName || start.title || '출발지');
+        const eName = encodeURIComponent(end.placeName || end.title || '도착지');
         const kakaoUrl = `https://map.kakao.com/link/from/${sName},${start.lat},${start.lng}/to/${eName},${end.lat},${end.lng}`;
+
+        // 2) 카카오맵 및 네이버 지도 구간별(Legs: 1->2, 2->3 등) 릴레이 길찾기 링크 목록
+        const legs = [];
+        for (let i = 0; i < validPoints.length - 1; i++) {
+          const fromPt = validPoints[i];
+          const toPt = validPoints[i + 1];
+          const fromTitle = fromPt.placeName || fromPt.title || `코스 ${i + 1}`;
+          const toTitle = toPt.placeName || toPt.title || `코스 ${i + 2}`;
+          const fn = encodeURIComponent(fromTitle);
+          const tn = encodeURIComponent(toTitle);
+          const legKakao = `https://map.kakao.com/link/from/${fn},${fromPt.lat},${fromPt.lng}/to/${tn},${toPt.lat},${toPt.lng}`;
+          const fromM = toMercator(fromPt.lng, fromPt.lat);
+          const toM = toMercator(toPt.lng, toPt.lat);
+          const legNaver = `https://map.naver.com/p/directions/${fromM.x},${fromM.y},${fn},,ADDRESS_POI/${toM.x},${toM.y},${tn},,ADDRESS_POI/-/car`;
+          legs.push({
+            index: i + 1,
+            fromTitle,
+            toTitle,
+            kakaoUrl: legKakao,
+            naverUrl: legNaver
+          });
+        }
 
         return {
           naver: naverUrl,
           kakao: kakaoUrl,
+          legs,
           isRoute: true,
+          waypointCount: Math.max(0, validPoints.length - 2),
+          totalSpots: validPoints.length,
           startTitle: start.placeName || start.title,
           endTitle: end.placeName || end.title
         };
@@ -4408,9 +4439,13 @@
           });
 
           const naviQuery = encodeURIComponent(point.placeName || point.address || point.title);
-          const naverDirectUrl = point.lat && point.lng
-            ? `https://map.naver.com/v5/search/${naviQuery}?c=${point.lng},${point.lat},15,0,0,0,dh`
-            : `https://map.naver.com/v5/search/${naviQuery}`;
+          const markerUrlMatch = `${point.linkUrl || ''} ${point.memo || ''}`.match(/(https?:\/\/[^\s\x22\x27<>]+)/i);
+          const directPlaceUrl = point.linkUrl || (markerUrlMatch ? markerUrlMatch[0] : null);
+          const naverDirectUrl = directPlaceUrl || (
+            point.lat && point.lng
+              ? `https://map.naver.com/p/search/${naviQuery}?c=${point.lng},${point.lat},15,0,0,0,dh`
+              : `https://map.naver.com/p/search/${naviQuery}`
+          );
 
           const popupContent = `
             <div style="min-width: 220px; padding: 4px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
@@ -4485,41 +4520,79 @@
       return (
         <div className="space-y-2">
           {/* 지도 상단 모던 네이버/카카오 연동 바 */}
-          <div className="flex items-center justify-between bg-white px-3 py-2 rounded-2xl border border-slate-200 shadow-2xs flex-wrap gap-2">
-            <div className="flex items-center space-x-2 text-xs font-bold text-slate-700">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px] font-black">N</span>
-              <span>지도 연동 길찾기</span>
-              <span className="text-[11px] font-normal text-slate-400">
-                {navigationUrls.isRoute
-                  ? `(${navigationUrls.startTitle} ➔ ${navigationUrls.endTitle})`
-                  : `(${validPoints.length}곳 동선)`}
-              </span>
-            </div>
-            <div className="flex items-center space-x-1.5 ml-auto">
-              <a
-                href={navigationUrls.naver}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs shadow-xs transition flex items-center space-x-1"
-                title="네이버 지도에서 자동차 길찾기 경로 즉시 계산"
-              >
-                <span>🟢</span>
-                <span>네이버 길찾기</span>
-                <span>↗</span>
-              </a>
-              {navigationUrls.isRoute && (
+          <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center space-x-2 text-xs font-bold text-slate-800">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px] font-black">N</span>
+                <span>지도 연동 길찾기</span>
+                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
+                  {navigationUrls.isRoute
+                    ? (navigationUrls.waypointCount > 0
+                        ? `${navigationUrls.startTitle} ➔ 경유 ${navigationUrls.waypointCount}곳 ➔ ${navigationUrls.endTitle}`
+                        : `${navigationUrls.startTitle} ➔ ${navigationUrls.endTitle}`)
+                    : `${validPoints.length}곳 동선`}
+                </span>
+              </div>
+              <div className="flex items-center space-x-1.5 ml-auto">
                 <a
-                  href={navigationUrls.kakao}
+                  href={navigationUrls.naver}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-2.5 py-1.5 rounded-xl bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-extrabold text-xs transition flex items-center space-x-1"
-                  title="카카오맵에서 자동차 길찾기 코스 열기"
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs transition flex items-center space-x-1"
+                  title="네이버 지도에서 경유지까지 포함된 전체 자동차 경로 열기"
                 >
-                  <span>🟡</span>
-                  <span>카카오 길찾기</span>
+                  <span>🟢</span>
+                  <span>네이버 전체코스 {navigationUrls.waypointCount > 0 ? `(경유 ${navigationUrls.waypointCount}곳)` : ''}</span>
+                  <span>↗</span>
                 </a>
-              )}
+                {navigationUrls.isRoute && (
+                  <a
+                    href={navigationUrls.kakao}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1.5 rounded-xl bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-extrabold text-xs transition flex items-center space-x-1"
+                    title="카카오맵에서 전체 코스 열기"
+                  >
+                    <span>🟡</span>
+                    <span>카카오 길찾기</span>
+                  </a>
+                )}
+              </div>
             </div>
+
+            {/* 3곳 이상일 때 카카오/네이버 구간별 릴레이 길찾기 버튼 바 */}
+            {navigationUrls.legs && navigationUrls.legs.length > 1 && (
+              <div className="pt-2 border-t border-slate-100 flex items-center text-[11px] flex-wrap gap-1.5">
+                <span className="text-slate-400 font-bold shrink-0">구간별 길찾기:</span>
+                <div className="flex items-center flex-wrap gap-1.5">
+                  {navigationUrls.legs.map((leg) => (
+                    <div key={leg.index} className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 text-[11px] overflow-hidden">
+                      <span className="px-2 py-1 font-bold text-slate-700 bg-slate-100/70">
+                        {leg.index}구간: {leg.fromTitle} ➔ {leg.toTitle}
+                      </span>
+                      <a
+                        href={leg.naverUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-1.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border-l border-slate-200 transition"
+                        title="네이버 지도로 이 구간만 길찾기"
+                      >
+                        네이버
+                      </a>
+                      <a
+                        href={leg.kakaoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-1.5 py-1 bg-yellow-50 hover:bg-yellow-100 text-yellow-900 font-bold border-l border-slate-200 transition"
+                        title="카카오맵으로 이 구간만 길찾기"
+                      >
+                        카카오
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 지도 캔버스 뷰 */}
@@ -4693,6 +4766,7 @@
           address: '',
           cost: '',
           memo: '',
+          linkUrl: '',
           lat: '',
           lng: ''
         });
@@ -4706,6 +4780,8 @@
           return;
         }
         setEditingItem(item);
+        // 메모에 URL이 포함되어 있는데 linkUrl이 없으면 자동 추출
+        const memoUrlMatch = (item.memo || '').match(/(https?:\/\/[^\s\x22\x27<>]+)/i);
         setItemForm({
           day: item.day || 1,
           time: item.time || '10:00',
@@ -4715,6 +4791,7 @@
           address: item.address || '',
           cost: item.cost || '',
           memo: item.memo || '',
+          linkUrl: item.linkUrl || (memoUrlMatch ? memoUrlMatch[0] : ''),
           lat: item.lat || '',
           lng: item.lng || ''
         });
@@ -4779,10 +4856,18 @@
           }
         }
 
+        // 링크 URL이 비어있는데 메모에 URL이 포함되어 있는 경우 자동 추출하여 채움
+        let finalLinkUrl = (itemForm.linkUrl || '').trim();
+        if (!finalLinkUrl) {
+          const mMatch = `${itemForm.memo || ''} ${itemForm.address || ''}`.match(/(https?:\/\/[^\s\x22\x27<>]+)/i);
+          if (mMatch) finalLinkUrl = mMatch[0];
+        }
+
         const itemData = {
           ...(editingItem || {}),
           ...itemForm,
           day: Number(itemForm.day) || 1,
+          linkUrl: finalLinkUrl,
           lat: finalLat,
           lng: finalLng
         };
@@ -5049,6 +5134,48 @@
                     const cat = TRAVEL_CATEGORIES.find(c => c.id === item.category) || TRAVEL_CATEGORIES[0];
                     const naviQuery = encodeURIComponent(item.placeName || item.address || item.title);
 
+                    // 웹/네이버지도 링크 감지 (item.linkUrl 또는 memo, address 등에 포함된 http/https URL)
+                    const fullTextForUrl = `${item.linkUrl || ''} ${item.memo || ''} ${item.address || ''}`;
+                    const urlMatch = fullTextForUrl.match(/(https?:\/\/[^\s\x22\x27<>]+)/i);
+                    const directUrl = item.linkUrl || (urlMatch ? urlMatch[0] : null);
+
+                    const naverPlaceUrl = directUrl || (
+                      item.lat && item.lng
+                        ? `https://map.naver.com/p/search/${naviQuery}?c=${item.lng},${item.lat},15,0,0,0,dh`
+                        : `https://map.naver.com/p/search/${naviQuery}`
+                    );
+                    const kakaoPlaceUrl = `https://map.kakao.com/link/search/${naviQuery}`;
+
+                    let memoText = (item.memo || '').trim();
+                    const memoUrlMatch = memoText.match(/(https?:\/\/[^\s\x22\x27<>]+)/i);
+                    const memoExtractedUrl = memoUrlMatch ? memoUrlMatch[0] : null;
+                    let memoCleanText = memoText;
+                    if (memoExtractedUrl) {
+                      memoCleanText = memoText.replace(memoExtractedUrl, '').replace(/^[\x22\x27\s]+|[\x22\x27\s]+$/g, '').trim();
+                    }
+
+                    const nextItem = (idx < displayedItems.length - 1) ? displayedItems[idx + 1] : null;
+                    let nextLegNaver = null;
+                    let nextLegKakao = null;
+                    if (nextItem) {
+                      const toMercator = (lng, lat) => {
+                        const x = (lng * 20037508.34) / 180;
+                        let y = Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) / (Math.PI / 180);
+                        y = (y * 20037508.34) / 180;
+                        return { x: x.toFixed(7), y: y.toFixed(7) };
+                      };
+                      const fn = encodeURIComponent(item.placeName || item.title || '출발');
+                      const tn = encodeURIComponent(nextItem.placeName || nextItem.title || '도착');
+                      nextLegKakao = (item.lat && item.lng && nextItem.lat && nextItem.lng)
+                        ? `https://map.kakao.com/link/from/${fn},${item.lat},${item.lng}/to/${tn},${nextItem.lat},${nextItem.lng}`
+                        : `https://map.kakao.com/link/search/${tn}`;
+                      const fromM = (item.lat && item.lng) ? toMercator(item.lng, item.lat) : null;
+                      const toM = (nextItem.lat && nextItem.lng) ? toMercator(nextItem.lng, nextItem.lat) : null;
+                      nextLegNaver = (fromM && toM)
+                        ? `https://map.naver.com/p/directions/${fromM.x},${fromM.y},${fn},,ADDRESS_POI/${toM.x},${toM.y},${tn},,ADDRESS_POI/-/car`
+                        : `https://map.naver.com/p/search/${tn}`;
+                    }
+
                     return (
                       <div key={item.id} className="relative group">
                         {/* 타임라인 왼쪽 동그라미 핀 */}
@@ -5118,39 +5245,107 @@
                             </div>
                           </div>
 
-                          {/* 장소 및 주소 (클릭 시 네이버 지도 바로 열기) */}
+                          {/* 장소 및 주소 (클릭 시 네이버 지도 바로 열기 + 주소 복사) */}
                           {(item.placeName || item.address) && (
-                            <a
-                              href={`https://map.naver.com/v5/search/${naviQuery}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-slate-700 flex items-center justify-between flex-wrap bg-slate-50 hover:bg-emerald-50/60 p-2.5 rounded-xl border border-slate-100 hover:border-emerald-200 transition group/addr"
-                              title="네이버 지도에서 장소 상세정보 확인하기"
-                            >
-                              <div className="flex items-center space-x-1.5 flex-wrap">
-                                <span className="font-bold text-slate-900 group-hover/addr:text-emerald-800">📍 {item.placeName || '장소명 없음'}</span>
+                            <div className="flex items-center justify-between flex-wrap gap-2 bg-slate-50 hover:bg-emerald-50/50 p-2.5 rounded-xl border border-slate-200 transition">
+                              <a
+                                href={naverPlaceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center space-x-1.5 flex-wrap flex-1 text-xs text-slate-700 hover:text-emerald-800 group/addr"
+                                title="네이버 지도에서 상세 정보 열기"
+                              >
+                                <span className="font-extrabold text-slate-900 group-hover/addr:text-emerald-700">📍 {item.placeName || '장소명 없음'}</span>
                                 {item.address && <span className="text-slate-500 text-[11px]">({item.address})</span>}
-                              </div>
-                              <span className="text-[10px] text-emerald-600 font-extrabold flex items-center space-x-0.5 shrink-0 ml-auto pt-0.5">
-                                <span>네이버지도 열기</span>
-                                <span>↗</span>
+                                <span className="text-[10px] text-emerald-600 font-extrabold group-hover/addr:underline shrink-0 flex items-center space-x-0.5">
+                                  <span>네이버지도 열기</span>
+                                  <span>↗</span>
+                                </span>
+                              </a>
+                              {item.address && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    navigator.clipboard.writeText(item.address);
+                                    showToast(`📋 '${item.placeName || item.address}' 주소가 복사되었습니다!`);
+                                    triggerHaptic(20);
+                                  }}
+                                  className="px-2 py-0.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-[10px] transition active:scale-95 flex items-center space-x-0.5 shrink-0"
+                                  title="주소 복사"
+                                >
+                                  <span>📋 주소복사</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* 메모 및 등록된 웹/지도 링크 */}
+                          {(memoCleanText || memoExtractedUrl || directUrl) && (
+                            <div className="space-y-1.5">
+                              {memoCleanText && (
+                                <p className="text-xs text-slate-600 whitespace-pre-wrap bg-emerald-50/40 p-2 rounded-xl border border-emerald-100 leading-relaxed">
+                                  {'💬 "' + memoCleanText + '"'}
+                                </p>
+                              )}
+                              {(memoExtractedUrl || directUrl) && (
+                                <div>
+                                  <a
+                                    href={memoExtractedUrl || directUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-extrabold text-xs shadow-xs transition active:scale-95 group/link"
+                                    title="등록된 웹/지도 링크 열기"
+                                  >
+                                    <span className="text-sm">🔗</span>
+                                    <span className="group-hover/link:underline">
+                                      {(memoExtractedUrl || directUrl).includes('naver') ? '네이버 플레이스 상세페이지 열기' : '등록된 웹 링크 열기'}
+                                    </span>
+                                    <span className="text-emerald-600 text-[11px]">↗</span>
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* 다음 코스로 이동하는 릴레이 길찾기 (다음 장소가 있을 때) */}
+                          {nextItem && (
+                            <div className="pt-2 border-t border-dashed border-emerald-200 flex items-center justify-between text-[11px] flex-wrap gap-1.5 bg-emerald-50/50 p-2 rounded-xl">
+                              <span className="text-emerald-800 font-extrabold flex items-center space-x-1">
+                                <span>🚗</span>
+                                <span>다음 코스 ➔ <b>{nextItem.placeName || nextItem.title}</b> 길찾기:</span>
                               </span>
-                            </a>
+                              <div className="flex items-center space-x-1.5">
+                                <a
+                                  href={nextLegNaver}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow-xs transition flex items-center space-x-1"
+                                  title="네이버 지도로 다음 코스까지 자동차 길찾기"
+                                >
+                                  <span>🟢</span>
+                                  <span>네이버 길찾기</span>
+                                </a>
+                                <a
+                                  href={nextLegKakao}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2.5 py-1 rounded-lg bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-extrabold transition flex items-center space-x-1"
+                                  title="카카오맵으로 다음 코스까지 자동차 길찾기"
+                                >
+                                  <span>🟡</span>
+                                  <span>카카오 길찾기</span>
+                                </a>
+                              </div>
+                            </div>
                           )}
 
-                          {/* 메모 */}
-                          {item.memo && (
-                            <p className="text-xs text-slate-600 whitespace-pre-wrap bg-emerald-50/40 p-2 rounded-xl border border-emerald-100 leading-relaxed">
-                              💬 "{item.memo}"
-                            </p>
-                          )}
-
-                          {/* 하단 길찾기 내비게이션 바로가기 바 */}
+                          {/* 하단 장소 바로보기 바 */}
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] flex-wrap gap-1.5">
-                            <span className="text-slate-400">길찾기 바로가기:</span>
+                            <span className="text-slate-400">장소 바로보기:</span>
                             <div className="flex items-center space-x-1.5">
                               <a
-                                href={`https://map.naver.com/v5/search/${naviQuery}`}
+                                href={naverPlaceUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black shadow-xs transition flex items-center space-x-1"
@@ -5159,7 +5354,7 @@
                                 <span>네이버 지도</span>
                               </a>
                               <a
-                                href={`https://map.kakao.com/link/search/${naviQuery}`}
+                                href={kakaoPlaceUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="px-2.5 py-1 rounded-lg bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-extrabold transition flex items-center space-x-1"
@@ -5496,6 +5691,26 @@
                       placeholder="예: 주아 유모차 반입 가능, 대기 시간 있을 수 있으니 일찍 출발"
                       className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1 flex items-center justify-between">
+                      <span className="flex items-center space-x-1">
+                        <span>🔗</span>
+                        <span>장소 웹/네이버지도 링크</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-normal">선택 사항</span>
+                    </label>
+                    <input
+                      type="url"
+                      value={itemForm.linkUrl || ''}
+                      onChange={(e) => setItemForm({ ...itemForm, linkUrl: e.target.value })}
+                      placeholder="예: https://map.naver.com/p/... (네이버 플레이스 공유 링크 등)"
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-xs text-blue-700 placeholder-slate-400"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      💡 링크를 입력하거나 메모에 링크를 넣으시면 일정 카드에서 바로 열 수 있는 링크 버튼이 생성됩니다.
+                    </p>
                   </div>
 
                   <div className="flex items-center justify-end space-x-2 pt-2">
