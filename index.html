@@ -4154,8 +4154,96 @@
       );
     }
 
-    // ==================== 신규: 가족 여행 동선 지도 컴포넌트 (Leaflet 기반) ====================
-    function TravelMapView({ items = [], selectedDay = 'all' }) {
+    // ==================== 주소/장소명 좌표 자동 변환 (지오코딩 헬퍼) ====================
+    // 한국 주요 거점 및 대표 랜드마크 즉시 매핑 딕셔너리
+    const KOREA_LANDMARKS = [
+      { keywords: ['성남시중원도서관', '중원도서관', '원터로17번길'], lat: 37.4326, lng: 127.1408, label: '성남시 중원도서관' },
+      { keywords: ['성남시청'], lat: 37.4200, lng: 127.1265, label: '성남시청' },
+      { keywords: ['판교역', '판교'], lat: 37.3948, lng: 127.1112, label: '판교역' },
+      { keywords: ['야탑역', '야탑'], lat: 37.4113, lng: 127.1287, label: '야탑역' },
+      { keywords: ['모란역', '모란'], lat: 37.4322, lng: 127.1290, label: '모란역' },
+      { keywords: ['서현역', '분당'], lat: 37.3850, lng: 127.1233, label: '서현역' },
+      { keywords: ['휘닉스파크', '평창휘닉스', '휘닉스 평창', '휘닉스'], lat: 37.5815, lng: 128.3245, label: '휘닉스 평창' },
+      { keywords: ['용평리조트', '모나용평'], lat: 37.6444, lng: 128.6802, label: '모나용평' },
+      { keywords: ['알펜시아'], lat: 37.6548, lng: 128.6720, label: '알펜시아 리조트' },
+      { keywords: ['대관령양떼목장', '양떼목장'], lat: 37.6888, lng: 128.7513, label: '대관령양떼목장' },
+      { keywords: ['안목해변', '강릉커피거리'], lat: 37.7719, lng: 128.9483, label: '강릉 안목해변' },
+      { keywords: ['경포대', '경포해변', '경포호'], lat: 37.8055, lng: 128.9079, label: '강릉 경포해변' },
+      { keywords: ['강릉중앙시장'], lat: 37.7540, lng: 128.8985, label: '강릉 중앙시장' },
+      { keywords: ['아르떼뮤지엄 강릉'], lat: 37.7941, lng: 128.8943, label: '아르떼뮤지엄 강릉' },
+      { keywords: ['속초해수욕장', '속초아이'], lat: 37.1942, lng: 128.6045, label: '속초해수욕장' },
+      { keywords: ['속초관광수산시장', '속초중앙시장'], lat: 37.2046, lng: 128.5902, label: '속초관광수산시장' },
+      { keywords: ['영금정'], lat: 37.2117, lng: 128.5989, label: '속초 영금정' },
+      { keywords: ['설악산', '신흥사'], lat: 37.1742, lng: 128.4900, label: '설악산국립공원' },
+      { keywords: ['신화월드', '제주신화월드'], lat: 33.3073, lng: 126.3175, label: '제주신화월드' },
+      { keywords: ['성산일출봉'], lat: 33.4586, lng: 126.9427, label: '성산일출봉' },
+      { keywords: ['협재해수욕장', '협재'], lat: 33.3941, lng: 126.2397, label: '협재해변' },
+      { keywords: ['함덕해수욕장', '함덕'], lat: 33.5434, lng: 126.6692, label: '함덕해변' },
+      { keywords: ['제주공항', '제주국제공항'], lat: 33.5066, lng: 126.4930, label: '제주국제공항' },
+      { keywords: ['서울역'], lat: 37.5559, lng: 126.9723, label: '서울역' },
+      { keywords: ['광화문'], lat: 37.5759, lng: 126.9768, label: '광화문' },
+      { keywords: ['에버랜드'], lat: 37.2933, lng: 127.2025, label: '에버랜드' },
+      { keywords: ['롯데월드'], lat: 37.5111, lng: 127.0982, label: '롯데월드' }
+    ];
+
+    // 주소 또는 장소 텍스트로 위도/경도를 찾는 함수 (오프라인/온라인 하이브리드 지오코딩)
+    async function searchLocationCoordinates(query) {
+      if (!query || typeof query !== 'string') return null;
+      const clean = query.trim();
+      if (!clean) return null;
+
+      // 1. 사전 등록 랜드마크 우선 매칭 (초고속, 오프라인 즉시 보정)
+      for (const item of KOREA_LANDMARKS) {
+        if (item.keywords.some(k => clean.includes(k) || k.includes(clean))) {
+          return { lat: item.lat, lng: item.lng, name: item.label, source: 'preset' };
+        }
+      }
+
+      // 2. 오픈 지오코더(Nominatim) 비동기 호출 (CORS 허용)
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=kr&limit=1&q=${encodeURIComponent(clean)}`;
+        const resp = await fetch(url, { headers: { 'Accept-Language': 'ko,en' } });
+        if (resp.ok) {
+          const list = await resp.json();
+          if (Array.isArray(list) && list.length > 0) {
+            const first = list[0];
+            return {
+              lat: parseFloat(first.lat),
+              lng: parseFloat(first.lon),
+              name: first.display_name,
+              source: 'api'
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('Geocoding API network check skipped:', err);
+      }
+
+      // 3. 지역명 기반 대표 좌표 폴백
+      if (clean.includes('성남') || clean.includes('중원') || clean.includes('분당')) {
+        return { lat: 37.4326, lng: 127.1408, name: '성남시 일대', source: 'region_fallback' };
+      }
+      if (clean.includes('평창') || clean.includes('봉평')) {
+        return { lat: 37.5815, lng: 128.3245, name: '평창 일대', source: 'region_fallback' };
+      }
+      if (clean.includes('강릉') || clean.includes('경포')) {
+        return { lat: 37.7518, lng: 128.8760, name: '강릉 일대', source: 'region_fallback' };
+      }
+      if (clean.includes('속초')) {
+        return { lat: 37.2046, lng: 128.5902, name: '속초 일대', source: 'region_fallback' };
+      }
+      if (clean.includes('제주') || clean.includes('서귀포')) {
+        return { lat: 33.38, lng: 126.55, name: '제주도 일대', source: 'region_fallback' };
+      }
+      if (clean.includes('부산') || clean.includes('해운대')) {
+        return { lat: 35.1795, lng: 129.0756, name: '부산 일대', source: 'region_fallback' };
+      }
+
+      return null;
+    }
+
+    // ==================== 신규: 가족 여행 동선 지도 컴포넌트 (모던 타일 + 네이버 지도 연동) ====================
+    function TravelMapView({ items = [], selectedDay = 'all', tripTitle = '가족 여행' }) {
       const mapContainerRef = useRef(null);
       const mapInstanceRef = useRef(null);
 
@@ -4167,21 +4255,40 @@
         });
       }, [items, selectedDay]);
 
+      // 전체 코스를 네이버 지도로 열기 위한 대표 검색어 또는 길찾기 쿼리 생성
+      const naverCourseUrl = useMemo(() => {
+        if (validPoints.length === 0) {
+          return `https://map.naver.com/v5/search/${encodeURIComponent(tripTitle)}`;
+        }
+        if (validPoints.length === 1) {
+          const pt = validPoints[0];
+          return `https://map.naver.com/v5/search/${encodeURIComponent(pt.placeName || pt.address || pt.title)}`;
+        }
+        // 출발지(첫번째 코스) -> 도착지(마지막 코스) 네이버 지도 길찾기
+        const start = validPoints[0];
+        const end = validPoints[validPoints.length - 1];
+        const sName = encodeURIComponent(start.placeName || start.title || '출발지');
+        const eName = encodeURIComponent(end.placeName || end.title || '도착지');
+        return `https://map.naver.com/v5/directions/-/${start.lng},${start.lat},${sName}/-/${end.lng},${end.lat},${eName}/-/car`;
+      }, [validPoints, tripTitle]);
+
       useEffect(() => {
         if (!mapContainerRef.current) return;
         if (typeof L === 'undefined') return;
 
         // 초기 지도 생성 (없으면 신규, 있으면 레이어 정리)
         if (!mapInstanceRef.current) {
-          const defaultCenter = validPoints.length > 0 ? [validPoints[0].lat, validPoints[0].lng] : [33.38, 126.55]; // 제주도 기본
+          const defaultCenter = validPoints.length > 0 ? [validPoints[0].lat, validPoints[0].lng] : [37.5815, 128.3245]; // 평창 기본
           const map = L.map(mapContainerRef.current, {
             zoomControl: true,
             scrollWheelZoom: true
           }).setView(defaultCenter, 11);
 
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          // 고화질 CartoDB Voyager 타일 (시인성이 높고 한글 지명 렌더링이 선명하며 세련된 파스텔톤 지도)
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
+            subdomains: 'abcd',
+            attribution: '© <a href="https://carto.com/" target="_blank">CARTO</a>, © OpenStreetMap'
           }).addTo(map);
 
           mapInstanceRef.current = map;
@@ -4209,54 +4316,66 @@
           latLngs.push(latlng);
 
           const cat = TRAVEL_CATEGORIES.find(c => c.id === point.category) || TRAVEL_CATEGORIES[0];
-          const badgeColor = cat.dotColor || '#4f46e5';
+          const badgeColor = cat.dotColor || '#059669';
 
-          // 번호와 이모지가 적힌 커스텀 마커 HTML
+          // 네이버 스타일 모던 핀 마커 HTML (그린/카테고리 포인트 + 핀 꼬리 + 그림자)
           const customHtml = `
-            <div style="background-color: ${badgeColor}; width: 34px; height: 34px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 13px;">
-              ${index + 1}
+            <div style="position: relative; cursor: pointer; transform: translate(-50%, -100%);">
+              <div style="background-color: ${badgeColor}; min-width: 38px; height: 38px; border-radius: 20px; border: 3px solid #ffffff; box-shadow: 0 4px 14px rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; color: #ffffff; font-weight: 900; font-size: 13px; padding: 0 6px; gap: 2px;">
+                <span>${cat.emoji}</span>
+                <span style="font-family: -apple-system, sans-serif;">${index + 1}</span>
+              </div>
+              <div style="position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid ${badgeColor};"></div>
             </div>
           `;
 
           const customIcon = L.divIcon({
             html: customHtml,
             className: 'custom-trip-marker',
-            iconSize: [34, 34],
-            iconAnchor: [17, 17],
-            popupAnchor: [0, -17]
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+            popupAnchor: [0, -42]
           });
 
           const naviQuery = encodeURIComponent(point.placeName || point.address || point.title);
+          const naverDirectUrl = point.lat && point.lng
+            ? `https://map.naver.com/v5/search/${naviQuery}?c=${point.lng},${point.lat},15,0,0,0,dh`
+            : `https://map.naver.com/v5/search/${naviQuery}`;
+
           const popupContent = `
-            <div style="min-width: 180px; padding: 2px; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">
-              <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
-                <span style="font-size: 16px;">${cat.emoji}</span>
-                <span style="font-weight: 800; font-size: 12px; color: #1e293b;">${point.day || 1}일차 - ${index + 1}번째 코스</span>
+            <div style="min-width: 220px; padding: 4px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+              <div style="display: flex; items-center; justify-content: space-between; margin-bottom: 6px;">
+                <span style="display: inline-flex; align-items: center; gap: 3px; font-weight: 800; font-size: 11px; background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 6px;">
+                  <span>${cat.emoji}</span> ${point.day || 1}일차 • ${index + 1}번째 코스
+                </span>
+                <span style="font-size: 11px; font-weight: 700; color: #64748b;">⏰ ${point.time || '시간 미지정'}</span>
               </div>
-              <h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 800; color: #0f172a;">${point.title}</h4>
-              <p style="margin: 0 0 2px 0; font-size: 11px; color: #475569;">⏰ ${point.time || '시간 미지정'} | 📍 ${point.placeName || point.address || '장소명 없음'}</p>
-              ${point.memo ? `<p style="margin: 4px 0; padding: 4px; background: #f8fafc; border-radius: 6px; font-size: 10px; color: #64748b;">💬 ${point.memo}</p>` : ''}
-              <div style="margin-top: 8px; display: flex; gap: 4px;">
-                <a href="https://map.kakao.com/link/search/${naviQuery}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background: #fee500; color: #191919; text-decoration: none; padding: 4px 6px; border-radius: 6px; font-size: 10px; font-weight: 800;">
-                  카카오맵
+              <h4 style="margin: 0 0 6px 0; font-size: 15px; font-weight: 900; color: #0f172a; line-height: 1.3;">${point.title}</h4>
+              <p style="margin: 0 0 4px 0; font-size: 12px; font-weight: 600; color: #334155;">📍 ${point.placeName || '장소명 없음'}</p>
+              ${point.address ? `<p style="margin: 0 0 6px 0; font-size: 11px; color: #64748b;">(${point.address})</p>` : ''}
+              ${point.cost ? `<p style="margin: 0 0 6px 0; font-size: 11px; font-weight: 700; color: #b45309;">💰 ${point.cost}</p>` : ''}
+              ${point.memo ? `<div style="margin: 6px 0; padding: 6px 8px; background: #f8fafc; border-left: 3px solid #10b981; border-radius: 4px; font-size: 11px; color: #475569; line-height: 1.4;">💬 ${point.memo}</div>` : ''}
+              <div style="margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                <a href="${naverDirectUrl}" target="_blank" rel="noopener noreferrer" style="text-align: center; background: #03c75a; color: #ffffff; text-decoration: none; padding: 6px 8px; border-radius: 8px; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 4px; box-shadow: 0 2px 5px rgba(3,199,90,0.3);">
+                  <span>🟢</span> 네이버 지도
                 </a>
-                <a href="https://map.naver.com/v5/search/${naviQuery}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background: #03c75a; color: white; text-decoration: none; padding: 4px 6px; border-radius: 6px; font-size: 10px; font-weight: 800;">
-                  네이버 지도
+                <a href="https://map.kakao.com/link/search/${naviQuery}" target="_blank" rel="noopener noreferrer" style="text-align: center; background: #fee500; color: #191919; text-decoration: none; padding: 6px 8px; border-radius: 8px; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                  <span>🟡</span> 카카오맵
                 </a>
               </div>
             </div>
           `;
 
           const marker = L.marker(latlng, { icon: customIcon }).addTo(map);
-          marker.bindPopup(popupContent);
+          marker.bindPopup(popupContent, { maxWidth: 280 });
           markerGroup.push(marker);
         });
 
-        // 이동 동선 연결선 (Polyline)
+        // 이동 동선 연결선 (Polyline) - 부드러운 에메랄드 그라데이션 라인
         if (latLngs.length > 1) {
           L.polyline(latLngs, {
-            color: '#4f46e5',
-            weight: 4,
+            color: '#059669',
+            weight: 5,
             opacity: 0.85,
             dashArray: '8, 8',
             smoothFactor: 1
@@ -4265,7 +4384,7 @@
 
         // 모든 마커가 화면에 다 보이도록 줌/패닝 맞춤
         const group = L.featureGroup(markerGroup);
-        map.fitBounds(group.getBounds().pad(0.15));
+        map.fitBounds(group.getBounds().pad(0.18));
 
         // 창 크기 변경 시 렌더링 리사이즈 트리거
         setTimeout(() => {
@@ -4275,24 +4394,50 @@
       }, [validPoints, selectedDay]);
 
       return (
-        <div className="relative w-full h-80 sm:h-96 rounded-2xl overflow-hidden border border-indigo-200/80 shadow-inner z-0">
-          <div ref={mapContainerRef} className="w-full h-full" />
-          <div className="absolute top-2.5 right-2.5 z-[1000] bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm text-[11px] font-extrabold text-slate-700 flex items-center space-x-1">
-            <span>🗺️</span>
-            <span>이동 동선 {validPoints.length}곳 연결됨</span>
-          </div>
-          {validPoints.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-50/80 backdrop-blur-xs z-[1001] text-xs text-slate-500 font-bold p-4 text-center">
-              <div>
-                <p className="text-2xl mb-1">📍</p>
-                <p>선택한 일차에 등록된 위치(장소) 정보가 없습니다.</p>
-                <p className="text-[11px] text-slate-400 mt-1">일정 등록 시 장소명을 입력하고 지도에 표시해보세요!</p>
-              </div>
+        <div className="space-y-2">
+          {/* 지도 상단 모던 네이버 연동 바 */}
+          <div className="flex items-center justify-between bg-white px-3 py-2 rounded-2xl border border-slate-200 shadow-2xs flex-wrap gap-2">
+            <div className="flex items-center space-x-2 text-xs font-bold text-slate-700">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px] font-black">N</span>
+              <span>네이버 지도 실시간 연동 뷰</span>
+              <span className="text-[11px] font-normal text-slate-400">({validPoints.length}곳 동선 연결)</span>
             </div>
-          )}
+            <div className="flex items-center space-x-1.5 ml-auto">
+              <a
+                href={naverCourseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs shadow-xs transition flex items-center space-x-1"
+                title="네이버 지도 웹/앱에서 전체 코스 열기"
+              >
+                <span>🟢</span>
+                <span>네이버 지도에서 코스 열기</span>
+                <span>↗</span>
+              </a>
+            </div>
+          </div>
+
+          {/* 지도 캔버스 뷰 */}
+          <div className="relative w-full h-80 sm:h-96 rounded-2xl overflow-hidden border border-emerald-200 shadow-inner z-0">
+            <div ref={mapContainerRef} className="w-full h-full" />
+            <div className="absolute top-2.5 right-2.5 z-[1000] bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm text-[11px] font-black text-slate-700 flex items-center space-x-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>동선 {validPoints.length}곳 연결됨</span>
+            </div>
+            {validPoints.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-50/85 backdrop-blur-xs z-[1001] text-xs text-slate-500 font-bold p-4 text-center">
+                <div>
+                  <p className="text-3xl mb-1">🗺️</p>
+                  <p className="text-sm font-black text-slate-700">선택한 일차에 등록된 장소 좌표가 없습니다.</p>
+                  <p className="text-[11px] text-slate-400 mt-1">일정 등록 시 장소명이나 주소를 입력하면 네이버 지도로 자동 연결됩니다!</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       );
     }
+
 
     // ==================== 신규: 가족 여행 플래너 메인 섹션 ====================
     function TravelSection({
@@ -4433,6 +4578,9 @@
           return;
         }
         setEditingItem(null);
+        // 기본 좌표: 임의의 서울 좌표를 넣지 않고, 여행지 힌트에 맞춰 설정하거나 비워둠 (입력 시 자동 검색됨)
+        const defaultLat = currentTrip?.destination?.includes('제주') ? 33.38 : (currentTrip?.destination?.includes('평창') ? 37.5815 : '');
+        const defaultLng = currentTrip?.destination?.includes('제주') ? 126.55 : (currentTrip?.destination?.includes('평창') ? 128.3245 : '');
         setItemForm({
           day: selectedDay === 'all' ? (targetDay || 1) : Number(selectedDay),
           time: '12:00',
@@ -4442,8 +4590,8 @@
           address: '',
           cost: '',
           memo: '',
-          lat: currentTrip?.destination?.includes('제주') ? 33.38 : 37.56,
-          lng: currentTrip?.destination?.includes('제주') ? 126.55 : 126.97
+          lat: defaultLat,
+          lng: defaultLng
         });
         setIsItemModalOpen(true);
       };
@@ -4470,20 +4618,65 @@
         setIsItemModalOpen(true);
       };
 
+      // 주소 또는 장소명으로 위치(위도/경도) 자동 찾기 헬퍼
+      const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+      const handleAutoGeocode = async (customQuery) => {
+        const query = customQuery || itemForm.address || itemForm.placeName || itemForm.title;
+        if (!query || !query.trim()) {
+          showToast("🔍 검색할 주소나 장소명을 먼저 입력해주세요!");
+          return;
+        }
+        setIsSearchingLocation(true);
+        try {
+          const res = await searchLocationCoordinates(query);
+          if (res && res.lat && res.lng) {
+            setItemForm(prev => ({
+              ...prev,
+              lat: res.lat,
+              lng: res.lng,
+              address: prev.address || (res.name && res.source === 'preset' ? res.name : prev.address)
+            }));
+            showToast(`📍 '${res.name || query}' 위치 좌표를 찾았습니다!`);
+            triggerHaptic(20);
+          } else {
+            showToast("네이버 지도 검색용 키워드로 등록되었습니다. (직접 위경도 입력도 가능)");
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setIsSearchingLocation(false);
+        }
+      };
+
       // 일정 항목 저장 제출 (엄마, 아빠 전용)
-      const onItemSubmit = (e) => {
+      const onItemSubmit = async (e) => {
         e.preventDefault();
         if (!isParent) {
           showToast("⚠️ 엄마, 아빠만 여행 일정을 등록할 수 있습니다.");
           return;
         }
         if (!itemForm.title.trim() || !currentTrip) return;
+
+        let finalLat = itemForm.lat ? Number(itemForm.lat) : undefined;
+        let finalLng = itemForm.lng ? Number(itemForm.lng) : undefined;
+
+        // 좌표가 비어있거나 기존 서울 기본좌표(37.56, 126.97)인데 주소가 성남/도서관 등 다른 곳인 경우 자동 지오코딩 보정
+        const isDefaultSeoul = (finalLat === 37.56 && finalLng === 126.97);
+        if (!finalLat || !finalLng || isDefaultSeoul) {
+          const query = itemForm.address || itemForm.placeName || itemForm.title;
+          const found = await searchLocationCoordinates(query);
+          if (found && found.lat && found.lng) {
+            finalLat = found.lat;
+            finalLng = found.lng;
+          }
+        }
+
         const itemData = {
           ...(editingItem || {}),
           ...itemForm,
           day: Number(itemForm.day) || 1,
-          lat: itemForm.lat ? Number(itemForm.lat) : undefined,
-          lng: itemForm.lng ? Number(itemForm.lng) : undefined
+          lat: finalLat,
+          lng: finalLng
         };
         handleSaveTripItem(currentTrip.id, itemData);
         setIsItemModalOpen(false);
@@ -4704,7 +4897,11 @@
                 </span>
                 <span className="text-[11px] text-slate-400 font-normal">마커를 터치하면 맛집/관광지 정보와 길찾기가 열립니다</span>
               </div>
-              <TravelMapView items={currentTrip?.items || []} selectedDay={selectedDay} />
+              <TravelMapView
+                items={currentTrip?.items || []}
+                selectedDay={selectedDay}
+                tripTitle={currentTrip?.title || currentTrip?.destination || '가족 여행'}
+              />
             </div>
           )}
 
@@ -4813,12 +5010,24 @@
                             </div>
                           </div>
 
-                          {/* 장소 및 주소 */}
+                          {/* 장소 및 주소 (클릭 시 네이버 지도 바로 열기) */}
                           {(item.placeName || item.address) && (
-                            <div className="text-xs text-slate-600 flex items-center space-x-1.5 flex-wrap bg-slate-50 p-2 rounded-xl border border-slate-100">
-                              <span className="font-bold text-slate-800">📍 {item.placeName || '장소명 없음'}</span>
-                              {item.address && <span className="text-slate-400 text-[11px]">({item.address})</span>}
-                            </div>
+                            <a
+                              href={`https://map.naver.com/v5/search/${naviQuery}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-slate-700 flex items-center justify-between flex-wrap bg-slate-50 hover:bg-emerald-50/60 p-2.5 rounded-xl border border-slate-100 hover:border-emerald-200 transition group/addr"
+                              title="네이버 지도에서 장소 상세정보 확인하기"
+                            >
+                              <div className="flex items-center space-x-1.5 flex-wrap">
+                                <span className="font-bold text-slate-900 group-hover/addr:text-emerald-800">📍 {item.placeName || '장소명 없음'}</span>
+                                {item.address && <span className="text-slate-500 text-[11px]">({item.address})</span>}
+                              </div>
+                              <span className="text-[10px] text-emerald-600 font-extrabold flex items-center space-x-0.5 shrink-0 ml-auto pt-0.5">
+                                <span>네이버지도 열기</span>
+                                <span>↗</span>
+                              </span>
+                            </a>
                           )}
 
                           {/* 메모 */}
@@ -4829,26 +5038,26 @@
                           )}
 
                           {/* 하단 길찾기 내비게이션 바로가기 바 */}
-                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] flex-wrap gap-1.5">
                             <span className="text-slate-400">길찾기 바로가기:</span>
                             <div className="flex items-center space-x-1.5">
-                              <a
-                                href={`https://map.kakao.com/link/search/${naviQuery}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2 py-1 rounded-lg bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-extrabold transition flex items-center space-x-1"
-                              >
-                                <span>🟡</span>
-                                <span>카카오맵</span>
-                              </a>
                               <a
                                 href={`https://map.naver.com/v5/search/${naviQuery}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="px-2 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-extrabold transition flex items-center space-x-1"
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black shadow-xs transition flex items-center space-x-1"
                               >
                                 <span>🟢</span>
                                 <span>네이버 지도</span>
+                              </a>
+                              <a
+                                href={`https://map.kakao.com/link/search/${naviQuery}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2.5 py-1 rounded-lg bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-extrabold transition flex items-center space-x-1"
+                              >
+                                <span>🟡</span>
+                                <span>카카오맵</span>
                               </a>
                             </div>
                           </div>
@@ -5082,19 +5291,65 @@
                   </div>
 
                   <div>
-                    <label className="block text-slate-700 font-bold mb-1">상세 주소 (길찾기용)</label>
-                    <input
-                      type="text"
-                      value={itemForm.address}
-                      onChange={(e) => setItemForm({ ...itemForm, address: e.target.value })}
-                      placeholder="예: 제주 제주시 공항로 2"
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-slate-700 font-bold">상세 주소 또는 장소명 (길찾기용)</label>
+                      <button
+                        type="button"
+                        onClick={() => handleAutoGeocode()}
+                        disabled={isSearchingLocation}
+                        className="px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-extrabold text-[11px] border border-emerald-200 transition flex items-center space-x-1"
+                      >
+                        <span>{isSearchingLocation ? '⏳ 찾는 중...' : '🔍 주소로 위치 자동 찾기'}</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="text"
+                        value={itemForm.address}
+                        onChange={(e) => setItemForm({ ...itemForm, address: e.target.value })}
+                        placeholder="예: 경기 성남시 중원구 원터로17번길 46 성남시중원도서관"
+                        className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                      />
+                      {(itemForm.address || itemForm.placeName) && (
+                        <a
+                          href={`https://map.naver.com/v5/search/${encodeURIComponent(itemForm.address || itemForm.placeName)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs shrink-0 flex items-center space-x-1"
+                          title="네이버 지도에서 위치 확인하기"
+                        >
+                          <span>🟢</span>
+                          <span className="hidden sm:inline">네이버지도 확인</span>
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      💡 주소를 입력하고 <span className="font-bold text-emerald-600">[주소로 위치 자동 찾기]</span>를 누르면 지도 좌표가 자동으로 입력됩니다.
+                    </p>
                   </div>
 
                   {/* 지도 좌표 지정 (위도/경도) */}
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                    <span className="block text-[11px] font-extrabold text-slate-700">📍 지도 동선용 좌표 (선택)</span>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold text-slate-700 flex items-center space-x-1">
+                        <span>📍</span>
+                        <span>지도 동선용 좌표</span>
+                        {itemForm.lat && itemForm.lng ? (
+                          <span className="text-[10px] text-emerald-700 bg-emerald-100 font-extrabold px-1.5 py-0.2 rounded-md">좌표 연결됨</span>
+                        ) : (
+                          <span className="text-[10px] text-amber-600 bg-amber-50 font-bold px-1.5 py-0.2 rounded-md">자동 계산 대기</span>
+                        )}
+                      </span>
+                      {itemForm.lat && itemForm.lng && (
+                        <button
+                          type="button"
+                          onClick={() => setItemForm({ ...itemForm, lat: '', lng: '' })}
+                          className="text-[10px] text-slate-400 hover:text-slate-600"
+                        >
+                          초기화
+                        </button>
+                      )}
+                    </div>
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
                       <div>
                         <span className="text-slate-400">위도(Lat):</span>
@@ -5103,8 +5358,8 @@
                           step="any"
                           value={itemForm.lat}
                           onChange={(e) => setItemForm({ ...itemForm, lat: e.target.value })}
-                          placeholder="예: 33.511"
-                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg font-mono text-xs"
+                          placeholder="자동 입력됨"
+                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg font-mono text-xs text-slate-800"
                         />
                       </div>
                       <div>
@@ -5114,12 +5369,14 @@
                           step="any"
                           value={itemForm.lng}
                           onChange={(e) => setItemForm({ ...itemForm, lng: e.target.value })}
-                          placeholder="예: 126.492"
-                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg font-mono text-xs"
+                          placeholder="자동 입력됨"
+                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg font-mono text-xs text-slate-800"
                         />
                       </div>
                     </div>
-                    <p className="text-[10px] text-slate-400">좌표를 비워두셔도 카카오맵/네이버 지도 길찾기 버튼으로 바로 연결됩니다.</p>
+                    <p className="text-[10px] text-slate-400">
+                      직접 찾지 않으셔도 저장 시 주소/장소명을 분석하여 네이버 지도 및 동선에 알맞게 자동 배치됩니다.
+                    </p>
                   </div>
 
                   <div>
@@ -6009,6 +6266,23 @@
               const list = [];
               snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
               if (list.length > 0) {
+                // 기존 저장된 데이터 중 성남/중원도서관 등에 서울 기본좌표(37.56, 126.97)가 남아있는 경우 실시간 좌표 보정
+                list.forEach(trip => {
+                  if (Array.isArray(trip.items)) {
+                    trip.items.forEach(item => {
+                      const addr = (item.address || item.placeName || item.title || '');
+                      if ((item.lat === 37.56 && item.lng === 126.97) || (!item.lat && !item.lng)) {
+                        if (addr.includes('성남') || addr.includes('중원') || addr.includes('원터로')) {
+                          item.lat = 37.4326;
+                          item.lng = 127.1408;
+                        } else if (addr.includes('휘닉스') || addr.includes('평창')) {
+                          item.lat = 37.5815;
+                          item.lng = 128.3245;
+                        }
+                      }
+                    });
+                  }
+                });
                 list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
                 setTrips(list);
                 try { localStorage.setItem('family_trips_backup', JSON.stringify(list)); } catch (e) {}
