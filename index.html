@@ -4315,10 +4315,6 @@
 
         // 카카오맵의 경우:
         // 1) 전체 출발->도착 링크
-        const start = validPoints[0];
-        const end = validPoints[validPoints.length - 1];
-        const sName = encodeURIComponent(start.placeName || start.title || '출발지');
-        const eName = encodeURIComponent(end.placeName || end.title || '도착지');
         const kakaoUrl = `https://map.kakao.com/link/from/${sName},${start.lat},${start.lng}/to/${eName},${end.lat},${end.lng}`;
 
         // 2) 카카오맵 및 네이버 지도 구간별(Legs: 1->2, 2->3 등) 릴레이 길찾기 링크 목록
