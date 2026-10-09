@@ -7759,11 +7759,11 @@
                   </div>
 
                   {/* 1. 📖 독서 활동 및 완독 현황 */}
-                  <div className="p-3.5 rounded-2xl border border-amber-200 bg-amber-50/40 space-y-2">
-                    <div className="flex items-center justify-between">
+                  <div className="p-3.5 rounded-2xl border border-amber-200 bg-amber-50/40 space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-amber-200/80 pb-1.5">
                       <span className="font-black text-amber-900 text-xs flex items-center space-x-1">
                         <span>📖</span>
-                        <span>독서 시간 및 완독 도서 현황</span>
+                        <span>독서 활동 및 완독 도서 상세 기록</span>
                       </span>
                       <span className="text-[10px] text-amber-800 font-bold">총 {readingLogs.length}건 기록</span>
                     </div>
@@ -7788,15 +7788,54 @@
                               <span>누적 독서: <strong>{formatMinutesToHours(totalMins)}</strong></span>
                               <span>완독: <strong className="text-emerald-600">{completedBooks.length}권</strong></span>
                             </div>
-                            {completedBooks.length > 0 && (
-                              <div className="pt-1 border-t border-slate-100 text-[10px] text-slate-500 truncate">
-                                최근 완독: {completedBooks.slice(-2).map(b => `[${b.bookTitle}]`).join(', ')}
-                              </div>
-                            )}
                           </div>
                         );
                       })}
                     </div>
+
+                    {/* 전체 독서 활동 및 책 이름 상세 기록 리스트 */}
+                    {readingLogs.length === 0 ? (
+                      <div className="text-center py-3 bg-white/70 rounded-xl text-[11px] text-slate-400">
+                        기록된 독서 활동이 없습니다.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="text-[10px] font-black text-amber-900">📚 독서 기록 및 읽은 책 상세 내역:</div>
+                        <div className="space-y-1.5 max-h-60 overflow-y-auto no-scrollbar pr-0.5">
+                          {[...readingLogs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map((log, idx) => {
+                            const kid = KIDS_MEMBERS.find(k => k.id === log.childId) || { name: log.childName || '어린이', avatar: '👶' };
+                            return (
+                              <div key={log.id || idx} className="p-2 rounded-xl bg-white border border-amber-200/90 flex flex-col space-y-1 text-[11px]">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-1.5 font-bold">
+                                    <span>{kid.avatar}</span>
+                                    <span className="text-slate-800">{kid.name}</span>
+                                    <span className="text-amber-800 font-extrabold">
+                                      {log.bookTitle ? `《${log.bookTitle}》` : '자유 독서'}
+                                    </span>
+                                    {log.isCompleted && (
+                                      <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded-full font-black border border-emerald-200">
+                                        ✨ 완독
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center space-x-1.5 text-[10px] text-slate-400 font-medium">
+                                    <span className="text-amber-700 font-bold">⏱️ {log.minutes}분</span>
+                                    <span>•</span>
+                                    <span>{log.date}</span>
+                                  </div>
+                                </div>
+                                {log.notes && (
+                                  <p className="text-slate-600 text-[10px] bg-amber-50/50 p-1.5 rounded-lg border border-amber-100 italic leading-snug">
+                                    💬 "{log.notes}"
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 2. 🌟 칭찬 스티커 & 🎮 게임 시간 현황 */}
