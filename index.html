@@ -4163,6 +4163,9 @@
       { keywords: ['야탑역', '야탑'], lat: 37.4113, lng: 127.1287, label: '야탑역' },
       { keywords: ['모란역', '모란'], lat: 37.4322, lng: 127.1290, label: '모란역' },
       { keywords: ['서현역', '분당'], lat: 37.3850, lng: 127.1233, label: '서현역' },
+      { keywords: ['소금산그랜드밸리', '소금산', '간현유원지', '소금산출렁다리', '소금산울렁다리', '지정로317', '판대리'], lat: 37.3653, lng: 127.8288, label: '원주 소금산그랜드밸리' },
+      { keywords: ['뮤지엄산', '뮤지엄SAN'], lat: 37.3995, lng: 127.8690, label: '원주 뮤지엄산' },
+      { keywords: ['원주시청', '원주역', '만종역'], lat: 37.3422, lng: 127.9202, label: '강원도 원주시' },
       { keywords: ['휘닉스파크', '평창휘닉스', '휘닉스 평창', '휘닉스'], lat: 37.5815, lng: 128.3245, label: '휘닉스 평창' },
       { keywords: ['블루캐니언'], lat: 37.5802, lng: 128.3262, label: '휘닉스 평창 블루캐니언' },
       { keywords: ['루지랜드'], lat: 37.5826, lng: 128.3220, label: '휘닉스 평창 루지랜드' },
@@ -4227,6 +4230,9 @@
       }
 
       // 3. 지역명 기반 대표 좌표 폴백
+      if (clean.includes('소금산') || clean.includes('원주') || clean.includes('지정면') || clean.includes('간현') || clean.includes('문막')) {
+        return { lat: 37.3653, lng: 127.8288, name: '원주시 일대 (소금산)', source: 'region_fallback' };
+      }
       if (clean.includes('성남') || clean.includes('중원') || clean.includes('분당')) {
         return { lat: 37.4326, lng: 127.1408, name: '성남시 일대', source: 'region_fallback' };
       }
@@ -4315,6 +4321,12 @@
           return typeof item.lat === 'number' && typeof item.lng === 'number' && !isNaN(item.lat) && !isNaN(item.lng);
         }).map(item => {
           const addr = (item.address || item.placeName || item.title || '');
+          // 1. 소금산그랜드밸리 / 원주 권역 오인식(서울 37.56 또는 미등록) 자동 정밀 교정
+          if ((addr.includes('소금산') || addr.includes('간현') || addr.includes('원주') || addr.includes('지정로')) &&
+              (item.lat === 37.56 || item.lat === 37.5815 || Math.abs(item.lat - 37.3653) > 0.1)) {
+            return { ...item, lat: 37.3653, lng: 127.8288 };
+          }
+          // 2. 미가연 / 봉평메밀 오인식 자동 교정
           if ((addr.includes('미가연') || addr.includes('봉평메밀')) && (item.lat === 37.5815 || item.lat === 37.56)) {
             return { ...item, lat: 37.60155, lng: 128.39344 };
           }
@@ -4598,16 +4610,44 @@
                   </span>
                 )}
               </div>
-              <div className="flex items-center space-x-1.5 ml-auto">
+              <div className="flex items-center space-x-1.5 ml-auto flex-wrap gap-1">
+                {validPoints.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const textLines = validPoints.map((pt, idx) => {
+                        const name = pt.placeName || pt.title || `장소 ${idx + 1}`;
+                        const addr = pt.address ? ` (${pt.address})` : '';
+                        return `${idx + 1}. ${name}${addr}`;
+                      });
+                      const courseText = `[${tripTitle} ${selectedDay === 'all' ? '전체' : selectedDay + '일차'} 코스]\n` + textLines.join('\n➔ ');
+                      if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(courseText).then(() => {
+                          showToast("📋 전체 코스 경유지가 복사되었습니다! 네이버 지도 경유지에 붙여넣으세요.");
+                          triggerHaptic(20);
+                        }).catch(() => {
+                          prompt("아래 코스를 복사하세요:", courseText);
+                        });
+                      } else {
+                        prompt("아래 코스를 복사하세요:", courseText);
+                      }
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs transition flex items-center space-x-1 border border-slate-300 shadow-2xs"
+                    title="전체 경유지 코스 텍스트를 복사하여 네이버 지도 경유지에 붙여넣기"
+                  >
+                    <span>📋</span>
+                    <span>전체 코스 복사</span>
+                  </button>
+                )}
                 <a
                   href={navigationUrls.naver}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs transition flex items-center space-x-1"
-                  title="네이버 지도에서 출발지 ➔ 도착지 자동차 경로 바로 열기"
+                  title="네이버 지도에서 출발지 ➔ 도착지 직행 자동차 경로 바로 열기"
                 >
                   <span>🟢</span>
-                  <span>네이버 길찾기</span>
+                  <span>네이버 직행</span>
                   <span>↗</span>
                 </a>
                 {navigationUrls.isRoute && (
@@ -4616,10 +4656,10 @@
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-2.5 py-1.5 rounded-xl bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-extrabold text-xs transition flex items-center space-x-1"
-                    title="카카오맵에서 출발지 ➔ 도착지 자동차 경로 바로 열기"
+                    title="카카오맵에서 출발지 ➔ 도착지 직행 자동차 경로 바로 열기"
                   >
                     <span>🟡</span>
-                    <span>카카오 길찾기</span>
+                    <span>카카오 직행</span>
                   </a>
                 )}
               </div>
@@ -4633,8 +4673,8 @@
                     <span>🚗</span>
                     <span>구간별 상세 이동 경로 및 소요시간 ({navigationUrls.legs.length}개 구간):</span>
                   </span>
-                  <span className="text-[10px] text-slate-400">
-                    💡 각 구간을 클릭하시면 해당 목적지까지 네이버/카카오 길찾기가 100% 정확하게 열립니다.
+                  <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                    💡 네이버·카카오 외부 연동 정책상 웹 링크는 구간별(1구간, 2구간 등)로 연결됩니다. 각 구간 버튼을 누르면 해당 경로가 100% 정확하게 열립니다!
                   </span>
                 </div>
                 <div className="flex items-center flex-wrap gap-1.5">
