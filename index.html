@@ -4177,6 +4177,7 @@
       { keywords: ['용평리조트', '모나용평'], lat: 37.6444, lng: 128.6802, label: '모나용평' },
       { keywords: ['알펜시아'], lat: 37.6548, lng: 128.6720, label: '알펜시아 리조트' },
       { keywords: ['대관령양떼목장', '양떼목장'], lat: 37.6888, lng: 128.7513, label: '대관령양떼목장' },
+      { keywords: ['순두부젤라또', '순두부 젤라또', '젤라또아이스크림', '젤라또 아이스크림', '젤라또', '초당순두부길95'], lat: 37.7845, lng: 128.9168, label: '강릉 순두부젤라또' },
       { keywords: ['정동진레일바이크', '정동진 레일바이크', '정동진역', '정동역길'], lat: 37.6830, lng: 129.0325, label: '정동진 레일바이크' },
       { keywords: ['강문해변', '강문해수욕장', '강문'], lat: 37.7948, lng: 128.9194, label: '강문해변' },
       { keywords: ['안목해변', '강릉커피거리'], lat: 37.7719, lng: 128.9483, label: '강릉 안목해변' },
@@ -4244,8 +4245,8 @@
       if (clean.includes('평창')) {
         return { lat: 37.3707, lng: 128.3902, name: '평창군 일대', source: 'region_fallback' };
       }
-      if (clean.includes('강릉') || clean.includes('경포')) {
-        return { lat: 37.7518, lng: 128.8760, name: '강릉 일대', source: 'region_fallback' };
+      if (clean.includes('강릉') || clean.includes('경포') || clean.includes('초당') || clean.includes('정동진') || clean.includes('젤라또') || clean.includes('아이스크림')) {
+        return { lat: 37.7845, lng: 128.9168, name: '강릉 초당/젤라또 일대', source: 'region_fallback' };
       }
       if (clean.includes('속초')) {
         return { lat: 37.2046, lng: 128.5902, name: '속초 일대', source: 'region_fallback' };
@@ -4331,6 +4332,22 @@
           // 2. 미가연 / 봉평메밀 오인식 자동 교정
           if ((addr.includes('미가연') || addr.includes('봉평메밀')) && (item.lat === 37.5815 || item.lat === 37.56)) {
             return { ...item, lat: 37.60155, lng: 128.39344 };
+          }
+          // 3. 젤라또 / 아이스크림 / 순두부젤라또 서울 오인식 자동 교정 (강릉 초당 젤라또로 보정)
+          if ((addr.includes('젤라또') || addr.includes('아이스크림')) && (item.lat === 37.56 && item.lng === 126.97 || Math.abs(item.lat - 37.56) < 0.1)) {
+            return { ...item, lat: 37.7845, lng: 128.9168 };
+          }
+          // 4. 정동진 레일바이크 / 정동역길 오인식 자동 교정
+          if (addr.includes('정동진') || addr.includes('레일바이크') || addr.includes('정동역길')) {
+            if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245)) {
+              return { ...item, lat: 37.6830, lng: 129.0325 };
+            }
+          }
+          // 5. 강문해변 오인식 자동 교정
+          if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
+            if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97)) {
+              return { ...item, lat: 37.7948, lng: 128.9194 };
+            }
           }
           return item;
         });
@@ -6802,6 +6819,14 @@
                         if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97)) {
                           item.lat = 37.7948;
                           item.lng = 128.9194;
+                        }
+                      }
+
+                      // 젤라또 / 아이스크림 강릉 초당 정밀 좌표 자동 보정
+                      if (addr.includes('젤라또') || addr.includes('아이스크림')) {
+                        if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245) || Math.abs(item.lat - 37.56) < 0.1) {
+                          item.lat = 37.7845;
+                          item.lng = 128.9168;
                         }
                       }
                     });

@@ -158,6 +158,12 @@
               return { ...item, lat: 37.7948, lng: 128.9194 };
             }
           }
+          // 젤라또 / 아이스크림 강릉 초당 정밀 좌표 자동 보정
+          if (addr.includes('젤라또') || addr.includes('아이스크림')) {
+            if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245) || Math.abs(item.lat - 37.56) < 0.1) {
+              return { ...item, lat: 37.7845, lng: 128.9168 };
+            }
+          }
           return item;
         });
       }, [items, selectedDay]);
@@ -590,6 +596,11 @@
                     if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
                       if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97)) {
                         item.lat = 37.7948; item.lng = 128.9194;
+                      }
+                    }
+                    if (addr.includes('젤라또') || addr.includes('아이스크림')) {
+                      if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245) || Math.abs(item.lat - 37.56) < 0.1) {
+                        item.lat = 37.7845; item.lng = 128.9168;
                       }
                     }
                     if (!item.placeName || !item.placeName.trim()) {
