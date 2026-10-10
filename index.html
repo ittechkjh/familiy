@@ -4212,7 +4212,37 @@
         }
       }
 
-      // 2. 오픈 지오코더(Nominatim) 비동기 호출 (CORS 허용)
+      // 2. 한국 도로명/지번 행정구역 및 시/군/구 정밀 분석 엔진
+      const KOREAN_CITIES = [
+        { keys: ['강릉', '주문진', '초당', '경포', '강문', '정동진', '안목', '사천'], lat: 37.7845, lng: 128.9168, name: '강원도 강릉시' },
+        { keys: ['봉평', '대관령', '진부', '용평', '알펜시아', '휘닉스', '평창'], lat: 37.5815, lng: 128.3245, name: '강원도 평창군' },
+        { keys: ['소금산', '간현', '지정면', '문막', '원주'], lat: 37.3653, lng: 127.8288, name: '강원도 원주시' },
+        { keys: ['속초', '대포항', '동명항', '설악'], lat: 37.2046, lng: 128.5902, name: '강원도 속초시' },
+        { keys: ['춘천', '남이섬', '소양강', '강촌'], lat: 37.8813, lng: 127.7298, name: '강원도 춘천시' },
+        { keys: ['동해', '묵호', '망상', '추암'], lat: 37.5247, lng: 129.1143, name: '강원도 동해시' },
+        { keys: ['양양', '낙산', '하조대', '서피비치'], lat: 38.0754, lng: 128.6189, name: '강원도 양양군' },
+        { keys: ['고성', '화진포', '송지호'], lat: 38.3806, lng: 128.4677, name: '강원도 고성군' },
+        { keys: ['삼척', '장호항', '환선굴'], lat: 37.4499, lng: 129.1652, name: '강원도 삼척시' },
+        { keys: ['홍천', '비발디'], lat: 37.6972, lng: 127.8887, name: '강원도 홍천군' },
+        { keys: ['횡성', '둔내'], lat: 37.4918, lng: 127.9850, name: '강원도 횡성군' },
+        { keys: ['정선', '하이원', '민둥산'], lat: 37.3806, lng: 128.6608, name: '강원도 정선군' },
+        { keys: ['영월', '동강'], lat: 37.1838, lng: 128.4619, name: '강원도 영월군' },
+        { keys: ['중원도서관', '성남', '분당', '판교', '모란', '야탑'], lat: 37.4326, lng: 127.1408, name: '경기도 성남시' },
+        { keys: ['수원', '영통', '광교'], lat: 37.2636, lng: 127.0286, name: '경기도 수원시' },
+        { keys: ['용인', '수지', '기흥', '처인'], lat: 37.2411, lng: 127.1776, name: '경기도 용인시' },
+        { keys: ['제주', '서귀포', '애월', '한림', '성산', '조천', '구좌', '표선', '안덕'], lat: 33.3846, lng: 126.5535, name: '제주특별자치도' },
+        { keys: ['해운대', '광안리', '기장', '서면', '부산'], lat: 35.1795, lng: 129.0756, name: '부산광역시' },
+        { keys: ['여수', '돌산', '오동도'], lat: 34.7604, lng: 127.6622, name: '전라남도 여수시' },
+        { keys: ['경주', '보문'], lat: 35.8562, lng: 129.2247, name: '경상북도 경주시' }
+      ];
+
+      for (const city of KOREAN_CITIES) {
+        if (city.keys.some(k => clean.includes(k))) {
+          return { lat: city.lat, lng: city.lng, name: city.name, source: 'korean_address_parser' };
+        }
+      }
+
+      // 3. 오픈 지오코더(Nominatim) 비동기 호출 (CORS 허용)
       try {
         const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=kr&limit=1&q=${encodeURIComponent(clean)}`;
         const resp = await fetch(url, { headers: { 'Accept-Language': 'ko,en' } });
@@ -4230,32 +4260,6 @@
         }
       } catch (err) {
         console.warn('Geocoding API network check skipped:', err);
-      }
-
-      // 3. 지역명 기반 대표 좌표 폴백
-      if (clean.includes('소금산') || clean.includes('원주') || clean.includes('지정면') || clean.includes('간현') || clean.includes('문막')) {
-        return { lat: 37.3653, lng: 127.8288, name: '원주시 일대 (소금산)', source: 'region_fallback' };
-      }
-      if (clean.includes('성남') || clean.includes('중원') || clean.includes('분당')) {
-        return { lat: 37.4326, lng: 127.1408, name: '성남시 일대', source: 'region_fallback' };
-      }
-      if (clean.includes('봉평')) {
-        return { lat: 37.6033, lng: 128.3811, name: '평창 봉평면 일대', source: 'region_fallback' };
-      }
-      if (clean.includes('평창')) {
-        return { lat: 37.3707, lng: 128.3902, name: '평창군 일대', source: 'region_fallback' };
-      }
-      if (clean.includes('강릉') || clean.includes('경포') || clean.includes('초당') || clean.includes('정동진') || clean.includes('젤라또') || clean.includes('아이스크림')) {
-        return { lat: 37.7845, lng: 128.9168, name: '강릉 초당/젤라또 일대', source: 'region_fallback' };
-      }
-      if (clean.includes('속초')) {
-        return { lat: 37.2046, lng: 128.5902, name: '속초 일대', source: 'region_fallback' };
-      }
-      if (clean.includes('제주') || clean.includes('서귀포')) {
-        return { lat: 33.38, lng: 126.55, name: '제주도 일대', source: 'region_fallback' };
-      }
-      if (clean.includes('부산') || clean.includes('해운대')) {
-        return { lat: 35.1795, lng: 129.0756, name: '부산 일대', source: 'region_fallback' };
       }
 
       return null;
@@ -4333,21 +4337,29 @@
           if ((addr.includes('미가연') || addr.includes('봉평메밀')) && (item.lat === 37.5815 || item.lat === 37.56)) {
             return { ...item, lat: 37.60155, lng: 128.39344 };
           }
-          // 3. 젤라또 / 아이스크림 / 순두부젤라또 서울 오인식 자동 교정 (강릉 초당 젤라또로 보정)
-          if ((addr.includes('젤라또') || addr.includes('아이스크림')) && (item.lat === 37.56 && item.lng === 126.97 || Math.abs(item.lat - 37.56) < 0.1)) {
-            return { ...item, lat: 37.7845, lng: 128.9168 };
+          // 3. 강릉 관련 명소(젤라또, 순두부, 강문, 정동진, 초당, 안목, 경포 등)가 강릉 외 지역(성남/서울/평창 등)에 꽂힌 경우 강릉 실제 좌표로 강제 보정
+          if (addr.includes('젤라또') || addr.includes('아이스크림') || (addr.includes('초당') && !addr.includes('원터로')) || (addr.includes('강릉') && !addr.includes('성남'))) {
+            if (addr.includes('정동진') || addr.includes('레일바이크') || addr.includes('정동역길')) {
+              return { ...item, lat: 37.6830, lng: 129.0325 };
+            }
+            if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
+              return { ...item, lat: 37.7948, lng: 128.9194 };
+            }
+            if (addr.includes('안목') || addr.includes('커피거리')) {
+              return { ...item, lat: 37.7719, lng: 128.9483 };
+            }
+            // 젤라또/순두부/초당마을 기본
+            if (item.lat < 37.65 || item.lng < 128.80) {
+              return { ...item, lat: 37.7845, lng: 128.9168 };
+            }
           }
           // 4. 정동진 레일바이크 / 정동역길 오인식 자동 교정
           if (addr.includes('정동진') || addr.includes('레일바이크') || addr.includes('정동역길')) {
-            if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245)) {
-              return { ...item, lat: 37.6830, lng: 129.0325 };
-            }
+            return { ...item, lat: 37.6830, lng: 129.0325 };
           }
           // 5. 강문해변 오인식 자동 교정
           if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
-            if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97)) {
-              return { ...item, lat: 37.7948, lng: 128.9194 };
-            }
+            return { ...item, lat: 37.7948, lng: 128.9194 };
           }
           return item;
         });
@@ -6806,27 +6818,15 @@
                         item.placeName = (item.title || '').trim() || '장소';
                       }
 
-                      // 정동진 레일바이크/정동역길 정밀 좌표 자동 보정
-                      if (addr.includes('정동진') || addr.includes('레일바이크') || addr.includes('정동역길')) {
-                        if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245)) {
-                          item.lat = 37.6830;
-                          item.lng = 129.0325;
-                        }
-                      }
-
-                      // 강문해변 정밀 좌표 자동 보정
-                      if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
-                        if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97)) {
-                          item.lat = 37.7948;
-                          item.lng = 128.9194;
-                        }
-                      }
-
-                      // 젤라또 / 아이스크림 강릉 초당 정밀 좌표 자동 보정
-                      if (addr.includes('젤라또') || addr.includes('아이스크림')) {
-                        if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245) || Math.abs(item.lat - 37.56) < 0.1) {
-                          item.lat = 37.7845;
-                          item.lng = 128.9168;
+                      if (addr.includes('강릉') || addr.includes('초당') || addr.includes('젤라또') || addr.includes('아이스크림')) {
+                        if (addr.includes('정동진') || addr.includes('레일바이크') || addr.includes('정동역길')) {
+                          item.lat = 37.6830; item.lng = 129.0325;
+                        } else if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
+                          item.lat = 37.7948; item.lng = 128.9194;
+                        } else if (addr.includes('안목') || addr.includes('커피거리')) {
+                          item.lat = 37.7719; item.lng = 128.9483;
+                        } else if (item.lat < 37.65 || item.lng < 128.80) {
+                          item.lat = 37.7845; item.lng = 128.9168;
                         }
                       }
                     });

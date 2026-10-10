@@ -146,23 +146,29 @@
           if ((addr.includes('미가연') || addr.includes('봉평메밀')) && (item.lat === 37.5815 || item.lat === 37.56)) {
             return { ...item, lat: 37.60155, lng: 128.39344 };
           }
-          // 정동진 레일바이크 오인식 자동 교정
-          if (addr.includes('정동진') || addr.includes('레일바이크') || addr.includes('정동역길')) {
-            if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245)) {
+          // 3. 강릉 관련 명소(젤라또, 순두부, 강문, 정동진, 초당, 안목, 경포 등)가 강릉 외 지역(성남/서울/평창 등)에 꽂힌 경우 강릉 실제 좌표로 강제 보정
+          if (addr.includes('젤라또') || addr.includes('아이스크림') || (addr.includes('초당') && !addr.includes('원터로')) || (addr.includes('강릉') && !addr.includes('성남'))) {
+            if (addr.includes('정동진') || addr.includes('레일바이크') || addr.includes('정동역길')) {
               return { ...item, lat: 37.6830, lng: 129.0325 };
             }
-          }
-          // 강문해변 오인식 자동 교정
-          if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
-            if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97)) {
+            if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
               return { ...item, lat: 37.7948, lng: 128.9194 };
             }
-          }
-          // 젤라또 / 아이스크림 강릉 초당 정밀 좌표 자동 보정
-          if (addr.includes('젤라또') || addr.includes('아이스크림')) {
-            if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245) || Math.abs(item.lat - 37.56) < 0.1) {
+            if (addr.includes('안목') || addr.includes('커피거리')) {
+              return { ...item, lat: 37.7719, lng: 128.9483 };
+            }
+            // 젤라또/순두부/초당마을 기본
+            if (item.lat < 37.65 || item.lng < 128.80) {
               return { ...item, lat: 37.7845, lng: 128.9168 };
             }
+          }
+          // 4. 정동진 레일바이크 / 정동역길 오인식 자동 교정
+          if (addr.includes('정동진') || addr.includes('레일바이크') || addr.includes('정동역길')) {
+            return { ...item, lat: 37.6830, lng: 129.0325 };
+          }
+          // 5. 강문해변 오인식 자동 교정
+          if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
+            return { ...item, lat: 37.7948, lng: 128.9194 };
           }
           return item;
         });
@@ -588,18 +594,14 @@
                     if (addr.includes('미가연') || addr.includes('봉평메밀') || addr.includes('기풍로')) {
                       item.lat = 37.60155; item.lng = 128.39344;
                     }
-                    if (addr.includes('정동진') || addr.includes('레일바이크') || addr.includes('정동역길')) {
-                      if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245)) {
+                    if (addr.includes('강릉') || addr.includes('초당') || addr.includes('젤라또') || addr.includes('아이스크림')) {
+                      if (addr.includes('정동진') || addr.includes('레일바이크') || addr.includes('정동역길')) {
                         item.lat = 37.6830; item.lng = 129.0325;
-                      }
-                    }
-                    if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
-                      if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97)) {
+                      } else if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
                         item.lat = 37.7948; item.lng = 128.9194;
-                      }
-                    }
-                    if (addr.includes('젤라또') || addr.includes('아이스크림')) {
-                      if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245) || Math.abs(item.lat - 37.56) < 0.1) {
+                      } else if (addr.includes('안목') || addr.includes('커피거리')) {
+                        item.lat = 37.7719; item.lng = 128.9483;
+                      } else if (item.lat < 37.65 || item.lng < 128.80) {
                         item.lat = 37.7845; item.lng = 128.9168;
                       }
                     }
