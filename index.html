@@ -30,6 +30,8 @@
   <!-- Leaflet 지도 CDN (무료 오픈스트리트맵 호환) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Daum/카카오 공식 도로명 주소 검색 API (무료, API키 불필요) -->
+  <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 
   <style>
     .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -4201,20 +4203,81 @@
       { keywords: ['롯데월드'], lat: 37.5111, lng: 127.0982, label: '롯데월드' }
     ];
 
-    // 주소 또는 장소 텍스트로 위도/경도를 찾는 함수 (오프라인/온라인 하이브리드 지오코딩)
+    // 한국 주소 텍스트 정제 헬퍼 (층수, 호수, 괄호 부가설명, 상가 수식어 등 제거)
+    function cleanKoreanAddress(addrStr) {
+      if (!addrStr || typeof addrStr !== 'string') return '';
+      let clean = addrStr.trim();
+      // 1. 괄호 내용 제거 (예: (초당동), [별관])
+      clean = clean.replace(/\([^)]*\)/g, ' ').replace(/\[[^\]]*\]/g, ' ');
+      // 2. 층수/호수/지하/동 등 건물 내부 상세 위치 제거 (예: 1층, 지하 1층, 201호, 101동)
+      clean = clean.replace(/\b(지하\s*\d+|\d+)\s*층\b/g, ' ');
+      clean = clean.replace(/\b(B\d+|b\d+)\b/g, ' ');
+      clean = clean.replace(/\b\d+\s*호\b/g, ' ');
+      clean = clean.replace(/\b\d+\s*동\b/g, ' ');
+      // 3. 상가, 본점, 직영점 등 수식어 제거
+      clean = clean.replace(/\b(본점|직영점|가맹점|상가|별관|본관)\b/g, ' ');
+      // 4. 연속 공백 축소
+      clean = clean.replace(/\s+/g, ' ').trim();
+      return clean;
+    }
+
+    // 주소 또는 장소 텍스트로 위도/경도를 찾는 함수 (정밀 주소 우선 + 지오코딩 API + 폴백)
     async function searchLocationCoordinates(query) {
       if (!query || typeof query !== 'string') return null;
       const clean = query.trim();
       if (!clean) return null;
 
-      // 1. 사전 등록 랜드마크 우선 매칭 (초고속, 오프라인 즉시 보정)
+      // 1. 사전 등록 랜드마크 우선 매칭 (고유 명소/관광지 즉시 보정)
       for (const item of KOREA_LANDMARKS) {
-        if (item.keywords.some(k => clean.includes(k) || k.includes(clean))) {
+        if (item.keywords.some(k => clean.includes(k))) {
           return { lat: item.lat, lng: item.lng, name: item.label, source: 'preset' };
         }
       }
 
-      // 2. 한국 도로명/지번 행정구역 및 시/군/구 정밀 분석 엔진
+      // 2. [최우선] 한국 도로명/지번 정밀 주소 온라인 지오코딩
+      // 시/군/구 대표 좌표로 뭉개지 않고, 건물 번지수까지 실제 위치를 먼저 찾습니다.
+      const cleanedAddr = cleanKoreanAddress(clean);
+      const searchCandidates = [];
+      if (cleanedAddr) searchCandidates.push(cleanedAddr);
+
+      // "강원 강릉시 난설헌로 219" -> "강릉시 난설헌로 219" (도 단위 제외 시/군/구 이하)
+      const localMatch = cleanedAddr.match(/(?:[가-힣]{2,4}[시군구])\s+.+/);
+      if (localMatch && localMatch[0] !== cleanedAddr) {
+        searchCandidates.push(localMatch[0]);
+      }
+      // "난설헌로 219" (도로명 + 번호만 추출)
+      const roadMatch = cleanedAddr.match(/[가-힣0-9]+(?:로|길)\s*\d+(?:-\d+)?/);
+      if (roadMatch && roadMatch[0] !== cleanedAddr && !searchCandidates.includes(roadMatch[0])) {
+        searchCandidates.push(roadMatch[0]);
+      }
+
+      for (const q of searchCandidates) {
+        try {
+          const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=kr&limit=1&q=${encodeURIComponent(q)}`;
+          const resp = await fetch(url, { headers: { 'Accept-Language': 'ko,en' } });
+          if (resp.ok) {
+            const list = await resp.json();
+            if (Array.isArray(list) && list.length > 0) {
+              const first = list[0];
+              const lat = parseFloat(first.lat);
+              const lng = parseFloat(first.lon);
+              // 대한민국 영역 위경도 유효성 검사 (위도 33~39, 경도 124~132)
+              if (!isNaN(lat) && !isNaN(lng) && lat >= 33 && lat <= 39 && lng >= 124 && lng <= 132) {
+                return {
+                  lat,
+                  lng,
+                  name: first.display_name,
+                  source: 'api'
+                };
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Geocoding API network query skipped for:', q, err);
+        }
+      }
+
+      // 3. [폴백] 주소 검색 API에서 결과를 찾지 못했거나 오프라인일 때만 행정구역 대표 권역 좌표 할당
       const KOREAN_CITIES = [
         { keys: ['강릉', '주문진', '초당', '경포', '강문', '정동진', '안목', '사천'], lat: 37.7845, lng: 128.9168, name: '강원도 강릉시' },
         { keys: ['봉평', '대관령', '진부', '용평', '알펜시아', '휘닉스', '평창'], lat: 37.5815, lng: 128.3245, name: '강원도 평창군' },
@@ -4242,26 +4305,6 @@
         if (city.keys.some(k => clean.includes(k))) {
           return { lat: city.lat, lng: city.lng, name: city.name, source: 'korean_address_parser' };
         }
-      }
-
-      // 3. 오픈 지오코더(Nominatim) 비동기 호출 (CORS 허용)
-      try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=kr&limit=1&q=${encodeURIComponent(clean)}`;
-        const resp = await fetch(url, { headers: { 'Accept-Language': 'ko,en' } });
-        if (resp.ok) {
-          const list = await resp.json();
-          if (Array.isArray(list) && list.length > 0) {
-            const first = list[0];
-            return {
-              lat: parseFloat(first.lat),
-              lng: parseFloat(first.lon),
-              name: first.display_name,
-              source: 'api'
-            };
-          }
-        }
-      } catch (err) {
-        console.warn('Geocoding API network check skipped:', err);
       }
 
       return null;
@@ -4984,6 +5027,32 @@
         }
       };
 
+      // Daum 공식 우편번호/도로명 주소 검색 팝업 연동
+      const handleOpenPostcode = () => {
+        if (typeof window !== 'undefined' && window.daum && window.daum.Postcode) {
+          try {
+            new window.daum.Postcode({
+              oncomplete: function(data) {
+                const fullRoadAddr = data.roadAddress || data.jibunAddress || data.address || '';
+                setItemForm(prev => ({
+                  ...prev,
+                  address: fullRoadAddr,
+                  placeName: prev.placeName || data.buildingName || ''
+                }));
+                if (fullRoadAddr) {
+                  handleAutoGeocode(fullRoadAddr);
+                }
+              }
+            }).open();
+          } catch (err) {
+            console.warn('Daum postcode open error:', err);
+            handleAutoGeocode();
+          }
+        } else {
+          handleAutoGeocode();
+        }
+      };
+
       // 일정 항목 저장 제출 (엄마, 아빠 전용)
       const onItemSubmit = async (e) => {
         e.preventDefault();
@@ -4996,11 +5065,12 @@
         let finalLat = itemForm.lat ? Number(itemForm.lat) : undefined;
         let finalLng = itemForm.lng ? Number(itemForm.lng) : undefined;
 
-        // 좌표가 비어있거나, 이전 기본좌표(서울 기본 37.56 또는 평창휘닉스 기본 37.5815)인데 입력된 장소명이 다른 경우 최신 정밀 지오코딩
+        // 좌표가 비어있거나, 주소가 입력되어 있거나, 기본 좌표 충돌인 경우 최신 정밀 지오코딩
         const query = itemForm.address || itemForm.placeName || itemForm.title;
+        const hasAddressInput = !!(itemForm.address && itemForm.address.trim());
         const isPresetCollision = (finalLat === 37.56 && finalLng === 126.97) ||
           (!query.includes('휘닉스') && finalLat === 37.5815 && finalLng === 128.3245);
-        if (!finalLat || !finalLng || isPresetCollision) {
+        if (!finalLat || !finalLng || isPresetCollision || hasAddressInput) {
           const found = await searchLocationCoordinates(query);
           if (found && found.lat && found.lng) {
             finalLat = found.lat;
@@ -5798,21 +5868,32 @@
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-slate-700 font-bold">상세 주소 또는 장소명 (길찾기용)</label>
-                      <button
-                        type="button"
-                        onClick={() => handleAutoGeocode()}
-                        disabled={isSearchingLocation}
-                        className="px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-extrabold text-[11px] border border-emerald-200 transition flex items-center space-x-1"
-                      >
-                        <span>{isSearchingLocation ? '⏳ 찾는 중...' : '🔍 주소로 위치 자동 찾기'}</span>
-                      </button>
+                      <div className="flex items-center space-x-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPostcode()}
+                          className="px-2 py-0.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[11px] border border-indigo-200 transition flex items-center space-x-1"
+                          title="카카오/다음 공식 주소 검색 팝업 열기"
+                        >
+                          <span>🏢</span>
+                          <span>주소 검색</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAutoGeocode()}
+                          disabled={isSearchingLocation}
+                          className="px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-extrabold text-[11px] border border-emerald-200 transition flex items-center space-x-1"
+                        >
+                          <span>{isSearchingLocation ? '⏳ 찾는 중...' : '📍 위치 찾기'}</span>
+                        </button>
+                      </div>
                     </div>
                     <div className="flex items-center space-x-1.5">
                       <input
                         type="text"
                         value={itemForm.address}
                         onChange={(e) => setItemForm({ ...itemForm, address: e.target.value })}
-                        placeholder="예: 경기 성남시 중원구 원터로17번길 46 성남시중원도서관"
+                        placeholder="예: 강원 강릉시 난설헌로 219 1층 또는 경기 성남시 원터로17번길 46"
                         className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
                       />
                       {(itemForm.address || itemForm.placeName) && (
@@ -5829,7 +5910,7 @@
                       )}
                     </div>
                     <p className="text-[10px] text-slate-400 mt-1">
-                      💡 주소를 입력하고 <span className="font-bold text-emerald-600">[주소로 위치 자동 찾기]</span>를 누르면 지도 좌표가 자동으로 입력됩니다.
+                      💡 주소를 입력하시면 저장 시 건물 위치로 100% 자동 등록되며, <span className="font-bold text-indigo-600">[🏢 주소 검색]</span> 버튼으로 편리하게 찾으실 수도 있습니다.
                     </p>
                   </div>
 
