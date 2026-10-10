@@ -5053,6 +5053,30 @@
                     </select>
                   </div>
                 )}
+                {/* 🔗 친구에게 일정 공유 링크 복사 버튼 (누구나 공유 가능) */}
+                {currentTrip && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const shareUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '')}trip.html?trip=${currentTrip.id}`;
+                      if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(shareUrl).then(() => {
+                          showToast("🔗 친구 공유 링크가 복사되었습니다! 카톡이나 문자로 전송하세요.");
+                          triggerHaptic(20);
+                        }).catch(() => {
+                          prompt("아래 친구 공유 링크를 복사하세요:", shareUrl);
+                        });
+                      } else {
+                        prompt("아래 친구 공유 링크를 복사하세요:", shareUrl);
+                      }
+                    }}
+                    className="px-3 py-2 rounded-xl bg-emerald-500/80 hover:bg-emerald-500 border border-white/30 text-white font-extrabold text-xs shadow-xs transition active:scale-95 flex items-center space-x-1"
+                    title="로그인 없이 친구들이 여행 일정과 지도를 볼 수 있는 전용 웹페이지 링크를 복사합니다"
+                  >
+                    <span>🔗</span>
+                    <span>친구에게 공유</span>
+                  </button>
+                )}
                 {/* 📄 여행 일정 PDF 다운로드 버튼 (온 가족 누구나 다운로드 가능) */}
                 <button
                   type="button"

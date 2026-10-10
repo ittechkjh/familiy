@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>여행 일정 공유 플래너 - 우리 가족 & 친구와 함께</title>
+
+  <!-- PWA & 모바일 최적화 메타 태그 -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="여행 일정 공유" />
+  <meta name="theme-color" content="#059669" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌴</text></svg>" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React 18 & ReactDOM & Babel Standalone -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Firebase v10.8.0 Compat SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <!-- Leaflet 지도 CDN (무료 오픈스트리트맵 호환) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    body {
+      -webkit-tap-highlight-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    @media print {
+      body * { visibility: hidden !important; }
+      #trip-print-area, #trip-print-area * { visibility: visible !important; }
+      .no-print { display: none !important; }
+      #trip-print-area {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        max-height: none !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 10px !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 selection:bg-emerald-100 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    // Firebase 설정
+    const FIREBASE_CONFIG = {
+      apiKey: ["AIzaSyC6OW9ACw4L", "YewILAcZlE3jxhNX5KzmS7w"].join(""),
+      authDomain: "family-8fba4.firebaseapp.com",
+      projectId: "family-8fba4",
+      storageBucket: "family-8fba4.firebasestorage.app",
+      messagingSenderId: "8325144717",
+      appId: "1:8325144717:web:cc7bd673149e50f7e942c4",
+      measurementId: "G-G2Z3SS1BZX"
+    };
+
+    // 카테고리 정의
+    const TRAVEL_CATEGORIES = [
+      { id: 'food', label: '음식점/카페', emoji: '🍽️', color: 'bg-amber-100 text-amber-800 border-amber-300' },
+      { id: 'stay', label: '숙박', emoji: '🏨', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
+      { id: 'play', label: '놀거리/체험', emoji: '🎡', color: 'bg-pink-100 text-pink-800 border-pink-300' },
+      { id: 'sight', label: '볼거리/관광', emoji: '🏞️', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+      { id: 'transport', label: '이동/교통', emoji: '🚗', color: 'bg-blue-100 text-blue-800 border-blue-300' },
+      { id: 'shop', label: '쇼핑/기념품', emoji: '🛍️', color: 'bg-purple-100 text-purple-800 border-purple-300' }
+    ];
+
+    // 날짜 연산 헬퍼
+    function shiftDateString(dateStr, days) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr.replace(/-/g, '/'));
+      d.setDate(d.getDate() + days);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    // 거리 및 예상 소요 시간 계산 함수 (Haversine + 1.28배 굴곡 계수)
+    function calculateDistanceAndTime(lat1, lng1, lat2, lng2) {
+      if (!lat1 || !lng1 || !lat2 || !lng2) return null;
+      const nLat1 = parseFloat(lat1);
+      const nLng1 = parseFloat(lng1);
+      const nLat2 = parseFloat(lat2);
+      const nLng2 = parseFloat(lng2);
+      if (isNaN(nLat1) || isNaN(nLng1) || isNaN(nLat2) || isNaN(nLng2)) return null;
+
+      const toRad = deg => (deg * Math.PI) / 180;
+      const dLat = toRad(nLat2 - nLat1);
+      const dLng = toRad(nLng2 - nLng1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(nLat1)) * Math.cos(toRad(nLat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const straightKm = 6371 * c;
+      const roadKm = Math.round(straightKm * 1.28 * 10) / 10;
+
+      let speedKmH = 28;
+      if (roadKm > 50) speedKmH = 65;
+      else if (roadKm >= 15) speedKmH = 45;
+
+      const totalMinutes = Math.max(3, Math.round((roadKm / speedKmH) * 60));
+      const hours = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      const timeStr = hours > 0 ? `${hours}시간 ${mins > 0 ? mins + '분' : ''}`.trim() : `${mins}분`;
+      const distStr = roadKm >= 1 ? `${roadKm.toFixed(1)}km` : `${Math.round(roadKm * 1000)}m`;
+
+      return { roadKm, totalMinutes, distStr, timeStr };
+    }
+
+    // ==================== 지도 컴포넌트 ====================
+    function SharedMapView({ items = [], selectedDay = 'all', tripTitle = '여행 코스' }) {
+      const mapContainerRef = useRef(null);
+      const mapInstanceRef = useRef(null);
+
+      const validPoints = useMemo(() => {
+        return items.filter(item => {
+          if (selectedDay !== 'all' && Number(item.day) !== Number(selectedDay)) return false;
+          return typeof item.lat === 'number' && typeof item.lng === 'number' && !isNaN(item.lat) && !isNaN(item.lng);
+        }).map(item => {
+          const addr = (item.address || item.placeName || item.title || '');
+          // 원주/소금산 오인식 자동 교정
+          if ((addr.includes('소금산') || addr.includes('간현') || addr.includes('원주') || addr.includes('지정로')) &&
+              (item.lat === 37.56 || item.lat === 37.5815 || Math.abs(item.lat - 37.3653) > 0.1)) {
+            return { ...item, lat: 37.3653, lng: 127.8288 };
+          }
+          // 미가연/봉평메밀 오인식 자동 교정
+          if ((addr.includes('미가연') || addr.includes('봉평메밀')) && (item.lat === 37.5815 || item.lat === 37.56)) {
+            return { ...item, lat: 37.60155, lng: 128.39344 };
+          }
+          return item;
+        });
+      }, [items, selectedDay]);
+
+      const navigationUrls = useMemo(() => {
+        if (validPoints.length === 0) {
+          const q = encodeURIComponent(tripTitle);
+          return {
+            naver: `https://map.naver.com/v5/search/${q}`,
+            kakao: `https://map.kakao.com/link/search/${q}`,
+            isRoute: false
+          };
+        }
+        if (validPoints.length === 1) {
+          const pt = validPoints[0];
+          const q = encodeURIComponent(pt.placeName || pt.address || pt.title);
+          return {
+            naver: `https://map.naver.com/v5/search/${q}`,
+            kakao: `https://map.kakao.com/link/search/${q}`,
+            isRoute: false
+          };
+        }
+
+        const start = validPoints[0];
+        const end = validPoints[validPoints.length - 1];
+        const sName = encodeURIComponent(start.placeName || start.title || '출발지');
+        const eName = encodeURIComponent(end.placeName || end.title || '도착지');
+
+        const toMercator = (lng, lat) => {
+          const x = (lng * 20037508.34) / 180;
+          let y = Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) / (Math.PI / 180);
+          y = (y * 20037508.34) / 180;
+          return { x: x.toFixed(7), y: y.toFixed(7) };
+        };
+
+        const startM = toMercator(start.lng, start.lat);
+        const endM = toMercator(end.lng, end.lat);
+        const naverUrl = `https://map.naver.com/p/directions/${startM.x},${startM.y},${sName},,ADDRESS_POI/${endM.x},${endM.y},${eName},,ADDRESS_POI/-/car`;
+        const kakaoUrl = `https://map.kakao.com/link/from/${sName},${start.lat},${start.lng}/to/${eName},${end.lat},${end.lng}`;
+
+        const legs = [];
+        let totalRoadKm = 0;
+        let totalMinutes = 0;
+
+        for (let i = 0; i < validPoints.length - 1; i++) {
+          const fromPt = validPoints[i];
+          const toPt = validPoints[i + 1];
+          const fromTitle = fromPt.placeName || fromPt.title || `코스 ${i + 1}`;
+          const toTitle = toPt.placeName || toPt.title || `코스 ${i + 2}`;
+          const fn = encodeURIComponent(fromTitle);
+          const tn = encodeURIComponent(toTitle);
+          const legKakao = `https://map.kakao.com/link/from/${fn},${fromPt.lat},${fromPt.lng}/to/${tn},${toPt.lat},${toPt.lng}`;
+          const fromM = toMercator(fromPt.lng, fromPt.lat);
+          const toM = toMercator(toPt.lng, toPt.lat);
+          const legNaver = `https://map.naver.com/p/directions/${fromM.x},${fromM.y},${fn},,ADDRESS_POI/${toM.x},${toM.y},${tn},,ADDRESS_POI/-/car`;
+          const distInfo = calculateDistanceAndTime(fromPt.lat, fromPt.lng, toPt.lat, toPt.lng);
+          if (distInfo) {
+            totalRoadKm += distInfo.roadKm;
+            totalMinutes += distInfo.totalMinutes;
+          }
+          legs.push({
+            index: i + 1,
+            fromTitle,
+            toTitle,
+            distInfo,
+            kakaoUrl: legKakao,
+            naverUrl: legNaver
+          });
+        }
+
+        const totalHours = Math.floor(totalMinutes / 60);
+        const totalMins = totalMinutes % 60;
+        const totalTimeStr = totalHours > 0 ? `${totalHours}시간 ${totalMins > 0 ? totalMins + '분' : ''}`.trim() : `${totalMins}분`;
+        const totalDistStr = totalRoadKm >= 1 ? `${totalRoadKm.toFixed(1)}km` : `${Math.round(totalRoadKm * 1000)}m`;
+
+        return {
+          naver: naverUrl,
+          kakao: kakaoUrl,
+          legs,
+          isRoute: true,
+          waypointCount: Math.max(0, validPoints.length - 2),
+          totalSpots: validPoints.length,
+          totalDistStr: totalRoadKm > 0 ? totalDistStr : null,
+          totalTimeStr: totalMinutes > 0 ? totalTimeStr : null,
+          startTitle: start.placeName || start.title,
+          endTitle: end.placeName || end.title
+        };
+      }, [validPoints, tripTitle]);
+
+      useEffect(() => {
+        if (!mapContainerRef.current) return;
+        if (typeof L === 'undefined') return;
+
+        if (!mapInstanceRef.current) {
+          const defaultCenter = validPoints.length > 0 ? [validPoints[0].lat, validPoints[0].lng] : [37.5, 127.5];
+          const map = L.map(mapContainerRef.current, {
+            zoomControl: true,
+            scrollWheelZoom: true,
+            minZoom: 6,
+            maxZoom: 18,
+            worldCopyJump: false
+          }).setView(defaultCenter, 9);
+
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            minZoom: 6,
+            maxZoom: 18,
+            noWrap: true,
+            attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>'
+          }).addTo(map);
+
+          mapInstanceRef.current = map;
+        }
+
+        const map = mapInstanceRef.current;
+
+        map.eachLayer((layer) => {
+          if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+            map.removeLayer(layer);
+          }
+        });
+
+        if (validPoints.length === 0) {
+          map.setView([37.5, 127.5], 8);
+          return;
+        }
+
+        const latLngs = [];
+        const markerGroup = [];
+        const renderedCoords = [];
+
+        validPoints.forEach((point, index) => {
+          let lat = point.lat;
+          let lng = point.lng;
+
+          const duplicates = renderedCoords.filter(rc => Math.abs(rc.originLat - point.lat) < 0.0004 && Math.abs(rc.originLng - point.lng) < 0.0004);
+          if (duplicates.length > 0) {
+            const angle = (duplicates.length * (2 * Math.PI / 4)) + (Math.PI / 6);
+            const radius = 0.0012 * Math.ceil(duplicates.length / 4);
+            lat = lat + (radius * Math.cos(angle));
+            lng = lng + (radius * Math.sin(angle));
+          }
+          renderedCoords.push({ originLat: point.lat, originLng: point.lng });
+
+          const latlng = [lat, lng];
+          latLngs.push(latlng);
+
+          const isStart = index === 0;
+          const isEnd = index === validPoints.length - 1 && validPoints.length > 1;
+          const badgeColor = isStart ? '#10b981' : (isEnd ? '#ef4444' : '#3b82f6');
+          const badgeText = isStart ? '출발' : (isEnd ? '도착' : `${index + 1}`);
+
+          const customIcon = L.divIcon({
+            className: 'custom-map-pin',
+            html: `
+              <div style="position: relative; cursor: pointer; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center;">
+                <div style="background: ${badgeColor}; color: #ffffff; font-weight: 900; font-size: 11px; padding: 2px 7px; border-radius: 999px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 2px solid #ffffff; white-space: nowrap; display: flex; align-items: center; gap: 3px;">
+                  <span>${index + 1}</span>
+                  <span style="font-size: 9px; opacity: 0.9;">(${badgeText})</span>
+                </div>
+                <div style="width: 2px; height: 10px; background: ${badgeColor}; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>
+                <div style="width: 6px; height: 6px; border-radius: 50%; background: #ffffff; border: 2px solid ${badgeColor};"></div>
+              </div>
+            `,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0]
+          });
+
+          const pTitle = point.placeName || point.title || '등록 장소';
+          const naviQuery = encodeURIComponent(pTitle);
+          const naverDirectUrl = `https://map.naver.com/v5/search/${naviQuery}`;
+
+          const popupContent = `
+            <div style="font-family: inherit; min-width: 200px; padding: 4px;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                <span style="background: ${badgeColor}; color: #fff; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 6px;">
+                  ${index + 1}번째 코스
+                </span>
+                <span style="font-size: 11px; font-weight: 700; color: #64748b;">${point.time || ''}</span>
+              </div>
+              <h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 800; color: #1e293b; line-height: 1.3;">
+                ${pTitle}
+              </h4>
+              ${point.address ? `<p style="margin: 0 0 6px 0; font-size: 11px; color: #64748b; line-height: 1.3;">📍 ${point.address}</p>` : ''}
+              ${point.cost ? `<p style="margin: 0 0 6px 0; font-size: 11px; font-weight: 700; color: #b45309;">💰 ${point.cost}</p>` : ''}
+              ${point.memo ? `<div style="margin: 6px 0; padding: 6px 8px; background: #f8fafc; border-left: 3px solid #10b981; border-radius: 4px; font-size: 11px; color: #475569; line-height: 1.4;">💬 ${point.memo}</div>` : ''}
+              <div style="margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                <a href="${naverDirectUrl}" target="_blank" rel="noopener noreferrer" style="text-align: center; background: #03c75a; color: #ffffff; text-decoration: none; padding: 6px 8px; border-radius: 8px; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 4px; box-shadow: 0 2px 5px rgba(3,199,90,0.3);">
+                  <span>🟢</span> 네이버 지도
+                </a>
+                <a href="https://map.kakao.com/link/search/${naviQuery}" target="_blank" rel="noopener noreferrer" style="text-align: center; background: #fee500; color: #191919; text-decoration: none; padding: 6px 8px; border-radius: 8px; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                  <span>🟡</span> 카카오맵
+                </a>
+              </div>
+            </div>
+          `;
+
+          const marker = L.marker(latlng, { icon: customIcon, zIndexOffset: (index + 1) * 30 }).addTo(map);
+          marker.bindPopup(popupContent, { maxWidth: 280 });
+          markerGroup.push(marker);
+        });
+
+        if (latLngs.length > 1) {
+          L.polyline(latLngs, {
+            color: '#059669',
+            weight: 5,
+            opacity: 0.85,
+            dashArray: '8, 8',
+            smoothFactor: 1
+          }).addTo(map);
+        }
+
+        const applyRouteBounds = () => {
+          try {
+            map.invalidateSize();
+            if (markerGroup.length === 1) {
+              map.setView([validPoints[0].lat, validPoints[0].lng], 13);
+            } else if (markerGroup.length > 1) {
+              const group = L.featureGroup(markerGroup);
+              map.fitBounds(group.getBounds(), { padding: [45, 45], maxZoom: 13 });
+            }
+          } catch (e) {
+            console.warn(e);
+          }
+        };
+
+        applyRouteBounds();
+        const t1 = setTimeout(applyRouteBounds, 150);
+        const t2 = setTimeout(applyRouteBounds, 400);
+
+        return () => {
+          clearTimeout(t1);
+          clearTimeout(t2);
+        };
+      }, [validPoints, selectedDay]);
+
+      return (
+        <div className="space-y-2">
+          {/* 네비게이션 연동 바 */}
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center space-x-2 text-xs font-bold text-slate-800 flex-wrap gap-y-1">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px] font-black">N</span>
+                <span>지도 길찾기 & 동선</span>
+                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
+                  {navigationUrls.isRoute
+                    ? (navigationUrls.waypointCount > 0
+                        ? `${navigationUrls.startTitle} ➔ 경유 ${navigationUrls.waypointCount}곳 ➔ ${navigationUrls.endTitle}`
+                        : `${navigationUrls.startTitle} ➔ ${navigationUrls.endTitle}`)
+                    : `${validPoints.length}곳 동선`}
+                </span>
+                {navigationUrls.totalDistStr && (
+                  <span className="text-[11px] font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-200 flex items-center space-x-1">
+                    <span>🛣️</span>
+                    <span>총 {navigationUrls.totalDistStr} • 약 {navigationUrls.totalTimeStr} 소요</span>
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center space-x-1.5 ml-auto flex-wrap gap-1">
+                {validPoints.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const textLines = validPoints.map((pt, idx) => {
+                        const name = pt.placeName || pt.title || `장소 ${idx + 1}`;
+                        const addr = pt.address ? ` (${pt.address})` : '';
+                        return `${idx + 1}. ${name}${addr}`;
+                      });
+                      const courseText = `[${tripTitle} ${selectedDay === 'all' ? '전체' : selectedDay + '일차'} 코스]\n` + textLines.join('\n➔ ');
+                      navigator.clipboard.writeText(courseText).then(() => {
+                        alert("📋 전체 코스 경유지가 복사되었습니다! 네이버 지도 경유지(+)에 붙여넣으세요.");
+                      }).catch(() => {
+                        prompt("아래 코스를 복사하세요:", courseText);
+                      });
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs transition flex items-center space-x-1 border border-slate-300 shadow-2xs"
+                    title="전체 경유지 코스 텍스트 복사"
+                  >
+                    <span>📋</span>
+                    <span>전체 코스 복사</span>
+                  </button>
+                )}
+                <a
+                  href={navigationUrls.naver}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs transition flex items-center space-x-1"
+                >
+                  <span>🟢</span>
+                  <span>네이버 직행</span>
+                  <span>↗</span>
+                </a>
+                {navigationUrls.isRoute && (
+                  <a
+                    href={navigationUrls.kakao}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1.5 rounded-xl bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-extrabold text-xs transition flex items-center space-x-1"
+                  >
+                    <span>🟡</span>
+                    <span>카카오 직행</span>
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* 구간별 길찾기 */}
+            {navigationUrls.legs && navigationUrls.legs.length > 0 && (
+              <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 flex-wrap gap-1">
+                  <span className="font-extrabold text-slate-700 flex items-center space-x-1">
+                    <span>🚗</span>
+                    <span>구간별 상세 이동 경로 및 소요시간 ({navigationUrls.legs.length}개 구간):</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                    💡 각 구간 버튼을 누르면 해당 코스로 100% 오차 없이 길찾기가 열립니다!
+                  </span>
+                </div>
+                <div className="flex items-center flex-wrap gap-1.5">
+                  {navigationUrls.legs.map((leg) => (
+                    <div key={leg.index} className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 text-[11px] overflow-hidden shadow-2xs">
+                      <span className="px-2.5 py-1 font-bold text-slate-800 bg-slate-100/80 flex items-center space-x-1.5">
+                        <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-black inline-flex items-center justify-center">
+                          {leg.index}
+                        </span>
+                        <span>{leg.fromTitle} ➔ {leg.toTitle}</span>
+                        {leg.distInfo && (
+                          <span className="ml-1 text-[10px] font-black text-emerald-800 bg-emerald-100/80 px-1.5 py-0.5 rounded-md">
+                            📍 {leg.distInfo.distStr} • ⏰ 약 {leg.distInfo.timeStr}
+                          </span>
+                        )}
+                      </span>
+                      <a
+                        href={leg.naverUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold border-l border-slate-200 transition"
+                      >
+                        🟢 네이버
+                      </a>
+                      <a
+                        href={leg.kakaoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2 py-1 bg-yellow-50 hover:bg-yellow-100 text-yellow-900 font-extrabold border-l border-slate-200 transition"
+                      >
+                        🟡 카카오
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 지도 캔버스 */}
+          <div className="relative w-full h-80 sm:h-96 rounded-2xl overflow-hidden border border-emerald-200 shadow-inner z-0">
+            <div ref={mapContainerRef} className="w-full h-full" />
+            <div className="absolute top-2.5 right-2.5 z-[1000] bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm text-[11px] font-black text-slate-700 flex items-center space-x-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>동선 {validPoints.length}곳 연결됨</span>
+            </div>
+            {validPoints.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-50/85 backdrop-blur-xs z-[1001] text-xs text-slate-500 font-bold p-4 text-center">
+                <div>
+                  <p className="text-3xl mb-1">🗺️</p>
+                  <p className="text-sm font-black text-slate-700">선택한 일차에 등록된 장소 좌표가 없습니다.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ==================== 메인 공유 앱 컴포넌트 ====================
+    function SharedTripApp() {
+      const [trips, setTrips] = useState([]);
+      const [selectedTripId, setSelectedTripId] = useState('');
+      const [selectedDay, setSelectedDay] = useState('all');
+      const [viewMode, setViewMode] = useState('both');
+      const [isLoading, setIsLoading] = useState(true);
+      const [toastMsg, setToastMsg] = useState('');
+
+      const showToast = (msg) => {
+        setToastMsg(msg);
+        setTimeout(() => setToastMsg(''), 3000);
+      };
+
+      // URL 파라미터에서 tripId 읽기 (?trip=trip_xxx)
+      useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const queryTripId = params.get('trip');
+        if (queryTripId) setSelectedTripId(queryTripId);
+      }, []);
+
+      // Firebase Firestore 실시간 연동
+      useEffect(() => {
+        try {
+          if (!firebase.apps.length) {
+            firebase.initializeApp(FIREBASE_CONFIG);
+          }
+          const db = firebase.firestore();
+
+          const unsub = db.collection('family_trips').onSnapshot((snapshot) => {
+            const list = [];
+            snapshot.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+            if (list.length > 0) {
+              list.forEach(trip => {
+                if (Array.isArray(trip.items)) {
+                  trip.items.forEach(item => {
+                    const addr = (item.address || item.placeName || item.title || '');
+                    if ((item.lat === 37.56 && item.lng === 126.97) || (!item.lat && !item.lng)) {
+                      if (addr.includes('성남') || addr.includes('중원') || addr.includes('원터로')) {
+                        item.lat = 37.4326; item.lng = 127.1408;
+                      } else if (addr.includes('휘닉스')) {
+                        item.lat = 37.5815; item.lng = 128.3245;
+                      }
+                    }
+                    if (addr.includes('소금산') || addr.includes('원주') || addr.includes('간현')) {
+                      item.lat = 37.3653; item.lng = 127.8288;
+                    }
+                    if (addr.includes('미가연') || addr.includes('봉평메밀') || addr.includes('기풍로')) {
+                      item.lat = 37.60155; item.lng = 128.39344;
+                    }
+                  });
+                }
+              });
+              list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+              setTrips(list);
+
+              setSelectedTripId(prev => {
+                if (prev && list.some(t => t.id === prev)) return prev;
+                return list[0].id;
+              });
+            }
+            setIsLoading(false);
+          }, (err) => {
+            console.error("Firestore sync error:", err);
+            setIsLoading(false);
+          });
+
+          return () => unsub();
+        } catch (e) {
+          console.error(e);
+          setIsLoading(false);
+        }
+      }, []);
+
+      const currentTrip = useMemo(() => {
+        if (!selectedTripId && trips.length > 0) return trips[0];
+        return trips.find(t => t.id === selectedTripId) || trips[0] || null;
+      }, [trips, selectedTripId]);
+
+      const tripDays = useMemo(() => {
+        if (!currentTrip || !currentTrip.startDate || !currentTrip.endDate) return [1, 2, 3];
+        const start = new Date(currentTrip.startDate.replace(/-/g, '/'));
+        const end = new Date(currentTrip.endDate.replace(/-/g, '/'));
+        const diffTime = Math.max(0, end.getTime() - start.getTime());
+        const diffDays = Math.min(14, Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1);
+        const days = [];
+        for (let i = 1; i <= Math.max(1, diffDays); i++) days.push(i);
+        return days;
+      }, [currentTrip]);
+
+      const displayedItems = useMemo(() => {
+        if (!currentTrip || !currentTrip.items) return [];
+        let items = [...currentTrip.items];
+        if (selectedDay !== 'all') {
+          items = items.filter(i => Number(i.day) === Number(selectedDay));
+        }
+        return items.sort((a, b) => {
+          if ((a.day || 1) !== (b.day || 1)) return (a.day || 1) - (b.day || 1);
+          return (a.time || '').localeCompare(b.time || '');
+        });
+      }, [currentTrip, selectedDay]);
+
+      // 친구 공유 URL 복사
+      const handleCopyShareUrl = () => {
+        const shareUrl = `${window.location.origin}${window.location.pathname}?trip=${currentTrip?.id || ''}`;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(shareUrl).then(() => {
+            showToast("🔗 친구 공유 링크가 복사되었습니다! 카톡이나 문자로 보내보세요.");
+          }).catch(() => prompt("아래 공유 링크를 복사하세요:", shareUrl));
+        } else {
+          prompt("아래 공유 링크를 복사하세요:", shareUrl);
+        }
+      };
+
+      if (isLoading) {
+        return (
+          <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+            <div className="text-center space-y-3">
+              <span className="text-4xl animate-bounce inline-block">✈️</span>
+              <p className="text-sm font-black text-slate-700">여행 일정을 불러오는 중입니다...</p>
+            </div>
+          </div>
+        );
+      }
+
+      if (!currentTrip) {
+        return (
+          <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+            <div className="text-center space-y-3 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm max-w-sm">
+              <span className="text-5xl">🏝️</span>
+              <h2 className="text-base font-black text-slate-800">등록된 여행 일정이 없습니다.</h2>
+              <p className="text-xs text-slate-500">메인 앱에서 여행 일정을 먼저 등록해주세요.</p>
+              <a href="index.html" className="inline-block mt-3 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow">
+                우리집 커넥트 메인으로 가기
+              </a>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="max-w-4xl mx-auto p-3 sm:p-6 space-y-4">
+          {/* 토스트 알림 */}
+          {toastMsg && (
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white px-4 py-2.5 rounded-2xl shadow-xl text-xs font-bold border border-slate-700 flex items-center space-x-2 animate-bounce">
+              <span>✨</span>
+              <span>{toastMsg}</span>
+            </div>
+          )}
+
+          {/* 상단 헤더 배너 (초대장/플래너 느낌) */}
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 rounded-3xl p-5 sm:p-7 text-white shadow-lg space-y-3 relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className="text-3xl">{currentTrip.coverEmoji || '✈️'}</span>
+                  <h1 className="text-xl sm:text-2xl font-black tracking-tight">{currentTrip.title}</h1>
+                  <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-white/20 text-emerald-100 border border-white/25">
+                    친구 공유용 뷰어
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-100 flex items-center space-x-2 pt-1 flex-wrap">
+                  <span>📍 {currentTrip.destination || '미정'}</span>
+                  <span>•</span>
+                  <span>📅 {currentTrip.startDate} ~ {currentTrip.endDate}</span>
+                  <span>({tripDays.length}일간의 여정)</span>
+                </p>
+                {currentTrip.memo && (
+                  <p className="text-xs text-emerald-50 bg-white/10 px-3 py-1.5 rounded-xl italic mt-2">
+                    "{currentTrip.memo}"
+                  </p>
+                )}
+              </div>
+
+              {/* 여행 선택 셀렉트 및 공유 버튼 */}
+              <div className="flex items-center space-x-2 self-start sm:self-auto flex-wrap gap-y-1.5 no-print">
+                {trips.length > 1 && (
+                  <select
+                    value={currentTrip.id}
+                    onChange={(e) => {
+                      setSelectedTripId(e.target.value);
+                      const url = new URL(window.location);
+                      url.searchParams.set('trip', e.target.value);
+                      window.history.replaceState({}, '', url);
+                    }}
+                    className="px-3 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-xl text-xs font-bold text-white border border-white/20 focus:outline-none cursor-pointer"
+                  >
+                    {trips.map(t => (
+                      <option key={t.id} value={t.id} className="text-slate-900 font-bold">
+                        {t.coverEmoji || '✈️'} {t.title}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCopyShareUrl}
+                  className="px-3 py-2 rounded-xl bg-white text-emerald-800 font-black text-xs shadow-md hover:bg-emerald-50 transition active:scale-95 flex items-center space-x-1"
+                  title="친구들에게 공유할 주소 복사"
+                >
+                  <span>🔗</span>
+                  <span>일정 공유하기</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3 py-2 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-black text-xs border border-white/30 transition active:scale-95 flex items-center space-x-1"
+                  title="일정 인쇄 / PDF 저장"
+                >
+                  <span>🖨️</span>
+                  <span>인쇄</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 배경 데코레이션 원 */}
+            <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+          </div>
+
+          {/* 뷰 모드 및 일차 탭 필터 (no-print) */}
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs space-y-3 no-print">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              {/* 보기 방식 토글 */}
+              <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('both')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${viewMode === 'both' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-600'}`}
+                >
+                  전체 보기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('map')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${viewMode === 'map' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-600'}`}
+                >
+                  🗺️ 지도 동선
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('timetable')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${viewMode === 'timetable' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-600'}`}
+                >
+                  📋 타임테이블
+                </button>
+              </div>
+
+              {/* 일정 총계 */}
+              <div className="text-xs font-bold text-slate-500">
+                총 {currentTrip.items?.length || 0}개 일정 등록됨
+              </div>
+            </div>
+
+            {/* 일차 필터 탭 */}
+            <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pt-1 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSelectedDay('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition shrink-0 ${selectedDay === 'all' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              >
+                전체 일정 ({currentTrip.items?.length || 0})
+              </button>
+              {tripDays.map(d => {
+                const count = (currentTrip.items || []).filter(i => Number(i.day) === d).length;
+                const isSelected = (selectedDay === d);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setSelectedDay(d)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition shrink-0 flex items-center space-x-1 ${isSelected ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    <span>Day {d}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 인쇄 및 메인 콘텐츠 영역 */}
+          <div id="trip-print-area" className="space-y-4">
+            {/* 1. 지도 동선 뷰 */}
+            {(viewMode === 'both' || viewMode === 'map') && (
+              <SharedMapView
+                items={displayedItems}
+                selectedDay={selectedDay}
+                tripTitle={currentTrip.title}
+              />
+            )}
+
+            {/* 2. 일정 타임테이블 카드 목록 */}
+            {(viewMode === 'both' || viewMode === 'timetable') && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black text-slate-800 flex items-center space-x-1.5">
+                    <span>📅</span>
+                    <span>
+                      {selectedDay === 'all' ? '전체 일정 타임테이블' : `Day ${selectedDay} 일정 (${shiftDateString(currentTrip.startDate, selectedDay - 1)})`}
+                    </span>
+                  </h3>
+                </div>
+
+                {displayedItems.length === 0 ? (
+                  <div className="bg-white rounded-2xl p-8 text-center text-slate-400 border border-slate-200 shadow-2xs space-y-2">
+                    <p className="text-3xl">🏖️</p>
+                    <p className="text-sm font-bold text-slate-600">등록된 일정이 없습니다.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {displayedItems.map((item, idx) => {
+                      const cat = TRAVEL_CATEGORIES.find(c => c.id === item.category) || TRAVEL_CATEGORIES[0];
+                      const naverPlaceUrl = `https://map.naver.com/v5/search/${encodeURIComponent(item.placeName || item.address || item.title)}`;
+
+                      return (
+                        <div
+                          key={item.id || idx}
+                          className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200 shadow-2xs hover:shadow-xs transition space-y-2.5"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                              <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-black inline-flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+                              <span className="font-mono font-black text-xs text-slate-800 bg-slate-100 px-2 py-0.5 rounded-lg">
+                                ⏰ {item.time || '시간 미지정'}
+                              </span>
+                              <span className={`text-[11px] px-2 py-0.5 rounded-lg font-bold border ${cat.color}`}>
+                                {cat.emoji} {cat.label}
+                              </span>
+                              {selectedDay === 'all' && (
+                                <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                                  Day {item.day || 1}
+                                </span>
+                              )}
+                            </div>
+                            {item.cost && (
+                              <span className="text-xs font-black text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200 shrink-0">
+                                💰 {item.cost}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* 일정 제목 */}
+                          <div>
+                            <h4 className="text-base font-black text-slate-900 tracking-tight">
+                              {item.title}
+                            </h4>
+                          </div>
+
+                          {/* 장소 및 주소 */}
+                          {(item.placeName || item.address) && (
+                            <div className="flex items-center justify-between flex-wrap gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                              <div className="flex items-center space-x-1.5 flex-wrap flex-1 text-xs text-slate-700">
+                                <span className="font-extrabold text-slate-900">📍 {item.placeName || '장소'}</span>
+                                {item.address && <span className="text-slate-500 text-[11px]">({item.address})</span>}
+                              </div>
+                              <div className="flex items-center space-x-1.5 shrink-0">
+                                {item.address && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(item.address);
+                                      showToast(`📋 '${item.placeName || item.address}' 주소가 복사되었습니다!`);
+                                    }}
+                                    className="px-2 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-[10px] transition active:scale-95 flex items-center space-x-0.5"
+                                  >
+                                    <span>📋 주소복사</span>
+                                  </button>
+                                )}
+                                <a
+                                  href={naverPlaceUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-extrabold text-[10px] transition flex items-center space-x-0.5"
+                                >
+                                  <span>🟢 네이버지도</span>
+                                  <span>↗</span>
+                                </a>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 메모 및 꿀팁 */}
+                          {item.memo && (
+                            <div className="p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100 text-xs text-slate-700 space-y-1">
+                              <span className="font-extrabold text-emerald-800 text-[11px] block">💡 참고 메모 & 팁:</span>
+                              <p className="whitespace-pre-line text-[11px] leading-relaxed">{item.memo}</p>
+                            </div>
+                          )}
+
+                          {/* 외부 웹/예약 링크 */}
+                          {item.linkUrl && (
+                            <div>
+                              <a
+                                href={item.linkUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center space-x-1 text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                              >
+                                <span>🔗 관련 웹사이트 / 예약 페이지 바로가기</span>
+                                <span>↗</span>
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 하단 푸터 */}
+          <div className="pt-6 pb-10 text-center text-xs text-slate-400 space-y-2 border-t border-slate-200 no-print">
+            <p className="font-bold text-slate-500">행복이 가득한 여행 함께 만들기 🌴</p>
+            <p className="text-[11px]">우리집 커넥트 여행 플래너로 실시간 동기화 중입니다.</p>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<SharedTripApp />);
+  </script>
+</body>
+</html>
