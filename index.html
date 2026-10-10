@@ -4177,6 +4177,8 @@
       { keywords: ['용평리조트', '모나용평'], lat: 37.6444, lng: 128.6802, label: '모나용평' },
       { keywords: ['알펜시아'], lat: 37.6548, lng: 128.6720, label: '알펜시아 리조트' },
       { keywords: ['대관령양떼목장', '양떼목장'], lat: 37.6888, lng: 128.7513, label: '대관령양떼목장' },
+      { keywords: ['정동진레일바이크', '정동진 레일바이크', '정동진역', '정동역길'], lat: 37.6830, lng: 129.0325, label: '정동진 레일바이크' },
+      { keywords: ['강문해변', '강문해수욕장', '강문'], lat: 37.7948, lng: 128.9194, label: '강문해변' },
       { keywords: ['안목해변', '강릉커피거리'], lat: 37.7719, lng: 128.9483, label: '강릉 안목해변' },
       { keywords: ['경포대', '경포해변', '경포호'], lat: 37.8055, lng: 128.9079, label: '강릉 경포해변' },
       { keywords: ['강릉중앙시장'], lat: 37.7540, lng: 128.8985, label: '강릉 중앙시장' },
@@ -4527,7 +4529,7 @@
                 <span style="font-size: 11px; font-weight: 700; color: #64748b;">⏰ ${point.time || '시간 미지정'}</span>
               </div>
               <h4 style="margin: 0 0 6px 0; font-size: 15px; font-weight: 900; color: #0f172a; line-height: 1.3;">${point.title}</h4>
-              <p style="margin: 0 0 4px 0; font-size: 12px; font-weight: 600; color: #334155;">📍 ${point.placeName || '장소명 없음'}</p>
+              <p style="margin: 0 0 4px 0; font-size: 12px; font-weight: 600; color: #334155;">📍 ${(point.placeName || '').trim() || point.title || '장소'}</p>
               ${point.address ? `<p style="margin: 0 0 6px 0; font-size: 11px; color: #64748b;">(${point.address})</p>` : ''}
               ${point.cost ? `<p style="margin: 0 0 6px 0; font-size: 11px; font-weight: 700; color: #b45309;">💰 ${point.cost}</p>` : ''}
               ${point.memo ? `<div style="margin: 6px 0; padding: 6px 8px; background: #f8fafc; border-left: 3px solid #10b981; border-radius: 4px; font-size: 11px; color: #475569; line-height: 1.4;">💬 ${point.memo}</div>` : ''}
@@ -4980,9 +4982,13 @@
           if (mMatch) finalLinkUrl = mMatch[0];
         }
 
+        // 장소명이 비어있으면 제목(title) 또는 주소 검색 결과에서 장소명 자동 채움
+        const finalPlaceName = (itemForm.placeName || '').trim() || itemForm.title.trim();
+
         const itemData = {
           ...(editingItem || {}),
           ...itemForm,
+          placeName: finalPlaceName,
           day: Number(itemForm.day) || 1,
           linkUrl: finalLinkUrl,
           lat: finalLat,
@@ -5273,7 +5279,8 @@
                 <div className="relative pl-6 sm:pl-8 space-y-3.5 before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-emerald-200">
                   {displayedItems.map((item, idx) => {
                     const cat = TRAVEL_CATEGORIES.find(c => c.id === item.category) || TRAVEL_CATEGORIES[0];
-                    const naviQuery = encodeURIComponent(item.placeName || item.address || item.title);
+                    const directPlaceName = (item.placeName || '').trim() || item.title || '장소';
+                    const naviQuery = encodeURIComponent(directPlaceName);
 
                     // 웹/네이버지도 링크 감지 (item.linkUrl 또는 memo, address 등에 포함된 http/https URL)
                     const fullTextForUrl = `${item.linkUrl || ''} ${item.memo || ''} ${item.address || ''}`;
@@ -5285,7 +5292,9 @@
                         ? `https://map.naver.com/p/search/${naviQuery}?c=${item.lng},${item.lat},15,0,0,0,dh`
                         : `https://map.naver.com/p/search/${naviQuery}`
                     );
-                    const kakaoPlaceUrl = `https://map.kakao.com/link/search/${naviQuery}`;
+                    const tmapPlaceUrl = (item.lat && item.lng)
+                      ? `tmap://route?goalname=${naviQuery}&goalx=${item.lng}&goaly=${item.lat}`
+                      : `tmap://search?name=${naviQuery}`;
 
                     let memoText = (item.memo || '').trim();
                     const memoUrlMatch = memoText.match(/(https?:\/\/[^\s\x22\x27<>]+)/i);
@@ -5297,7 +5306,7 @@
 
                     const nextItem = (idx < displayedItems.length - 1) ? displayedItems[idx + 1] : null;
                     let nextLegNaver = null;
-                    let nextLegKakao = null;
+                    let nextLegTmap = null;
                     let nextLegDistInfo = null;
                     if (nextItem) {
                       const toMercator = (lng, lat) => {
@@ -5306,11 +5315,12 @@
                         y = (y * 20037508.34) / 180;
                         return { x: x.toFixed(7), y: y.toFixed(7) };
                       };
-                      const fn = encodeURIComponent(item.placeName || item.title || '출발');
-                      const tn = encodeURIComponent(nextItem.placeName || nextItem.title || '도착');
-                      nextLegKakao = (item.lat && item.lng && nextItem.lat && nextItem.lng)
-                        ? `https://map.kakao.com/link/from/${fn},${item.lat},${item.lng}/to/${tn},${nextItem.lat},${nextItem.lng}`
-                        : `https://map.kakao.com/link/search/${tn}`;
+                      const fn = encodeURIComponent((item.placeName || '').trim() || item.title || '출발');
+                      const nextDirectName = (nextItem.placeName || '').trim() || nextItem.title || '도착';
+                      const tn = encodeURIComponent(nextDirectName);
+                      nextLegTmap = (nextItem.lat && nextItem.lng)
+                        ? `tmap://route?goalname=${tn}&goalx=${nextItem.lng}&goaly=${nextItem.lat}`
+                        : `tmap://search?name=${tn}`;
                       const fromM = (item.lat && item.lng) ? toMercator(item.lng, item.lat) : null;
                       const toM = (nextItem.lat && nextItem.lng) ? toMercator(nextItem.lng, nextItem.lat) : null;
                       nextLegNaver = (fromM && toM)
@@ -5389,7 +5399,7 @@
                           </div>
 
                           {/* 장소 및 주소 (클릭 시 네이버 지도 바로 열기 + 주소 복사) */}
-                          {(item.placeName || item.address) && (
+                          {(item.placeName || item.address || item.title) && (
                             <div className="flex items-center justify-between flex-wrap gap-2 bg-slate-50 hover:bg-emerald-50/50 p-2.5 rounded-xl border border-slate-200 transition">
                               <a
                                 href={naverPlaceUrl}
@@ -5398,7 +5408,7 @@
                                 className="flex items-center space-x-1.5 flex-wrap flex-1 text-xs text-slate-700 hover:text-emerald-800 group/addr"
                                 title="네이버 지도에서 상세 정보 열기"
                               >
-                                <span className="font-extrabold text-slate-900 group-hover/addr:text-emerald-700">📍 {item.placeName || '장소명 없음'}</span>
+                                <span className="font-extrabold text-slate-900 group-hover/addr:text-emerald-700">📍 {directPlaceName}</span>
                                 {item.address && <span className="text-slate-500 text-[11px]">({item.address})</span>}
                                 <span className="text-[10px] text-emerald-600 font-extrabold group-hover/addr:underline shrink-0 flex items-center space-x-0.5">
                                   <span>네이버지도</span>
@@ -5408,7 +5418,7 @@
                               <div className="flex items-center space-x-1 shrink-0">
                                 {item.lat && item.lng && (
                                   <a
-                                    href={`tmap://route?goalname=${encodeURIComponent(item.placeName || item.title || '목적지')}&goalx=${item.lng}&goaly=${item.lat}`}
+                                    href={`tmap://route?goalname=${naviQuery}&goalx=${item.lng}&goaly=${item.lat}`}
                                     className="px-2 py-0.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-[10px] transition active:scale-95 flex items-center space-x-0.5"
                                     title="티맵으로 이 장소 길안내 바로 시작"
                                   >
@@ -5421,7 +5431,7 @@
                                     onClick={(e) => {
                                       e.preventDefault();
                                       navigator.clipboard.writeText(item.address);
-                                      showToast(`📋 '${item.placeName || item.address}' 주소가 복사되었습니다!`);
+                                      showToast(`📋 '${directPlaceName}' 주소가 복사되었습니다!`);
                                       triggerHaptic(20);
                                     }}
                                     className="px-2 py-0.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-[10px] transition active:scale-95 flex items-center space-x-0.5"
@@ -5467,7 +5477,7 @@
                             <div className="pt-2 border-t border-dashed border-emerald-200 flex items-center justify-between text-[11px] flex-wrap gap-1.5 bg-emerald-50/60 p-2.5 rounded-xl">
                               <div className="text-emerald-900 font-extrabold flex items-center space-x-1.5 flex-wrap gap-y-1">
                                 <span>🚗</span>
-                                <span>다음 코스 ➔ <b>{nextItem.placeName || nextItem.title}</b>:</span>
+                                <span>다음 코스 ➔ <b>{(nextItem.placeName || '').trim() || nextItem.title}</b>:</span>
                                 {nextLegDistInfo && (
                                   <span className="text-[10px] font-black text-emerald-800 bg-white/95 px-2 py-0.5 rounded-md border border-emerald-200 shadow-2xs">
                                     📍 {nextLegDistInfo.distStr} • ⏰ 약 {nextLegDistInfo.timeStr} 소요
@@ -5486,14 +5496,12 @@
                                   <span>네이버 길찾기</span>
                                 </a>
                                 <a
-                                  href={nextLegKakao}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-2.5 py-1 rounded-lg bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-extrabold transition flex items-center space-x-1"
-                                  title="카카오맵으로 다음 코스까지 자동차 길찾기"
+                                  href={nextLegTmap}
+                                  className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold shadow-xs transition flex items-center space-x-1"
+                                  title="티맵으로 다음 코스까지 즉시 내비게이션 안내 시작"
                                 >
-                                  <span>🟡</span>
-                                  <span>카카오 길찾기</span>
+                                  <span>🔴</span>
+                                  <span>티맵 길찾기</span>
                                 </a>
                               </div>
                             </div>
@@ -5513,13 +5521,11 @@
                                 <span>네이버 지도</span>
                               </a>
                               <a
-                                href={kakaoPlaceUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2.5 py-1 rounded-lg bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-extrabold transition flex items-center space-x-1"
+                                href={tmapPlaceUrl}
+                                className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-extrabold transition flex items-center space-x-1"
                               >
-                                <span>🟡</span>
-                                <span>카카오맵</span>
+                                <span>🔴</span>
+                                <span>티맵</span>
                               </a>
                             </div>
                           </div>
@@ -6778,11 +6784,24 @@
                           item.lng = 128.3245;
                         }
                       }
-                      // 미가연/봉평메밀 항목이 휘닉스파크 좌표(37.5815) 또는 서울 좌표로 들어간 경우 실제 봉평 미가연 정밀 좌표로 자동 갱신
-                      if (addr.includes('미가연') || addr.includes('봉평메밀') || addr.includes('기풍로')) {
-                        if (item.lat === 37.5815 || item.lat === 37.56 || !item.lat) {
-                          item.lat = 37.60155;
-                          item.lng = 128.39344;
+                      // 장소명이 비어있는 경우 title에서 자동 추출/보정
+                      if (!item.placeName || !item.placeName.trim()) {
+                        item.placeName = (item.title || '').trim() || '장소';
+                      }
+
+                      // 정동진 레일바이크/정동역길 정밀 좌표 자동 보정
+                      if (addr.includes('정동진') || addr.includes('레일바이크') || addr.includes('정동역길')) {
+                        if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97) || (item.lat === 37.5815 && item.lng === 128.3245)) {
+                          item.lat = 37.6830;
+                          item.lng = 129.0325;
+                        }
+                      }
+
+                      // 강문해변 정밀 좌표 자동 보정
+                      if (addr.includes('강문해변') || addr.includes('강문해수욕장') || addr.includes('강문')) {
+                        if (!item.lat || !item.lng || (item.lat === 37.56 && item.lng === 126.97)) {
+                          item.lat = 37.7948;
+                          item.lng = 128.9194;
                         }
                       }
                     });
