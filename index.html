@@ -526,13 +526,17 @@
     };
 
     const formatMinutesToHours = (totalMinutes) => {
-      const mins = Number(totalMinutes) || 0;
-      if (mins <= 0) return '0분';
+      const num = Number(totalMinutes) || 0;
+      if (num === 0) return '0분';
+      const isNegative = num < 0;
+      const mins = Math.abs(num);
       const h = Math.floor(mins / 60);
       const m = mins % 60;
-      if (h === 0) return `${m}분`;
-      if (m === 0) return `${h}시간`;
-      return `${h}시간 ${m}분`;
+      let res = '';
+      if (h === 0) res = `${m}분`;
+      else if (m === 0) res = `${h}시간`;
+      else res = `${h}시간 ${m}분`;
+      return isNegative ? `-${res}` : res;
     };
 
     const isScheduleOnDate = (item, dateStr) => {
@@ -1155,10 +1159,10 @@
                     </div>
 
                     <div className="text-right">
-                      <div className={`text-2xl sm:text-3xl font-black tracking-tight ${isOverZero ? 'text-emerald-400' : 'text-slate-400'}`}>
+                      <div className={`text-2xl sm:text-3xl font-black tracking-tight ${currentMinutes < 0 ? 'text-rose-400' : isOverZero ? 'text-emerald-400' : 'text-slate-400'}`}>
                         {currentMinutes} <span className="text-sm font-bold text-slate-300">분</span>
                       </div>
-                      <div className="text-[11px] font-semibold text-indigo-300">
+                      <div className={`text-[11px] font-semibold ${currentMinutes < 0 ? 'text-rose-300' : 'text-indigo-300'}`}>
                         ({formattedTime})
                       </div>
                     </div>
@@ -1168,7 +1172,7 @@
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-slate-400 font-medium">
                       <span>잔여 상태</span>
-                      <span>{isOverZero ? '🎮 플레이 가능' : '⏳ 시간 충전 필요'}</span>
+                      <span>{currentMinutes < 0 ? '⚠️ 시간 초과/차감' : isOverZero ? '🎮 플레이 가능' : '⏳ 시간 충전 필요'}</span>
                     </div>
                     <div className="w-full bg-black/40 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/10">
                       <div
@@ -6236,7 +6240,7 @@
                   <div>
                     <div className="text-sm font-extrabold text-slate-900">{st.name} ({st.role})</div>
                     <div className="text-xs text-amber-800 font-medium mt-0.5">
-                      남은 스티커 <span className="font-extrabold text-amber-600">{st.available ?? st.totalReceived}개</span>
+                      남은 스티커 <span className={`font-extrabold ${(st.available ?? st.totalReceived) < 0 ? 'text-rose-600' : 'text-amber-600'}`}>{st.available ?? st.totalReceived}개</span>
                       <span className="text-[11px] text-slate-400 ml-1.5">(누적 {st.totalReceived}개)</span>
                     </div>
                   </div>
@@ -6244,8 +6248,8 @@
 
                 <div className="flex items-center space-x-2">
                   <div className="text-right">
-                    <div className="bg-amber-100/90 text-amber-900 font-black text-xl px-3.5 py-1 rounded-2xl border border-amber-200 flex items-center space-x-1">
-                      <span>🌟</span>
+                    <div className={`${(st.available ?? st.totalReceived) < 0 ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-amber-100/90 text-amber-900 border-amber-200'} font-black text-xl px-3.5 py-1 rounded-2xl border flex items-center space-x-1`}>
+                      <span>{(st.available ?? st.totalReceived) < 0 ? '⚡' : '🌟'}</span>
                       <span>{st.available ?? st.totalReceived}</span>
                     </div>
                   </div>
@@ -6293,8 +6297,8 @@
               {praiseRewards.map((reward) => {
                 const canChild1 = child1Stat.available >= reward.cost;
                 const canChild2 = child2Stat.available >= reward.cost;
-                const pct1 = Math.min(100, Math.round((child1Stat.available / reward.cost) * 100));
-                const pct2 = Math.min(100, Math.round((child2Stat.available / reward.cost) * 100));
+                const pct1 = Math.min(100, Math.max(0, Math.round((child1Stat.available / reward.cost) * 100)));
+                const pct2 = Math.min(100, Math.max(0, Math.round((child2Stat.available / reward.cost) * 100)));
 
                 const isChild1 = currentMemberId === 'child1';
                 const isChild2 = currentMemberId === 'child2';
@@ -7048,9 +7052,9 @@
         }
 
         if (defaultDelta !== null) {
-          // 프리셋 바로 적용
+          // 프리셋 바로 적용 (음수 시간 허용)
           const currentVal = gameTimes[kidId] || 0;
-          const finalVal = Math.max(0, currentVal + defaultDelta);
+          const finalVal = currentVal + defaultDelta;
           applyGameTimeChange(kidId, defaultDelta, finalVal, defaultReason);
         } else {
           setGameTimeForm({
@@ -7107,19 +7111,19 @@
 
         const kidId = gameTimeForm.childId;
         const currentVal = gameTimes[kidId] || 0;
-        const inputMin = Math.abs(parseInt(gameTimeForm.minutes, 10) || 0);
+        const parsedMin = parseInt(gameTimeForm.minutes, 10) || 0;
 
         let delta = 0;
         let finalVal = currentVal;
 
         if (gameTimeForm.mode === 'add') {
-          delta = inputMin;
+          delta = Math.abs(parsedMin);
           finalVal = currentVal + delta;
         } else if (gameTimeForm.mode === 'subtract') {
-          delta = -inputMin;
-          finalVal = Math.max(0, currentVal + delta);
+          delta = -Math.abs(parsedMin);
+          finalVal = currentVal + delta;
         } else if (gameTimeForm.mode === 'set') {
-          finalVal = inputMin;
+          finalVal = parsedMin;
           delta = finalVal - currentVal;
         }
 
@@ -7479,10 +7483,15 @@
         const targetMember = FAMILY_MEMBERS.find(m => m.id === praiseForm.toMemberId) || FAMILY_MEMBERS[2];
         const stickerObj = STICKER_ICONS.find(s => s.key === praiseForm.stickerKey) || STICKER_ICONS[0];
 
-        const defaultReason = `${stickerObj.label}! 참 잘했어요! 🎉`;
+        const isSubtract = praiseForm.mode === 'subtract';
+        const rawCount = Math.max(1, Math.abs(Number(praiseForm.count) || 1));
+        const count = isSubtract ? -rawCount : rawCount;
+
+        const defaultReason = isSubtract
+          ? `${stickerObj.label} ${rawCount}개 차감`
+          : `${stickerObj.label}! 참 잘했어요! 🎉`;
         const finalReason = praiseForm.reason.trim() || defaultReason;
 
-        const count = Math.max(1, Number(praiseForm.count) || 1);
         const praiseData = {
           fromMemberId: currentMember.id,
           fromMemberName: currentMember.name,
@@ -7503,9 +7512,14 @@
           }
 
           setIsPraiseModalOpen(false);
-          setPraiseForm({ toMemberId: 'child1', stickerKey: 'star', reason: '', count: 1 });
-          showToast(`🌟 ${targetMember.name}에게 칭찬 스티커 ${count > 1 ? count + '개를' : '를'} 선물했습니다!`);
-          triggerHaptic([50, 80, 50]);
+          setPraiseForm({ toMemberId: 'child1', stickerKey: 'star', reason: '', count: 1, mode: 'add' });
+          if (isSubtract) {
+            showToast(`⚡ ${targetMember.name}의 칭찬 스티커 ${rawCount}개를 차감했습니다.`);
+            triggerHaptic(40);
+          } else {
+            showToast(`🌟 ${targetMember.name}에게 칭찬 스티커 ${rawCount > 1 ? rawCount + '개를' : '를'} 선물했습니다!`);
+            triggerHaptic([50, 80, 50]);
+          }
         } catch (err) { console.error(err); }
       };
 
@@ -8583,11 +8597,11 @@
       const kidStickerStats = useMemo(() => {
         return KIDS_MEMBERS.map(kid => {
           const receivedLogs = praiseLogs.filter(p => p.toMemberId === kid.id);
-          const totalReceived = Math.max(0, receivedLogs.reduce((sum, p) => sum + ((p.count !== undefined && !isNaN(Number(p.count))) ? Number(p.count) : 1), 0));
+          const totalReceived = receivedLogs.reduce((sum, p) => sum + ((p.count !== undefined && !isNaN(Number(p.count))) ? Number(p.count) : 1), 0);
           const redeemedCount = praiseRedeems
             .filter(r => r.memberId === kid.id)
             .reduce((sum, r) => sum + (Number(r.cost) || 0), 0);
-          const available = Math.max(0, totalReceived - redeemedCount);
+          const available = totalReceived - redeemedCount;
           return {
             ...kid,
             totalReceived,
@@ -9154,15 +9168,13 @@
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      {gameTimeForm.mode === 'add' ? '충전할 시간(분)' : gameTimeForm.mode === 'subtract' ? '차감할 시간(분)' : '설정할 총 시간(분)'}
+                      {gameTimeForm.mode === 'add' ? '충전할 시간(분)' : gameTimeForm.mode === 'subtract' ? '차감할 시간(분) (0분 이하 마이너스 적용)' : '설정할 총 시간(분) (마이너스 가능)'}
                     </label>
                     <div className="flex items-center space-x-2">
                       <input
                         type="number"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        min="0"
-                        max="300"
+                        min={gameTimeForm.mode === 'set' ? -600 : 0}
+                        max="600"
                         required
                         value={gameTimeForm.minutes}
                         onChange={(e) => setGameTimeForm({ ...gameTimeForm, minutes: e.target.value })}
@@ -9177,9 +9189,13 @@
                           key={min}
                           type="button"
                           onClick={() => setGameTimeForm({ ...gameTimeForm, minutes: min })}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-violet-50 text-slate-700 hover:text-violet-700 rounded-lg text-xs font-bold border border-slate-200 shrink-0"
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border shrink-0 transition ${
+                            gameTimeForm.mode === 'subtract'
+                              ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                              : 'bg-slate-100 hover:bg-violet-50 text-slate-700 hover:text-violet-700 border-slate-200'
+                          }`}
                         >
-                          {min}분
+                          {gameTimeForm.mode === 'subtract' ? `-${min}분` : `+${min}분`}
                         </button>
                       ))}
                     </div>
@@ -9676,33 +9692,65 @@
           {isPraiseModalOpen && (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
               <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between pb-2 border-b border-amber-100">
-                  <h3 className="text-base font-extrabold text-amber-900">🎁 칭찬 스티커 선물하기</h3>
+                <div className={`flex items-center justify-between pb-2 border-b ${praiseForm.mode === 'subtract' ? 'border-rose-100' : 'border-amber-100'}`}>
+                  <h3 className={`text-base font-extrabold ${praiseForm.mode === 'subtract' ? 'text-rose-900' : 'text-amber-900'}`}>
+                    {praiseForm.mode === 'subtract' ? '⚡ 칭찬 스티커 차감 / 벌칙' : '🎁 칭찬 스티커 선물하기'}
+                  </h3>
                   <button type="button" onClick={() => setIsPraiseModalOpen(false)} className="text-xs font-bold text-slate-400">✕</button>
                 </div>
 
                 <form onSubmit={handleCreatePraise} className="space-y-3">
+                  {/* 모드 선택 (선물 vs 차감) */}
+                  <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setPraiseForm({ ...praiseForm, mode: 'add' })}
+                      className={`py-1.5 rounded-lg text-xs font-extrabold transition flex items-center justify-center space-x-1 ${
+                        praiseForm.mode !== 'subtract' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-600'
+                      }`}
+                    >
+                      <span>🎁</span>
+                      <span>스티커 선물 (+)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPraiseForm({ ...praiseForm, mode: 'subtract' })}
+                      className={`py-1.5 rounded-lg text-xs font-extrabold transition flex items-center justify-center space-x-1 ${
+                        praiseForm.mode === 'subtract' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600'
+                      }`}
+                    >
+                      <span>⚡</span>
+                      <span>스티커 차감 (-)</span>
+                    </button>
+                  </div>
+
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">칭찬받을 어린이 선택</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {praiseForm.mode === 'subtract' ? '차감할 어린이 선택' : '칭찬받을 어린이 선택'}
+                    </label>
                     <div className="grid grid-cols-2 gap-2">
-                      {KIDS_MEMBERS.map((kid) => (
-                        <button
-                          type="button"
-                          key={kid.id}
-                          onClick={() => setPraiseForm({ ...praiseForm, toMemberId: kid.id })}
-                          className={`p-3 rounded-2xl border text-left transition flex items-center space-x-2.5 ${
-                            praiseForm.toMemberId === kid.id
-                              ? `${kid.cardBg} ring-2 ${kid.ringColor} font-bold`
-                              : 'bg-white border-slate-200 text-slate-700'
-                          }`}
-                        >
-                          <span className="text-2xl">{kid.avatar}</span>
-                          <div>
-                            <div className="text-xs font-extrabold">{kid.name}</div>
-                            <div className="text-[10px] text-slate-500">{kid.role}</div>
-                          </div>
-                        </button>
-                      ))}
+                      {KIDS_MEMBERS.map((kid) => {
+                        const kidStat = kidStickerStats.find(k => k.id === kid.id);
+                        const curAvail = kidStat ? kidStat.available : 0;
+                        return (
+                          <button
+                            type="button"
+                            key={kid.id}
+                            onClick={() => setPraiseForm({ ...praiseForm, toMemberId: kid.id })}
+                            className={`p-3 rounded-2xl border text-left transition flex items-center space-x-2.5 ${
+                              praiseForm.toMemberId === kid.id
+                                ? `${kid.cardBg} ring-2 ${kid.ringColor} font-bold`
+                                : 'bg-white border-slate-200 text-slate-700'
+                            }`}
+                          >
+                            <span className="text-2xl">{kid.avatar}</span>
+                            <div>
+                              <div className="text-xs font-extrabold">{kid.name}</div>
+                              <div className="text-[10px] text-slate-500">현재 {curAvail}개</div>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -9716,7 +9764,9 @@
                           onClick={() => setPraiseForm({ ...praiseForm, stickerKey: st.key })}
                           className={`p-2 rounded-xl border text-center transition ${
                             praiseForm.stickerKey === st.key
-                              ? 'bg-amber-100 border-amber-400 ring-2 ring-amber-300 font-bold scale-105'
+                              ? praiseForm.mode === 'subtract'
+                                ? 'bg-rose-100 border-rose-400 ring-2 ring-rose-300 font-bold scale-105'
+                                : 'bg-amber-100 border-amber-400 ring-2 ring-amber-300 font-bold scale-105'
                               : 'bg-white border-slate-200'
                           }`}
                         >
@@ -9728,17 +9778,23 @@
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">스티커 개수</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {praiseForm.mode === 'subtract' ? '차감할 스티커 개수 (마이너스 적용)' : '선물할 스티커 개수'}
+                    </label>
                     <div className="flex items-center space-x-2">
                       <div className="flex items-center space-x-1.5 flex-1">
-                        <span className="text-base">🌟</span>
+                        <span className="text-base">{praiseForm.mode === 'subtract' ? '⚡' : '🌟'}</span>
                         <input
                           type="number"
                           min={1}
                           max={9999}
                           value={praiseForm.count || 1}
                           onChange={(e) => setPraiseForm({ ...praiseForm, count: Math.max(1, parseInt(e.target.value) || 1) })}
-                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-black text-center focus:ring-2 focus:ring-amber-400"
+                          className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-xl font-black text-center focus:ring-2 ${
+                            praiseForm.mode === 'subtract'
+                              ? 'border-rose-200 text-rose-700 focus:ring-rose-400'
+                              : 'border-slate-200 text-amber-900 focus:ring-amber-400'
+                          }`}
                         />
                         <span className="text-xs font-bold text-slate-600">개</span>
                       </div>
@@ -9750,11 +9806,15 @@
                             onClick={() => setPraiseForm({ ...praiseForm, count: num })}
                             className={`px-2 py-1 rounded-lg text-xs font-bold border transition ${
                               (praiseForm.count || 1) === num
-                                ? 'bg-amber-500 text-white border-amber-500 shadow-2xs'
+                                ? praiseForm.mode === 'subtract'
+                                  ? 'bg-rose-600 text-white border-rose-600 shadow-2xs'
+                                  : 'bg-amber-500 text-white border-amber-500 shadow-2xs'
+                                : praiseForm.mode === 'subtract'
+                                ? 'bg-slate-50 hover:bg-rose-50 text-rose-700 border-slate-200'
                                 : 'bg-slate-50 hover:bg-amber-50 text-slate-700 border-slate-200'
                             }`}
                           >
-                            +{num}
+                            {praiseForm.mode === 'subtract' ? `-${num}` : `+${num}`}
                           </button>
                         ))}
                       </div>
@@ -9762,24 +9822,33 @@
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">칭찬 이유/메시지 (선택)</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {praiseForm.mode === 'subtract' ? '차감 사유 / 메모' : '칭찬 이유 / 메시지 (선택)'}
+                    </label>
                     <input
                       type="text"
                       value={praiseForm.reason}
                       onChange={(e) => setPraiseForm({ ...praiseForm, reason: e.target.value })}
-                      placeholder="비워두면 기본 칭찬 문구가 적용됩니다"
+                      placeholder={praiseForm.mode === 'subtract' ? '예: 약속 시간 미준수, 정리정돈 안 함' : '비워두면 기본 칭찬 문구가 적용됩니다'}
                       className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium"
                     />
 
                     <div className="mt-2 space-y-1">
-                      <span className="block text-[10px] font-bold text-slate-400">자주 쓰는 추천 칭찬 문구:</span>
+                      <span className="block text-[10px] font-bold text-slate-400">자주 쓰는 추천 문구:</span>
                       <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar py-1">
-                        {PRESET_PRAISE_MESSAGES.map((msg, idx) => (
+                        {(praiseForm.mode === 'subtract'
+                          ? ['약속 시간 미준수', '스마트폰/게임 시간 초과', '방 정리정돈 안 함', '약속 어김', '동생과 다툼']
+                          : PRESET_PRAISE_MESSAGES
+                        ).map((msg, idx) => (
                           <button
                             key={idx}
                             type="button"
                             onClick={() => setPraiseForm({ ...praiseForm, reason: msg })}
-                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 text-[10px] font-bold rounded-lg shrink-0 border border-amber-200"
+                            className={`px-2 py-1 text-[10px] font-bold rounded-lg shrink-0 border ${
+                              praiseForm.mode === 'subtract'
+                                ? 'bg-rose-50 hover:bg-rose-100 text-rose-900 border-rose-200'
+                                : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'
+                            }`}
                           >
                             {msg}
                           </button>
@@ -9798,9 +9867,15 @@
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md"
+                      className={`flex-1 py-2.5 rounded-xl text-white font-bold text-xs shadow-md transition ${
+                        praiseForm.mode === 'subtract'
+                          ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'
+                          : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200'
+                      }`}
                     >
-                      칭찬 스티커 선물하기 {(praiseForm.count || 1) > 1 ? `(${praiseForm.count || 1}개) ` : ''}🎁
+                      {praiseForm.mode === 'subtract'
+                        ? `스티커 차감하기 (-${praiseForm.count || 1}개) ⚡`
+                        : `칭찬 스티커 선물하기 (+${praiseForm.count || 1}개) 🎁`}
                     </button>
                   </div>
                 </form>
