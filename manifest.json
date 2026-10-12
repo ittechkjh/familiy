@@ -1,7 +1,7 @@
-﻿{
-  "name": "?곕━吏?而ㅻ꽖??& ?ы뻾 ?뚮옒??,
-  "short_name": "?곕━吏?,
-  "description": "?곕━ 媛議??섎（ ?쇱젙, ?ы뻾 ?뚮옒?? 移?갔?ㅽ떚而? ?낆꽌湲곕줉 ?ㅻ쭏??????,
+{
+  "name": "우리집 커넥트 & 여행 플래너",
+  "short_name": "우리집",
+  "description": "온 가족 일정, 여행 플래너, 칭찬스티커, 독서기록 스마트 공유",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f172a",
