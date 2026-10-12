@@ -7333,10 +7333,9 @@
         }
       };
 
-      // 타이머 실시간 카운트다운 인터벌 (자녀별 개별 독립 카운트다운)
+      // 타이머 실시간 카운트다운 인터벌 (자녀별 개별 독립 카운트다운 및 타임스탬프 동기화)
       useEffect(() => {
-        let interval = null;
-        interval = setInterval(() => {
+        let interval = setInterval(() => {
           setFocusTimers((prev) => {
             let hasActive = false;
             Object.values(prev).forEach((t) => {
@@ -7349,9 +7348,14 @@
             Object.entries(prev).forEach(([childId, timer]) => {
               if (timer.isActive && !timer.isPaused) {
                 changed = true;
-                if (timer.secondsLeft <= 1) {
+                const remaining = timer.endsAt
+                  ? Math.round((timer.endsAt - Date.now()) / 1000)
+                  : (timer.secondsLeft - 1);
+
+                if (remaining <= 0) {
                   playNotificationSound('complete');
                   const kid = FAMILY_MEMBERS.find((m) => m.id === childId) || { name: '아이' };
+                  const isReading = timer.timerType === 'reading';
                   if (isReading) {
                     sendSystemNotification(
                       `🎉 [${kid.name}] 독서 목표 달성!`,
@@ -7374,12 +7378,25 @@
                     ...timer,
                     isActive: false,
                     isPaused: false,
-                    secondsLeft: 0
+                    secondsLeft: 0,
+                    endsAt: null,
+                    pausedSecondsLeft: null
                   };
+
+                  // Firebase에도 종료 상태 동기화 (온 가족 기기에 반영)
+                  if (dbRef.current) {
+                    dbRef.current.collection('focus_timers').doc(childId).set({
+                      isActive: false,
+                      isPaused: false,
+                      endsAt: null,
+                      pausedSecondsLeft: null,
+                      updatedAt: Date.now()
+                    }, { merge: true }).catch(() => {});
+                  }
                 } else {
                   next[childId] = {
                     ...timer,
-                    secondsLeft: timer.secondsLeft - 1
+                    secondsLeft: remaining
                   };
                 }
               }
@@ -7393,75 +7410,157 @@
         };
       }, []);
 
-      const handleStartTimer = (childId = 'child1', targetMinutes = 25, timerType = 'reading', title = '') => {
+      const handleStartTimer = async (childId = 'child1', targetMinutes = 25, timerType = 'reading', title = '') => {
         const mins = Math.max(1, Number(targetMinutes) || 25);
+        const endsAt = Date.now() + mins * 60 * 1000;
+        const timerData = {
+          isActive: true,
+          isPaused: false,
+          childId,
+          targetMinutes: mins,
+          timerType: timerType || 'reading',
+          title: title || '',
+          endsAt: endsAt,
+          pausedSecondsLeft: null,
+          updatedAt: Date.now()
+        };
+
         setFocusTimers((prev) => ({
           ...prev,
           [childId]: {
-            isActive: true,
-            isPaused: false,
-            targetMinutes: mins,
-            secondsLeft: mins * 60,
-            timerType: timerType || 'reading',
-            title: title || ''
+            ...prev[childId],
+            ...timerData,
+            secondsLeft: mins * 60
           }
         }));
+
+        if (dbRef.current) {
+          try {
+            await dbRef.current.collection('focus_timers').doc(childId).set(timerData, { merge: true });
+          } catch (e) {
+            console.warn("Firestore timer start error:", e);
+          }
+        }
+
         playNotificationSound('start');
         triggerHaptic(30);
         const kid = FAMILY_MEMBERS.find((m) => m.id === childId) || { name: '아이' };
-        const typeLabel = timerType === 'reading' ? '독서' : '별개 집중';
+        const typeLabel = timerType === 'reading' ? '독서' : '일반 단순';
         showToast(`⏱️ [${kid.name}] ${mins}분 ${typeLabel} 타이머가 시작되었습니다!`);
       };
 
-      const handleTogglePauseTimer = (childId = 'child1') => {
-        setFocusTimers((prev) => {
-          const cur = prev[childId];
-          if (!cur) return prev;
-          const nextPaused = !cur.isPaused;
-          triggerHaptic(20);
-          const kid = FAMILY_MEMBERS.find((m) => m.id === childId) || { name: '아이' };
-          showToast(nextPaused ? `⏸️ [${kid.name}] 타이머가 일시정지되었습니다.` : `▶️ [${kid.name}] 타이머를 재개합니다.`);
-          return {
-            ...prev,
-            [childId]: { ...cur, isPaused: nextPaused }
-          };
-        });
+      const handleTogglePauseTimer = async (childId = 'child1') => {
+        const cur = focusTimers[childId];
+        if (!cur || !cur.isActive) return;
+
+        const nextPaused = !cur.isPaused;
+        let nextEndsAt = cur.endsAt;
+        let nextPausedSecondsLeft = cur.pausedSecondsLeft;
+
+        if (nextPaused) {
+          nextPausedSecondsLeft = cur.endsAt
+            ? Math.max(0, Math.round((cur.endsAt - Date.now()) / 1000))
+            : cur.secondsLeft;
+          nextEndsAt = null;
+        } else {
+          const rem = nextPausedSecondsLeft !== null && nextPausedSecondsLeft !== undefined
+            ? nextPausedSecondsLeft
+            : (cur.secondsLeft || (cur.targetMinutes * 60));
+          nextEndsAt = Date.now() + rem * 1000;
+          nextPausedSecondsLeft = null;
+        }
+
+        const patch = {
+          isPaused: nextPaused,
+          endsAt: nextEndsAt,
+          pausedSecondsLeft: nextPausedSecondsLeft,
+          updatedAt: Date.now()
+        };
+
+        setFocusTimers((prev) => ({
+          ...prev,
+          [childId]: {
+            ...prev[childId],
+            ...patch,
+            secondsLeft: nextPaused ? nextPausedSecondsLeft : Math.max(0, Math.round((nextEndsAt - Date.now()) / 1000))
+          }
+        }));
+
+        if (dbRef.current) {
+          try {
+            await dbRef.current.collection('focus_timers').doc(childId).set(patch, { merge: true });
+          } catch (e) {
+            console.warn("Firestore timer pause error:", e);
+          }
+        }
+
+        triggerHaptic(20);
+        const kid = FAMILY_MEMBERS.find((m) => m.id === childId) || { name: '아이' };
+        showToast(nextPaused ? `⏸️ [${kid.name}] 타이머가 일시정지되었습니다.` : `▶️ [${kid.name}] 타이머를 재개합니다.`);
       };
 
-      const handleStopTimer = (childId = 'child1') => {
-        setFocusTimers((prev) => {
-          const cur = prev[childId];
-          if (!cur) return prev;
-          triggerHaptic(20);
-          const kid = FAMILY_MEMBERS.find((m) => m.id === childId) || { name: '아이' };
-          showToast(`⏹️ [${kid.name}] 타이머가 종료되었습니다.`);
-          return {
-            ...prev,
-            [childId]: {
-              ...cur,
-              isActive: false,
-              isPaused: false,
-              secondsLeft: cur.targetMinutes * 60
-            }
-          };
-        });
+      const handleStopTimer = async (childId = 'child1') => {
+        const cur = focusTimers[childId];
+        if (!cur) return;
+
+        const patch = {
+          isActive: false,
+          isPaused: false,
+          endsAt: null,
+          pausedSecondsLeft: null,
+          updatedAt: Date.now()
+        };
+
+        setFocusTimers((prev) => ({
+          ...prev,
+          [childId]: {
+            ...prev[childId],
+            ...patch,
+            secondsLeft: cur.targetMinutes * 60
+          }
+        }));
+
+        if (dbRef.current) {
+          try {
+            await dbRef.current.collection('focus_timers').doc(childId).set(patch, { merge: true });
+          } catch (e) {
+            console.warn("Firestore timer stop error:", e);
+          }
+        }
+
+        triggerHaptic(20);
+        const kid = FAMILY_MEMBERS.find((m) => m.id === childId) || { name: '아이' };
+        showToast(`⏹️ [${kid.name}] 타이머가 종료되었습니다.`);
       };
 
-      const handleResetTimer = (childId = 'child1', minutes) => {
-        setFocusTimers((prev) => {
-          const cur = prev[childId];
-          const targetM = minutes || cur?.targetMinutes || 25;
-          return {
-            ...prev,
-            [childId]: {
-              ...cur,
-              isActive: false,
-              isPaused: false,
-              targetMinutes: targetM,
-              secondsLeft: targetM * 60
-            }
-          };
-        });
+      const handleResetTimer = async (childId = 'child1', minutes) => {
+        const cur = focusTimers[childId];
+        const targetM = minutes || cur?.targetMinutes || 25;
+        const patch = {
+          isActive: false,
+          isPaused: false,
+          targetMinutes: targetM,
+          endsAt: null,
+          pausedSecondsLeft: null,
+          updatedAt: Date.now()
+        };
+
+        setFocusTimers((prev) => ({
+          ...prev,
+          [childId]: {
+            ...prev[childId],
+            ...patch,
+            secondsLeft: targetM * 60
+          }
+        }));
+
+        if (dbRef.current) {
+          try {
+            await dbRef.current.collection('focus_timers').doc(childId).set(patch, { merge: true });
+          } catch (e) {
+            console.warn("Firestore timer reset error:", e);
+          }
+        }
       };
 
       const [myStatusInput, setMyStatusInput] = useState('');
@@ -7756,6 +7855,40 @@
                 try { localStorage.setItem('family_trips_backup', JSON.stringify(list)); } catch (e) {}
               }
             }, (err) => console.warn("family_trips snapshot error:", err));
+
+            // 신규: 주원·주아 집중 타이머 실시간 동기화 (온 가족 기기 연동)
+            db.collection('focus_timers').onSnapshot((snapshot) => {
+              const remoteTimers = {};
+              snapshot.forEach((doc) => {
+                remoteTimers[doc.id] = doc.data();
+              });
+              setFocusTimers((prev) => {
+                const next = { ...prev };
+                ['child1', 'child2'].forEach((childId) => {
+                  if (remoteTimers[childId]) {
+                    const r = remoteTimers[childId];
+                    let sLeft = 0;
+                    if (r.isActive) {
+                      if (r.isPaused) {
+                        sLeft = (r.pausedSecondsLeft !== null && r.pausedSecondsLeft !== undefined)
+                          ? r.pausedSecondsLeft
+                          : (r.targetMinutes * 60);
+                      } else if (r.endsAt) {
+                        sLeft = Math.max(0, Math.round((r.endsAt - Date.now()) / 1000));
+                      }
+                    } else {
+                      sLeft = (r.targetMinutes || 25) * 60;
+                    }
+                    next[childId] = {
+                      ...next[childId],
+                      ...r,
+                      secondsLeft: sLeft
+                    };
+                  }
+                });
+                return next;
+              });
+            }, (err) => console.warn("focus_timers snapshot error:", err));
 
           } catch (error) {
             console.error(error);
