@@ -1430,7 +1430,7 @@
       handleOpenReadingModal,
       handleRequestDeleteReadingLog,
       handleRequestResetReading,
-      focusTimer,
+      focusTimers,
       handleStartTimer,
       handleTogglePauseTimer,
       handleStopTimer,
@@ -1439,10 +1439,16 @@
       requestNotificationPermission
     }) {
       const [isTimerOpen, setIsTimerOpen] = useState(false);
-      const [timerKidId, setTimerKidId] = useState('child1');
-      const [timerMinutes, setTimerMinutes] = useState(25);
-      const [timerCustomMinutes, setTimerCustomMinutes] = useState('');
-      const [timerBookTitle, setTimerBookTitle] = useState('');
+      const [timerForms, setTimerForms] = useState({
+        child1: { minutes: 25, customMinutes: '', timerType: 'reading', title: '' },
+        child2: { minutes: 25, customMinutes: '', timerType: 'reading', title: '' }
+      });
+      const updateTimerForm = (kidId, patch) => {
+        setTimerForms((prev) => ({
+          ...prev,
+          [kidId]: { ...prev[kidId], ...patch }
+        }));
+      };
 
       const [selectedWeekOffset, setSelectedWeekOffset] = useState(0);
       const [isLevelGuideOpen, setIsLevelGuideOpen] = useState(false);
@@ -1628,14 +1634,18 @@
                 type="button"
                 onClick={() => setIsTimerOpen(!isTimerOpen)}
                 className={`px-3 py-1.5 text-xs font-extrabold rounded-xl border transition active:scale-95 flex items-center space-x-1.5 ${
-                  isTimerOpen || focusTimer?.isActive
+                  isTimerOpen || Object.values(focusTimers || {}).some(t => t?.isActive)
                     ? 'bg-amber-500 text-white border-amber-400 shadow-md shadow-amber-500/30'
                     : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border-amber-400/40'
                 }`}
               >
                 <span>⏱️</span>
-                <span>{focusTimer?.isActive ? '집중 타이머 가동 중' : '집중 타이머'}</span>
-                {focusTimer?.isActive && (
+                <span>
+                  {Object.values(focusTimers || {}).some(t => t?.isActive)
+                    ? `집중 타이머 (${Object.values(focusTimers || {}).filter(t => t?.isActive).length}명 가동 중)`
+                    : '집중 타이머'}
+                </span>
+                {Object.values(focusTimers || {}).some(t => t?.isActive) && (
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping ml-0.5" />
                 )}
               </button>
@@ -1687,23 +1697,18 @@
             </div>
           </div>
 
-          {/* 독서 & 공부 집중 타이머 인터랙티브 카드 */}
-          {(isTimerOpen || focusTimer?.isActive) && (
+          {/* 독서 & 공부 집중 타이머 인터랙티브 카드 (자녀별 독립 동시 가동) */}
+          {(isTimerOpen || Object.values(focusTimers || {}).some(t => t?.isActive)) && (
             <div className="bg-black/35 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-amber-500/40 shadow-inner space-y-4 animate-in fade-in duration-200">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
                 <div className="flex items-center space-x-2">
                   <span className="text-2xl animate-pulse">⏱️</span>
                   <div>
-                    <h3 className="text-sm sm:text-base font-black text-amber-200 flex items-center space-x-1.5">
-                      <span>독서 & 공부 집중 타이머 (뽀모도로)</span>
-                      {focusTimer?.isActive && (
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${focusTimer.isPaused ? 'bg-amber-500/30 text-amber-200' : 'bg-emerald-500/30 text-emerald-200'}`}>
-                          {focusTimer.isPaused ? '⏸️ 일시정지됨' : '🔥 집중 진행 중'}
-                        </span>
-                      )}
+                    <h3 className="text-sm sm:text-base font-black text-amber-200 flex items-center space-x-2">
+                      <span>독서 & 집중 타이머 (자녀별 독립 동시 가동)</span>
                     </h3>
                     <p className="text-[11px] text-slate-300">
-                      정해진 시간 동안 집중하고, 끝나면 알림음과 함께 오늘 독서 기록으로 즉시 연동됩니다!
+                      주원이와 주아가 각자 원하는 시간과 목적(독서 vs 별개 공부)으로 동시에 타이머를 실행할 수 있습니다!
                     </p>
                   </div>
                 </div>
@@ -1734,158 +1739,205 @@
                 </div>
               </div>
 
-              {/* 대상 아이 선택 & 시간 프리셋 */}
-              {!focusTimer?.isActive ? (
-                <div className="space-y-3.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-bold text-amber-200">집중할 어린이:</span>
-                      <div className="flex items-center space-x-1.5 bg-white/10 p-1 rounded-xl">
-                        {KIDS_MEMBERS.map(kid => (
-                          <button
-                            key={kid.id}
-                            type="button"
-                            onClick={() => setTimerKidId(kid.id)}
-                            className={`px-3 py-1 rounded-lg text-xs font-extrabold transition flex items-center space-x-1 ${
-                              timerKidId === kid.id
-                                ? 'bg-amber-500 text-white shadow-xs'
-                                : 'text-slate-300 hover:text-white'
-                            }`}
-                          >
-                            <span>{kid.avatar}</span>
-                            <span>{kid.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+              {/* 자녀별 독립 타이머 2열 카드 그리드 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {KIDS_MEMBERS.map((kid) => {
+                  const timer = focusTimers?.[kid.id] || { isActive: false };
+                  const form = timerForms[kid.id] || { minutes: 25, customMinutes: '', timerType: 'reading', title: '' };
+                  const isReadingMode = form.timerType === 'reading';
+                  const targetM = form.customMinutes ? Math.max(1, Number(form.customMinutes) || 25) : form.minutes;
 
-                    {/* 읽을 책 / 공부 내용 (선택) */}
-                    <div className="flex-1 max-w-xs">
-                      <input
-                        type="text"
-                        value={timerBookTitle}
-                        onChange={(e) => setTimerBookTitle(e.target.value)}
-                        placeholder="읽을 책 제목 또는 과목 (선택 입력)"
-                        className="w-full px-3 py-1.5 bg-white/10 border border-white/20 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 시간 프리셋 버튼들 */}
-                  <div className="flex items-center space-x-1.5 flex-wrap gap-y-1.5">
-                    <span className="text-xs font-bold text-amber-200 mr-1">목표 시간:</span>
-                    {[15, 20, 25, 30, 45, 60].map(mins => (
-                      <button
-                        key={mins}
-                        type="button"
-                        onClick={() => { setTimerMinutes(mins); setTimerCustomMinutes(''); }}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                          timerMinutes === mins && !timerCustomMinutes
-                            ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md font-black'
-                            : 'bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10'
-                        }`}
-                      >
-                        {mins}분 {mins === 25 ? '🍅' : ''}
-                      </button>
-                    ))}
-                    <div className="flex items-center space-x-1 bg-white/10 px-2 py-1 rounded-xl border border-white/10">
-                      <input
-                        type="number"
-                        min="1"
-                        max="180"
-                        placeholder="직접"
-                        value={timerCustomMinutes}
-                        onChange={(e) => setTimerCustomMinutes(e.target.value)}
-                        className="w-12 bg-transparent text-xs font-bold text-white text-center focus:outline-none"
-                      />
-                      <span className="text-xs text-slate-300">분</span>
-                    </div>
-                  </div>
-
-                  {/* 타이머 대형 표시 및 시작 버튼 */}
-                  <div className="flex items-center justify-between pt-2">
-                    <div className="flex items-baseline space-x-2">
-                      <span className="text-3xl sm:text-4xl font-mono font-black tracking-widest text-amber-300">
-                        {String(timerCustomMinutes ? Number(timerCustomMinutes) : timerMinutes).padStart(2, '0')}:00
-                      </span>
-                      <span className="text-xs text-slate-400">목표</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleStartTimer(timerKidId, timerCustomMinutes ? Number(timerCustomMinutes) : timerMinutes, 'reading', timerBookTitle)}
-                      className="px-6 py-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/30 transition active:scale-95 flex items-center space-x-2"
-                    >
-                      <span>▶</span>
-                      <span>집중 타이머 시작</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* 타이머 가동 중 화면 */
-                <div className="space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/5 p-4 rounded-2xl border border-white/10">
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-2xl">
-                          {KIDS_MEMBERS.find(k => k.id === focusTimer.childId)?.avatar || '👦'}
-                        </span>
-                        <span className="text-base font-black text-white">
-                          {KIDS_MEMBERS.find(k => k.id === focusTimer.childId)?.name || '주원'}의 독서 집중 시간
-                        </span>
-                        {focusTimer.bookTitle && (
-                          <span className="text-xs text-amber-200 bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-400/30">
-                            📖 {focusTimer.bookTitle}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-300">
-                        총 {focusTimer.targetMinutes}분 중 {Math.floor((focusTimer.targetMinutes * 60 - focusTimer.secondsLeft) / 60)}분 진행됨
-                      </p>
-                    </div>
-
-                    {/* 대형 카운트다운 디스플레이 */}
-                    <div className="text-center sm:text-right">
-                      <div className="text-4xl sm:text-5xl font-mono font-black tracking-widest text-amber-300 drop-shadow">
-                        {String(Math.floor(focusTimer.secondsLeft / 60)).padStart(2, '0')}:{String(focusTimer.secondsLeft % 60).padStart(2, '0')}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 프로그레스 바 */}
-                  <div className="w-full bg-white/10 h-3 rounded-full overflow-hidden p-0.5">
+                  return (
                     <div
-                      className="bg-gradient-to-r from-amber-400 to-orange-500 h-full rounded-full transition-all duration-1000 shadow"
-                      style={{
-                        width: `${Math.min(100, Math.max(0, ((focusTimer.targetMinutes * 60 - focusTimer.secondsLeft) / (focusTimer.targetMinutes * 60)) * 100))}%`
-                      }}
-                    />
-                  </div>
-
-                  {/* 컨트롤러 버튼들 */}
-                  <div className="flex items-center justify-end space-x-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={handleTogglePauseTimer}
-                      className={`px-4 py-2 rounded-xl text-xs font-black transition active:scale-95 flex items-center space-x-1.5 ${
-                        focusTimer.isPaused
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow'
-                          : 'bg-amber-600 hover:bg-amber-700 text-white shadow'
+                      key={kid.id}
+                      className={`rounded-2xl p-3.5 sm:p-4 border transition-all ${
+                        timer.isActive
+                          ? 'bg-amber-950/40 border-amber-400/50 shadow-lg shadow-amber-950/40 ring-1 ring-amber-400/30'
+                          : 'bg-white/5 border-white/10'
                       }`}
                     >
-                      <span>{focusTimer.isPaused ? '▶' : '⏸'}</span>
-                      <span>{focusTimer.isPaused ? '재개하기' : '일시정지'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleStopTimer}
-                      className="px-4 py-2 rounded-xl bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-black transition active:scale-95 flex items-center space-x-1.5 shadow"
-                    >
-                      <span>⏹</span>
-                      <span>타이머 종료</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+                      {/* 카드 헤더: 아이 정보 및 상태 뱃지 */}
+                      <div className="flex items-center justify-between pb-2.5 border-b border-white/10">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xl sm:text-2xl">{kid.avatar}</span>
+                          <div>
+                            <h4 className="text-sm font-black text-white flex items-center space-x-1.5">
+                              <span>{kid.name}</span>
+                              <span className="text-[10px] text-amber-300 font-bold">집중 타이머</span>
+                            </h4>
+                          </div>
+                        </div>
+
+                        <div>
+                          {timer.isActive ? (
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                              timer.isPaused ? 'bg-amber-500/30 text-amber-200' : 'bg-emerald-500/30 text-emerald-200 animate-pulse'
+                            }`}>
+                              {timer.isPaused ? '⏸️ 일시정지' : `🔥 ${timer.timerType === 'reading' ? '독서' : '집중'} 진행 중`}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-white/10 text-slate-300">
+                              대기 중
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 대기 상태일 때: 타이머 설정 폼 */}
+                      {!timer.isActive ? (
+                        <div className="space-y-3 pt-3">
+                          {/* 1. 독서 vs 별개 타이머 선택 스위치 */}
+                          <div className="space-y-1">
+                            <span className="text-[11px] font-bold text-amber-200">목적 선택:</span>
+                            <div className="grid grid-cols-2 gap-1.5 bg-black/40 p-1 rounded-xl">
+                              <button
+                                type="button"
+                                onClick={() => updateTimerForm(kid.id, { timerType: 'reading' })}
+                                className={`py-1.5 px-2 rounded-lg text-xs font-black transition flex items-center justify-center space-x-1 ${
+                                  isReadingMode
+                                    ? 'bg-amber-500 text-white shadow-xs'
+                                    : 'text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                <span>📖</span>
+                                <span>독서 타이머</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateTimerForm(kid.id, { timerType: 'general' })}
+                                className={`py-1.5 px-2 rounded-lg text-xs font-black transition flex items-center justify-center space-x-1 ${
+                                  !isReadingMode
+                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                    : 'text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                <span>✏️</span>
+                                <span>별개 타이머</span>
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-amber-200/70 pt-0.5">
+                              {isReadingMode
+                                ? '💡 독서 타이머: 완료 시 오늘 독서 일지 기록과 바로 연동됩니다.'
+                                : '💡 별개 타이머: 독서 기록과 분리된 일반 공부·숙제·활동 집중 타이머입니다.'}
+                            </p>
+                          </div>
+
+                          {/* 2. 책 제목 또는 활동/과목명 입력 */}
+                          <div>
+                            <input
+                              type="text"
+                              value={form.title}
+                              onChange={(e) => updateTimerForm(kid.id, { title: e.target.value })}
+                              placeholder={isReadingMode ? "읽을 책 제목 (선택 입력)" : "공부 과목 또는 활동명 (예: 수학 숙제)"}
+                              className="w-full px-3 py-1.5 bg-white/10 border border-white/20 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                            />
+                          </div>
+
+                          {/* 3. 목표 시간 프리셋 버튼들 */}
+                          <div className="space-y-1">
+                            <span className="text-[11px] font-bold text-amber-200">목표 시간:</span>
+                            <div className="flex items-center space-x-1 flex-wrap gap-y-1">
+                              {[15, 20, 25, 30, 45, 60].map((mins) => (
+                                <button
+                                  key={mins}
+                                  type="button"
+                                  onClick={() => updateTimerForm(kid.id, { minutes: mins, customMinutes: '' })}
+                                  className={`px-2 py-1 rounded-lg text-xs font-bold transition ${
+                                    form.minutes === mins && !form.customMinutes
+                                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black shadow-xs'
+                                      : 'bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10'
+                                  }`}
+                                >
+                                  {mins}분{mins === 25 ? '🍅' : ''}
+                                </button>
+                              ))}
+                              <div className="flex items-center space-x-1 bg-white/10 px-1.5 py-0.5 rounded-lg border border-white/10">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="180"
+                                  placeholder="직접"
+                                  value={form.customMinutes}
+                                  onChange={(e) => updateTimerForm(kid.id, { customMinutes: e.target.value })}
+                                  className="w-8 bg-transparent text-xs font-bold text-white text-center focus:outline-none"
+                                />
+                                <span className="text-[10px] text-slate-300">분</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 4. 시작 버튼 & 목표 디스플레이 */}
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="flex items-baseline space-x-1 font-mono text-xl sm:text-2xl font-black text-amber-300">
+                              <span>{String(targetM).padStart(2, '0')}:00</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleStartTimer(kid.id, targetM, form.timerType, form.title)}
+                              className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs rounded-xl shadow-md transition active:scale-95 flex items-center space-x-1.5"
+                            >
+                              <span>▶</span>
+                              <span>{kid.name} 시작</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* 가동 중 화면 */
+                        <div className="space-y-3 pt-3">
+                          <div className="flex items-center justify-between">
+                            <div className="min-w-0">
+                              <p className="text-xs font-extrabold text-amber-200 truncate">
+                                {timer.timerType === 'reading' ? '📖 독서' : '✏️ 별개 집중'}
+                                {timer.title && <span className="text-white ml-1 font-bold">({timer.title})</span>}
+                              </p>
+                              <p className="text-[11px] text-slate-300">
+                                {timer.targetMinutes}분 중 {Math.floor((timer.targetMinutes * 60 - timer.secondsLeft) / 60)}분 경과
+                              </p>
+                            </div>
+                            <div className="font-mono text-3xl sm:text-4xl font-black tracking-widest text-amber-300 drop-shadow">
+                              {String(Math.floor(timer.secondsLeft / 60)).padStart(2, '0')}:{String(timer.secondsLeft % 60).padStart(2, '0')}
+                            </div>
+                          </div>
+
+                          {/* 프로그레스 바 */}
+                          <div className="w-full bg-white/10 h-2.5 rounded-full overflow-hidden p-0.5">
+                            <div
+                              className="bg-gradient-to-r from-amber-400 to-orange-500 h-full rounded-full transition-all duration-1000 shadow"
+                              style={{
+                                width: `${Math.min(100, Math.max(0, ((timer.targetMinutes * 60 - timer.secondsLeft) / (timer.targetMinutes * 60)) * 100))}%`
+                              }}
+                            />
+                          </div>
+
+                          {/* 컨트롤러 버튼들 */}
+                          <div className="flex items-center justify-end space-x-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePauseTimer(kid.id)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black transition active:scale-95 flex items-center space-x-1 ${
+                                timer.isPaused
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow'
+                                  : 'bg-amber-600 hover:bg-amber-700 text-white shadow'
+                              }`}
+                            >
+                              <span>{timer.isPaused ? '▶' : '⏸'}</span>
+                              <span>{timer.isPaused ? '재개' : '일시정지'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleStopTimer(kid.id)}
+                              className="px-3 py-1.5 rounded-xl bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-black transition active:scale-95 flex items-center space-x-1 shadow"
+                            >
+                              <span>⏹</span>
+                              <span>종료</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -7230,15 +7282,24 @@
         }
       };
 
-      // 📚 독서 & 공부 집중 타이머 전역 상태 (다른 탭으로 이동해도 지속 카운트다운)
-      const [focusTimer, setFocusTimer] = useState({
-        isActive: false,
-        isPaused: false,
-        childId: 'child1',
-        targetMinutes: 25,
-        secondsLeft: 25 * 60,
-        subject: 'reading',
-        bookTitle: ''
+      // 📚 독서 & 공부 집중 타이머 전역 상태 (자녀별 독립 동시 가동 지원)
+      const [focusTimers, setFocusTimers] = useState({
+        child1: {
+          isActive: false,
+          isPaused: false,
+          targetMinutes: 25,
+          secondsLeft: 25 * 60,
+          timerType: 'reading', // 'reading' (독서) | 'general' (별개 집중/공부)
+          title: ''
+        },
+        child2: {
+          isActive: false,
+          isPaused: false,
+          targetMinutes: 25,
+          secondsLeft: 25 * 60,
+          timerType: 'reading',
+          title: ''
+        }
       });
 
       // 타이머 완료 축하 모달 상태
@@ -7272,92 +7333,129 @@
         }
       };
 
-      // 타이머 실시간 카운트다운 인터벌
+      // 타이머 실시간 카운트다운 인터벌 (자녀별 개별 독립 카운트다운)
       useEffect(() => {
         let interval = null;
-        if (focusTimer.isActive && !focusTimer.isPaused) {
-          interval = setInterval(() => {
-            setFocusTimer((prev) => {
-              if (!prev.isActive || prev.isPaused) return prev;
-              if (prev.secondsLeft <= 1) {
-                playNotificationSound('complete');
-                const kid = FAMILY_MEMBERS.find(m => m.id === prev.childId) || { name: '아이' };
-                sendSystemNotification(
-                  `🎉 [${kid.name}] 집중 목표 달성!`,
-                  `약속한 ${prev.targetMinutes}분 ${prev.subject === 'reading' ? '독서' : '공부'}를 성공적으로 마쳤습니다! 👏`
-                );
-                setTimerCompletedModal({
-                  childId: prev.childId,
-                  childName: kid.name,
-                  minutes: prev.targetMinutes,
-                  subject: prev.subject,
-                  bookTitle: prev.bookTitle || ''
-                });
-                return {
-                  ...prev,
-                  isActive: false,
-                  isPaused: false,
-                  secondsLeft: 0
-                };
-              }
-              return {
-                ...prev,
-                secondsLeft: prev.secondsLeft - 1
-              };
+        interval = setInterval(() => {
+          setFocusTimers((prev) => {
+            let hasActive = false;
+            Object.values(prev).forEach((t) => {
+              if (t.isActive && !t.isPaused) hasActive = true;
             });
-          }, 1000);
-        }
+            if (!hasActive) return prev;
+
+            let changed = false;
+            const next = { ...prev };
+            Object.entries(prev).forEach(([childId, timer]) => {
+              if (timer.isActive && !timer.isPaused) {
+                changed = true;
+                if (timer.secondsLeft <= 1) {
+                  playNotificationSound('complete');
+                  const kid = FAMILY_MEMBERS.find((m) => m.id === childId) || { name: '아이' };
+                  const isReading = timer.timerType === 'reading';
+                  sendSystemNotification(
+                    `🎉 [${kid.name}] ${isReading ? '독서' : '집중'} 목표 달성!`,
+                    `약속한 ${timer.targetMinutes}분 ${isReading ? '독서' : (timer.title || '집중 공부')}를 성공적으로 마쳤습니다! 👏`
+                  );
+                  setTimerCompletedModal({
+                    childId,
+                    childName: kid.name,
+                    minutes: timer.targetMinutes,
+                    timerType: timer.timerType,
+                    title: timer.title || ''
+                  });
+                  next[childId] = {
+                    ...timer,
+                    isActive: false,
+                    isPaused: false,
+                    secondsLeft: 0
+                  };
+                } else {
+                  next[childId] = {
+                    ...timer,
+                    secondsLeft: timer.secondsLeft - 1
+                  };
+                }
+              }
+            });
+            return changed ? next : prev;
+          });
+        }, 1000);
+
         return () => {
           if (interval) clearInterval(interval);
         };
-      }, [focusTimer.isActive, focusTimer.isPaused]);
+      }, []);
 
-      const handleStartTimer = (childId, targetMinutes, subject = 'reading', bookTitle = '') => {
+      const handleStartTimer = (childId = 'child1', targetMinutes = 25, timerType = 'reading', title = '') => {
         const mins = Math.max(1, Number(targetMinutes) || 25);
-        setFocusTimer({
-          isActive: true,
-          isPaused: false,
-          childId: childId || 'child1',
-          targetMinutes: mins,
-          secondsLeft: mins * 60,
-          subject,
-          bookTitle: bookTitle || ''
-        });
+        setFocusTimers((prev) => ({
+          ...prev,
+          [childId]: {
+            isActive: true,
+            isPaused: false,
+            targetMinutes: mins,
+            secondsLeft: mins * 60,
+            timerType: timerType || 'reading',
+            title: title || ''
+          }
+        }));
         playNotificationSound('start');
         triggerHaptic(30);
-        const kid = FAMILY_MEMBERS.find(m => m.id === childId) || { name: '아이' };
-        showToast(`⏱️ [${kid.name}] ${mins}분 집중 타이머가 시작되었습니다!`);
+        const kid = FAMILY_MEMBERS.find((m) => m.id === childId) || { name: '아이' };
+        const typeLabel = timerType === 'reading' ? '독서' : '별개 집중';
+        showToast(`⏱️ [${kid.name}] ${mins}분 ${typeLabel} 타이머가 시작되었습니다!`);
       };
 
-      const handleTogglePauseTimer = () => {
-        setFocusTimer((prev) => {
-          const nextPaused = !prev.isPaused;
+      const handleTogglePauseTimer = (childId = 'child1') => {
+        setFocusTimers((prev) => {
+          const cur = prev[childId];
+          if (!cur) return prev;
+          const nextPaused = !cur.isPaused;
           triggerHaptic(20);
-          showToast(nextPaused ? '⏸️ 타이머가 일시정지되었습니다.' : '▶️ 타이머를 다시 시작합니다.');
-          return { ...prev, isPaused: nextPaused };
+          const kid = FAMILY_MEMBERS.find((m) => m.id === childId) || { name: '아이' };
+          showToast(nextPaused ? `⏸️ [${kid.name}] 타이머가 일시정지되었습니다.` : `▶️ [${kid.name}] 타이머를 재개합니다.`);
+          return {
+            ...prev,
+            [childId]: { ...cur, isPaused: nextPaused }
+          };
         });
       };
 
-      const handleStopTimer = () => {
-        setFocusTimer((prev) => ({
-          ...prev,
-          isActive: false,
-          isPaused: false,
-          secondsLeft: prev.targetMinutes * 60
-        }));
-        triggerHaptic(20);
-        showToast('⏹️ 타이머가 종료되었습니다.');
+      const handleStopTimer = (childId = 'child1') => {
+        setFocusTimers((prev) => {
+          const cur = prev[childId];
+          if (!cur) return prev;
+          triggerHaptic(20);
+          const kid = FAMILY_MEMBERS.find((m) => m.id === childId) || { name: '아이' };
+          showToast(`⏹️ [${kid.name}] 타이머가 종료되었습니다.`);
+          return {
+            ...prev,
+            [childId]: {
+              ...cur,
+              isActive: false,
+              isPaused: false,
+              secondsLeft: cur.targetMinutes * 60
+            }
+          };
+        });
       };
 
-      const handleResetTimer = (minutes) => {
-        const targetM = minutes || focusTimer.targetMinutes || 25;
-        setFocusTimer((prev) => ({
-          ...prev,
-          isActive: false,
-          isPaused: false,
-          targetMinutes: targetM,
-          secondsLeft: targetM * 60
-        }));
+      const handleResetTimer = (childId = 'child1', minutes) => {
+        setFocusTimers((prev) => {
+          const cur = prev[childId];
+          const targetM = minutes || cur?.targetMinutes || 25;
+          return {
+            ...prev,
+            [childId]: {
+              ...cur,
+              isActive: false,
+              isPaused: false,
+              targetMinutes: targetM,
+              secondsLeft: targetM * 60
+            }
+          };
+        });
       };
 
       const [myStatusInput, setMyStatusInput] = useState('');
@@ -9489,46 +9587,50 @@
             </div>
           </header>
 
-          {/* 상단 스티키 미니 타이머 바 (타이머 작동 중 다른 탭 이동 시에도 항상 표시) */}
-          {focusTimer.isActive && (
-            <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white px-3 sm:px-4 py-2 sm:py-2.5 shadow-md flex items-center justify-between z-20 sticky top-[53px] sm:top-[61px] backdrop-blur-md border-b border-amber-400/30 animate-in slide-in-from-top duration-200">
-              <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-                <span className="text-xl sm:text-2xl animate-pulse">⏱️</span>
-                <div className="min-w-0">
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-xs sm:text-sm font-black truncate">
-                      {KIDS_MEMBERS.find(k => k.id === focusTimer.childId)?.name || '주원'}의 독서 집중 중
-                    </span>
-                    {focusTimer.isPaused && (
-                      <span className="text-[10px] bg-white/20 px-1.5 py-0.2 rounded font-bold">일시정지됨</span>
-                    )}
-                  </div>
-                  {focusTimer.bookTitle && (
-                    <p className="text-[11px] text-amber-100 truncate">📖 {focusTimer.bookTitle}</p>
-                  )}
+          {/* 상단 스티키 미니 타이머 바 (타이머 작동 중 다른 탭 이동 시에도 항상 표시 - 자녀별 독립 표시) */}
+          {Object.values(focusTimers || {}).some(t => t?.isActive) && (
+            <div className="bg-gradient-to-r from-amber-700 via-orange-600 to-amber-700 text-white px-3 sm:px-4 py-2 shadow-md z-20 sticky top-[53px] sm:top-[61px] backdrop-blur-md border-b border-amber-400/30 animate-in slide-in-from-top duration-200">
+              <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center space-x-2 shrink-0">
+                  <span className="text-xl animate-pulse">⏱️</span>
+                  <span className="text-xs font-black tracking-tight">집중 타이머 가동 중</span>
                 </div>
-              </div>
-              <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-                <span className="font-mono text-base sm:text-lg font-black tracking-wider bg-black/25 px-2.5 py-0.5 rounded-xl border border-white/20">
-                  {String(Math.floor(focusTimer.secondsLeft / 60)).padStart(2, '0')}:{String(focusTimer.secondsLeft % 60).padStart(2, '0')}
-                </span>
-                <div className="flex items-center space-x-1">
-                  <button
-                    type="button"
-                    onClick={handleTogglePauseTimer}
-                    className="px-2.5 py-1 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition active:scale-95"
-                    title={focusTimer.isPaused ? "재개" : "일시정지"}
-                  >
-                    {focusTimer.isPaused ? '▶ 재개' : '⏸ 일시정지'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleStopTimer}
-                    className="px-2.5 py-1 rounded-xl bg-rose-500/80 hover:bg-rose-500 text-white text-xs font-bold transition active:scale-95"
-                    title="타이머 종료"
-                  >
-                    ⏹ 종료
-                  </button>
+                <div className="flex items-center space-x-2 sm:space-x-3 overflow-x-auto no-scrollbar w-full sm:w-auto justify-start sm:justify-end">
+                  {KIDS_MEMBERS.map(kid => {
+                    const timer = focusTimers?.[kid.id];
+                    if (!timer || !timer.isActive) return null;
+                    const isReading = timer.timerType === 'reading';
+                    return (
+                      <div key={kid.id} className="bg-black/30 px-2.5 py-1 rounded-xl border border-white/20 flex items-center space-x-2 shrink-0 text-xs">
+                        <span className="font-bold flex items-center space-x-1">
+                          <span>{kid.avatar}</span>
+                          <span className="font-black">{kid.name}</span>
+                          <span className="text-[10px] opacity-80 font-normal">({isReading ? '독서' : '별개'})</span>
+                        </span>
+                        <span className="font-mono font-black text-amber-200 bg-black/40 px-1.5 py-0.2 rounded border border-white/10">
+                          {String(Math.floor(timer.secondsLeft / 60)).padStart(2, '0')}:{String(timer.secondsLeft % 60).padStart(2, '0')}
+                        </span>
+                        <div className="flex items-center space-x-1">
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePauseTimer(kid.id)}
+                            className="px-2 py-0.5 rounded-lg bg-white/20 hover:bg-white/30 text-[11px] font-bold transition active:scale-95"
+                            title={timer.isPaused ? "재개" : "일시정지"}
+                          >
+                            {timer.isPaused ? '▶ 재개' : '⏸ 일시정지'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStopTimer(kid.id)}
+                            className="px-2 py-0.5 rounded-lg bg-rose-500/80 hover:bg-rose-500 text-[11px] font-bold transition active:scale-95"
+                            title="종료"
+                          >
+                            ⏹ 종료
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -9706,7 +9808,7 @@
                   handleOpenReadingModal={handleOpenReadingModal}
                   handleRequestDeleteReadingLog={handleRequestDeleteReadingLog}
                   handleRequestResetReading={handleRequestResetReading}
-                  focusTimer={focusTimer}
+                  focusTimers={focusTimers}
                   handleStartTimer={handleStartTimer}
                   handleTogglePauseTimer={handleTogglePauseTimer}
                   handleStopTimer={handleStopTimer}
@@ -9849,7 +9951,7 @@
                 handleOpenReadingModal={handleOpenReadingModal}
                 handleRequestDeleteReadingLog={handleRequestDeleteReadingLog}
                 handleRequestResetReading={handleRequestResetReading}
-                focusTimer={focusTimer}
+                focusTimers={focusTimers}
                 handleStartTimer={handleStartTimer}
                 handleTogglePauseTimer={handleTogglePauseTimer}
                 handleStopTimer={handleStopTimer}
@@ -12039,30 +12141,30 @@
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
               <div className="bg-white rounded-3xl max-w-sm w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 text-center">
                 <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-3xl animate-bounce shadow-inner">
-                  🎉
+                  {timerCompletedModal.timerType === 'reading' ? '🎉' : '🏅'}
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-slate-800">
-                    집중 목표 달성 축하해요!
+                    {timerCompletedModal.timerType === 'reading' ? '독서 목표 달성 축하해요!' : '집중 목표 달성 축하해요!'}
                   </h3>
                   <p className="text-xs text-slate-500 mt-1">
-                    <span className="font-bold text-amber-600">{timerCompletedModal.childName}</span>이가 약속한 <span className="font-extrabold text-slate-700">{timerCompletedModal.minutes}분</span> 동안 집중을 마쳤습니다! 👏
+                    <span className="font-bold text-amber-600">{timerCompletedModal.childName}</span>이가 약속한 <span className="font-extrabold text-slate-700">{timerCompletedModal.minutes}분</span> 동안 {timerCompletedModal.timerType === 'reading' ? '독서' : '집중 활동'}을 마쳤습니다! 👏
                   </p>
-                  {timerCompletedModal.bookTitle && (
+                  {timerCompletedModal.title && (
                     <div className="mt-2 py-1.5 px-3 bg-amber-50 rounded-xl border border-amber-200/60 inline-block text-xs font-bold text-amber-800">
-                      📖 {timerCompletedModal.bookTitle}
+                      {timerCompletedModal.timerType === 'reading' ? '📖 ' : '✏️ '}{timerCompletedModal.title}
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-2 pt-2">
-                  {isParent && timerCompletedModal.subject === 'reading' && (
+                  {isParent && timerCompletedModal.timerType === 'reading' && (
                     <button
                       type="button"
                       onClick={() => {
                         handleOpenReadingModal(
                           timerCompletedModal.childId,
-                          timerCompletedModal.bookTitle || '',
+                          timerCompletedModal.title || '',
                           timerCompletedModal.minutes
                         );
                         setTimerCompletedModal(null);
@@ -12080,7 +12182,7 @@
                         setPraiseForm({
                           toMemberId: timerCompletedModal.childId,
                           stickerKey: 'trophy',
-                          reason: `${timerCompletedModal.minutes}분 집중 목표 달성!`
+                          reason: `${timerCompletedModal.minutes}분 ${timerCompletedModal.title ? timerCompletedModal.title + ' ' : ''}${timerCompletedModal.timerType === 'reading' ? '독서' : '집중'} 완료!`
                         });
                         setIsPraiseModalOpen(true);
                         setTimerCompletedModal(null);
