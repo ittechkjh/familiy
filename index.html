@@ -1811,24 +1811,24 @@
                                     : 'text-slate-400 hover:text-white'
                                 }`}
                               >
-                                <span>✏️</span>
-                                <span>별개 타이머</span>
+                                <span>⏱️</span>
+                                <span>일반 단순 타이머</span>
                               </button>
                             </div>
                             <p className="text-[10px] text-amber-200/70 pt-0.5">
                               {isReadingMode
                                 ? '💡 독서 타이머: 완료 시 오늘 독서 일지 기록과 바로 연동됩니다.'
-                                : '💡 별개 타이머: 독서 기록과 분리된 일반 공부·숙제·활동 집중 타이머입니다.'}
+                                : '💡 일반 단순 타이머: 독서 기록과 무관하게 시간 종료 시 알림만 울리는 타이머입니다.'}
                             </p>
                           </div>
 
-                          {/* 2. 책 제목 또는 활동/과목명 입력 */}
+                          {/* 2. 책 제목 또는 메모 입력 */}
                           <div>
                             <input
                               type="text"
                               value={form.title}
                               onChange={(e) => updateTimerForm(kid.id, { title: e.target.value })}
-                              placeholder={isReadingMode ? "읽을 책 제목 (선택 입력)" : "공부 과목 또는 활동명 (예: 수학 숙제)"}
+                              placeholder={isReadingMode ? "읽을 책 제목 (선택 입력)" : "타이머 메모 또는 과목 (선택 입력, 예: 수학 숙제)"}
                               className="w-full px-3 py-1.5 bg-white/10 border border-white/20 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
                             />
                           </div>
@@ -7352,11 +7352,17 @@
                 if (timer.secondsLeft <= 1) {
                   playNotificationSound('complete');
                   const kid = FAMILY_MEMBERS.find((m) => m.id === childId) || { name: '아이' };
-                  const isReading = timer.timerType === 'reading';
-                  sendSystemNotification(
-                    `🎉 [${kid.name}] ${isReading ? '독서' : '집중'} 목표 달성!`,
-                    `약속한 ${timer.targetMinutes}분 ${isReading ? '독서' : (timer.title || '집중 공부')}를 성공적으로 마쳤습니다! 👏`
-                  );
+                  if (isReading) {
+                    sendSystemNotification(
+                      `🎉 [${kid.name}] 독서 목표 달성!`,
+                      `약속한 ${timer.targetMinutes}분 독서를 성공적으로 마쳤습니다! 👏`
+                    );
+                  } else {
+                    sendSystemNotification(
+                      `⏰ [${kid.name}] ${timer.targetMinutes}분 타이머 종료!`,
+                      `약속한 ${timer.targetMinutes}분${timer.title ? ` (${timer.title})` : ''} 타이머가 완료되었습니다.`
+                    );
+                  }
                   setTimerCompletedModal({
                     childId,
                     childName: kid.name,
@@ -12140,67 +12146,83 @@
           {timerCompletedModal && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
               <div className="bg-white rounded-3xl max-w-sm w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 text-center">
-                <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-3xl animate-bounce shadow-inner">
-                  {timerCompletedModal.timerType === 'reading' ? '🎉' : '🏅'}
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-slate-800">
-                    {timerCompletedModal.timerType === 'reading' ? '독서 목표 달성 축하해요!' : '집중 목표 달성 축하해요!'}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    <span className="font-bold text-amber-600">{timerCompletedModal.childName}</span>이가 약속한 <span className="font-extrabold text-slate-700">{timerCompletedModal.minutes}분</span> 동안 {timerCompletedModal.timerType === 'reading' ? '독서' : '집중 활동'}을 마쳤습니다! 👏
-                  </p>
-                  {timerCompletedModal.title && (
-                    <div className="mt-2 py-1.5 px-3 bg-amber-50 rounded-xl border border-amber-200/60 inline-block text-xs font-bold text-amber-800">
-                      {timerCompletedModal.timerType === 'reading' ? '📖 ' : '✏️ '}{timerCompletedModal.title}
+                {timerCompletedModal.timerType === 'reading' ? (
+                  <>
+                    <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-3xl animate-bounce shadow-inner">
+                      🎉
                     </div>
-                  )}
-                </div>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-800">
+                        독서 목표 달성 축하해요!
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1">
+                        <span className="font-bold text-amber-600">{timerCompletedModal.childName}</span>이가 약속한 <span className="font-extrabold text-slate-700">{timerCompletedModal.minutes}분</span> 동안 독서를 마쳤습니다! 👏
+                      </p>
+                      {timerCompletedModal.title && (
+                        <div className="mt-2 py-1.5 px-3 bg-amber-50 rounded-xl border border-amber-200/60 inline-block text-xs font-bold text-amber-800">
+                          📖 {timerCompletedModal.title}
+                        </div>
+                      )}
+                    </div>
 
-                <div className="space-y-2 pt-2">
-                  {isParent && timerCompletedModal.timerType === 'reading' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleOpenReadingModal(
-                          timerCompletedModal.childId,
-                          timerCompletedModal.title || '',
-                          timerCompletedModal.minutes
-                        );
-                        setTimerCompletedModal(null);
-                      }}
-                      className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition active:scale-95 flex items-center justify-center space-x-1.5"
-                    >
-                      <span>📖</span>
-                      <span>오늘 독서 기록에 바로 저장하기</span>
-                    </button>
-                  )}
-                  {isParent && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPraiseForm({
-                          toMemberId: timerCompletedModal.childId,
-                          stickerKey: 'trophy',
-                          reason: `${timerCompletedModal.minutes}분 ${timerCompletedModal.title ? timerCompletedModal.title + ' ' : ''}${timerCompletedModal.timerType === 'reading' ? '독서' : '집중'} 완료!`
-                        });
-                        setIsPraiseModalOpen(true);
-                        setTimerCompletedModal(null);
-                      }}
-                      className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs sm:text-sm rounded-xl border border-indigo-200 transition active:scale-95 flex items-center justify-center space-x-1.5"
-                    >
-                      <span>⭐</span>
-                      <span>칭찬 스티커 선물하기</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setTimerCompletedModal(null)}
-                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs sm:text-sm rounded-xl transition active:scale-95"
-                  >
-                    확인 및 닫기
-                  </button>
-                </div>
+                    <div className="space-y-2 pt-2">
+                      {isParent && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleOpenReadingModal(
+                              timerCompletedModal.childId,
+                              timerCompletedModal.title || '',
+                              timerCompletedModal.minutes
+                            );
+                            setTimerCompletedModal(null);
+                          }}
+                          className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition active:scale-95 flex items-center justify-center space-x-1.5"
+                        >
+                          <span>📖</span>
+                          <span>오늘 독서 기록에 바로 저장하기</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setTimerCompletedModal(null)}
+                        className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs sm:text-sm rounded-xl transition active:scale-95"
+                      >
+                        확인 및 닫기
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  /* 별개 단순 타이머 완료 화면 (단순 알림 및 확인 버튼만 제공) */
+                  <>
+                    <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-3xl animate-bounce shadow-inner">
+                      ⏰
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-800">
+                        타이머가 종료되었습니다!
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1">
+                        <span className="font-bold text-slate-800">{timerCompletedModal.childName}</span>의 <span className="font-extrabold text-indigo-600">{timerCompletedModal.minutes}분</span> 타이머가 끝났습니다.
+                      </p>
+                      {timerCompletedModal.title && (
+                        <div className="mt-2 py-1.5 px-3 bg-slate-100 rounded-xl border border-slate-200 inline-block text-xs font-bold text-slate-700">
+                          ⏱️ {timerCompletedModal.title}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setTimerCompletedModal(null)}
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition active:scale-95"
+                      >
+                        확인
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
