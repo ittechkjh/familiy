@@ -12,7 +12,18 @@
   <meta name="apple-mobile-web-app-title" content="우리집 커넥트" />
   <meta name="theme-color" content="#0f172a" />
   <link rel="apple-touch-icon" href="https://placehold.co/192x192/4f46e5/ffffff?text=🏡" />
-  <link rel="manifest" href='data:application/manifest+json,{"name":"우리집 커넥트","short_name":"우리집","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#4f46e5","icons":[{"src":"https://placehold.co/192x192/4f46e5/ffffff?text=🏡","sizes":"192x192","type":"image/png"}]}' />
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- PWA 서비스워커 등록 스크립트 -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((err) => {
+          console.log('SW registration error:', err);
+        });
+      });
+    }
+  </script>
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -4898,6 +4909,115 @@
         });
       }, [currentTrip, selectedDay]);
 
+      // 스마트 여행 경비 자동 파싱 및 합산
+      const tripCostStats = useMemo(() => {
+        if (!currentTrip || !currentTrip.items) return { totalCost: 0, dayCost: 0, itemCount: 0 };
+        const parseCost = (val) => {
+          if (!val) return 0;
+          const cleaned = String(val).replace(/[^0-9]/g, '');
+          return cleaned ? parseInt(cleaned, 10) : 0;
+        };
+
+        let total = 0;
+        let dayTotal = 0;
+        currentTrip.items.forEach(item => {
+          const costNum = parseCost(item.cost);
+          total += costNum;
+          if (selectedDay !== 'all' && Number(item.day) === Number(selectedDay)) {
+            dayTotal += costNum;
+          }
+        });
+        return {
+          totalCost: total,
+          dayCost: selectedDay === 'all' ? total : dayTotal,
+          itemCount: currentTrip.items.length
+        };
+      }, [currentTrip, selectedDay]);
+
+      // 가족 여행 준비물 (짐싸기 체크리스트) 상태 및 로컬 백업
+      const [checklist, setChecklist] = useState(() => {
+        const saved = localStorage.getItem(`family_trip_checklist_${currentTrip?.id || 'default'}`);
+        if (saved) {
+          try { return JSON.parse(saved); } catch (e) {}
+        }
+        return [
+          { id: 1, text: '신분증 / 운전면허증', category: '필수', done: false },
+          { id: 2, text: '보조배터리 및 스마트폰 충전기', category: '필수', done: false },
+          { id: 3, text: '상비약 (소화제, 밴드, 해열제)', category: '건강', done: false },
+          { id: 4, text: '여벌 옷 및 속옷 / 양말', category: '의류', done: false },
+          { id: 5, text: '세면도구 / 칫솔·치약 / 선크림', category: '위생', done: false },
+          { id: 6, text: '아이들 간식 및 물티슈', category: '가족', done: false }
+        ];
+      });
+
+      useEffect(() => {
+        if (currentTrip?.id) {
+          localStorage.setItem(`family_trip_checklist_${currentTrip.id}`, JSON.stringify(checklist));
+        }
+      }, [checklist, currentTrip?.id]);
+
+      const [newChecklistText, setNewChecklistText] = useState('');
+
+      const handleToggleChecklist = (id) => {
+        setChecklist(prev => prev.map(item => item.id === id ? { ...item, done: !item.done } : item));
+        triggerHaptic(10);
+      };
+
+      const handleAddChecklist = (e) => {
+        e.preventDefault();
+        if (!newChecklistText.trim()) return;
+        const newItem = {
+          id: Date.now(),
+          text: newChecklistText.trim(),
+          category: '준비물',
+          done: false
+        };
+        setChecklist(prev => [...prev, newItem]);
+        setNewChecklistText('');
+        showToast("🧳 짐싸기 목록에 추가되었습니다!");
+        triggerHaptic(15);
+      };
+
+      const handleDeleteChecklist = (id) => {
+        setChecklist(prev => prev.filter(item => item.id !== id));
+        triggerHaptic(10);
+      };
+
+      // 여행 일정 공유 (모바일 Web Share API 및 카카오톡/클립보드 폴백)
+      const handleShareTrip = async () => {
+        if (!currentTrip) return;
+        const shareUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '')}trip.html?trip=${currentTrip.id}`;
+        const title = `🌴 [우리 가족 여행] ${currentTrip.title}`;
+        const text = `${currentTrip.destination} (${currentTrip.startDate} ~ ${currentTrip.endDate})\n실시간 일정과 지도를 확인하세요!`;
+
+        if (navigator.share) {
+          try {
+            await navigator.share({
+              title,
+              text,
+              url: shareUrl
+            });
+            showToast("📤 여행 일정이 성공적으로 공유되었습니다!");
+            return;
+          } catch (err) {
+            if (err.name !== 'AbortError') {
+              console.warn('Share error:', err);
+            }
+          }
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          try {
+            await navigator.clipboard.writeText(shareUrl);
+            showToast("🔗 친구 공유 링크가 복사되었습니다! 카톡이나 문자로 전송하세요.");
+            triggerHaptic(20);
+          } catch (e) {
+            prompt("아래 친구 공유 링크를 복사하세요:", shareUrl);
+          }
+        } else {
+          prompt("아래 친구 공유 링크를 복사하세요:", shareUrl);
+        }
+      };
+
       // 새 여행 모달 열기 (엄마, 아빠 전용)
       const handleOpenNewTripModal = () => {
         if (!isParent) {
@@ -5166,28 +5286,16 @@
                     </select>
                   </div>
                 )}
-                {/* 🔗 친구에게 일정 공유 링크 복사 버튼 (누구나 공유 가능) */}
+                {/* 🔗 친구에게 일정 공유 링크 복사 및 모바일 카톡 원터치 공유 버튼 */}
                 {currentTrip && (
                   <button
                     type="button"
-                    onClick={() => {
-                      const shareUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '')}trip.html?trip=${currentTrip.id}`;
-                      if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(shareUrl).then(() => {
-                          showToast("🔗 친구 공유 링크가 복사되었습니다! 카톡이나 문자로 전송하세요.");
-                          triggerHaptic(20);
-                        }).catch(() => {
-                          prompt("아래 친구 공유 링크를 복사하세요:", shareUrl);
-                        });
-                      } else {
-                        prompt("아래 친구 공유 링크를 복사하세요:", shareUrl);
-                      }
-                    }}
+                    onClick={handleShareTrip}
                     className="px-3 py-2 rounded-xl bg-emerald-500/80 hover:bg-emerald-500 border border-white/30 text-white font-extrabold text-xs shadow-xs transition active:scale-95 flex items-center space-x-1"
-                    title="로그인 없이 친구들이 여행 일정과 지도를 볼 수 있는 전용 웹페이지 링크를 복사합니다"
+                    title="카카오톡/문자 원터치 공유 및 친구 전용 일정 페이지 링크를 공유합니다"
                   >
-                    <span>🔗</span>
-                    <span>친구에게 공유</span>
+                    <span>📤</span>
+                    <span>일정 공유하기</span>
                   </button>
                 )}
                 {/* 📄 여행 일정 PDF 다운로드 버튼 (온 가족 누구나 다운로드 가능) */}
@@ -5284,8 +5392,8 @@
                 })}
               </div>
 
-              {/* 뷰 전환 모드 (타임테이블 / 지도 / 둘 다 보기) */}
-              <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-xl shrink-0 self-start sm:self-auto">
+              {/* 뷰 전환 모드 (타임테이블 / 지도 / 둘 다 보기 / 짐싸기 목록) */}
+              <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-xl shrink-0 self-start sm:self-auto flex-wrap gap-y-1">
                 <button
                   type="button"
                   onClick={() => setViewMode('both')}
@@ -5313,6 +5421,19 @@
                 >
                   🗺️ 이동 동선 지도
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('checklist')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                    viewMode === 'checklist' ? 'bg-white text-emerald-700 shadow-2xs' : 'text-slate-500'
+                  }`}
+                >
+                  <span>🧳</span>
+                  <span>짐싸기 목록</span>
+                  <span className="text-[10px] px-1 rounded-full bg-emerald-100 text-emerald-800 font-bold ml-0.5">
+                    {checklist.filter(c => c.done).length}/{checklist.length}
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -5338,8 +5459,40 @@
             </div>
           </div>
 
+          {/* 스마트 여행 경비 자동 합산 요약 바 */}
+          {tripCostStats.totalCost > 0 && viewMode !== 'checklist' && (
+            <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 p-3.5 sm:p-4 rounded-2xl border border-amber-200/80 shadow-2xs flex items-center justify-between gap-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg font-black shadow-xs shrink-0">
+                  💰
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-extrabold text-amber-900">
+                      {selectedDay === 'all' ? '전체 여정 예상 경비' : `Day ${selectedDay} 예상 경비`}
+                    </span>
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded">
+                      실시간 집계
+                    </span>
+                  </div>
+                  <p className="text-base sm:text-lg font-black text-amber-800 tracking-tight">
+                    {tripCostStats.dayCost.toLocaleString()}원
+                    {selectedDay !== 'all' && (
+                      <span className="text-xs font-bold text-slate-500 ml-2">
+                        (전체 {tripCostStats.totalCost.toLocaleString()}원)
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right text-[11px] text-amber-700 hidden sm:block">
+                <span>등록된 일정 {currentTrip?.items?.length || 0}개 기준</span>
+              </div>
+            </div>
+          )}
+
           {/* 지도 뷰 (viewMode === 'both' 또는 'map'일 때 표시) */}
-          {(viewMode === 'both' || viewMode === 'map') && (
+          {viewMode !== 'checklist' && (viewMode === 'both' || viewMode === 'map') && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between px-1 text-xs font-black text-slate-800">
                 <span className="flex items-center space-x-1">
@@ -5357,7 +5510,7 @@
           )}
 
           {/* 타임테이블 뷰 (viewMode === 'both' 또는 'timetable'일 때 표시) */}
-          {(viewMode === 'both' || viewMode === 'timetable') && (
+          {viewMode !== 'checklist' && (viewMode === 'both' || viewMode === 'timetable') && (
             <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-2xs space-y-3">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                 <span className="text-xs sm:text-sm font-extrabold text-slate-900 flex items-center space-x-1.5">
@@ -5646,6 +5799,84 @@
                   })}
                 </div>
               )}
+          {/* 짐싸기 체크리스트 뷰 */}
+          {viewMode === 'checklist' && (
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="text-xl">🧳</span>
+                  <h3 className="text-sm font-black text-slate-800">가족 여행 짐싸기 체크리스트</h3>
+                </div>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                  완료 {checklist.filter(c => c.done).length} / 전체 {checklist.length}
+                </span>
+              </div>
+
+              {/* 진행도 게이지 바 */}
+              <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full transition-all duration-300"
+                  style={{ width: `${checklist.length > 0 ? (checklist.filter(c => c.done).length / checklist.length) * 100 : 0}%` }}
+                />
+              </div>
+
+              {/* 새 항목 추가 폼 */}
+              <form onSubmit={handleAddChecklist} className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="챙길 준비물을 입력하세요 (예: 튜브, 카메라, 충전기)"
+                  value={newChecklistText}
+                  onChange={(e) => setNewChecklistText(e.target.value)}
+                  className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-xs transition active:scale-95 shrink-0"
+                >
+                  + 추가
+                </button>
+              </form>
+
+              {/* 체크리스트 항목들 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {checklist.map(item => (
+                  <div
+                    key={item.id}
+                    onClick={() => handleToggleChecklist(item.id)}
+                    className={`flex items-center justify-between p-3 rounded-xl border transition cursor-pointer select-none ${
+                      item.done
+                        ? 'bg-emerald-50/60 border-emerald-200 text-slate-400 line-through'
+                        : 'bg-white border-slate-200 text-slate-800 hover:border-emerald-300'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={item.done}
+                        onChange={() => {}}
+                        className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer pointer-events-none"
+                      />
+                      <span className="text-xs font-bold truncate">{item.text}</span>
+                    </div>
+                    <div className="flex items-center space-x-1.5 shrink-0">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-semibold">
+                        {item.category}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteChecklist(item.id);
+                        }}
+                        className="text-slate-300 hover:text-rose-500 p-1 text-xs"
+                        title="삭제"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -6641,6 +6872,39 @@
         }
       });
       const [selectedTripId, setSelectedTripId] = useState(() => DEFAULT_TRIPS[0]?.id || '');
+
+      // PWA 홈 화면 앱 설치 상태 및 핸들러
+      const [deferredPrompt, setDeferredPrompt] = useState(null);
+      const [isInstallable, setIsInstallable] = useState(false);
+      const [isIosPromptOpen, setIsIosPromptOpen] = useState(false);
+
+      useEffect(() => {
+        const handleBeforeInstall = (e) => {
+          e.preventDefault();
+          setDeferredPrompt(e);
+          setIsInstallable(true);
+        };
+        window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      }, []);
+
+      const handleInstallApp = async () => {
+        const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        if (isIos && !window.navigator.standalone) {
+          setIsIosPromptOpen(true);
+          return;
+        }
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          if (outcome === 'accepted') {
+            setDeferredPrompt(null);
+            setIsInstallable(false);
+          }
+        } else {
+          setIsIosPromptOpen(true);
+        }
+      };
 
       const [myStatusInput, setMyStatusInput] = useState('');
 
@@ -8728,6 +8992,15 @@
                   <span className="text-sm">{currentMember.avatar}</span>
                   <span className="max-w-[70px] sm:max-w-none truncate">{currentMember.name}</span>
                   <span className="text-[10px] opacity-60">▾</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleInstallApp}
+                  className="px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition shrink-0 active:scale-95 flex items-center space-x-1"
+                  title="스마트폰 홈 화면에 앱으로 설치 (PWA)"
+                >
+                  <span>📲</span>
+                  <span className="hidden sm:inline">앱 설치</span>
                 </button>
                 <button
                   type="button"
@@ -11190,6 +11463,48 @@
           {toastMessage && (
             <div className="fixed bottom-[max(4.5rem,calc(4.5rem+env(safe-area-inset-bottom,0px)))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white px-4 py-2.5 rounded-2xl shadow-xl text-xs font-bold border border-slate-700 max-w-[90vw] text-center animate-in slide-in-from-bottom duration-300">
               {toastMessage}
+            </div>
+          )}
+
+          {/* iOS Safari 및 PWA 홈 화면 추가 안내 모달 */}
+          {isIosPromptOpen && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-2xl">📲</span>
+                    <h3 className="text-base font-black text-slate-800">홈 화면에 앱으로 추가</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsIosPromptOpen(false)}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="space-y-3 text-xs text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <div className="flex items-start space-x-2.5">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[11px] inline-flex items-center justify-center shrink-0">1</span>
+                    <p className="leading-relaxed">사파리(Safari) 또는 브라우저 하단/상단의 <span className="font-black text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-300">공유 버튼 [⬆]</span>을 누릅니다.</p>
+                  </div>
+                  <div className="flex items-start space-x-2.5">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[11px] inline-flex items-center justify-center shrink-0">2</span>
+                    <p className="leading-relaxed">공유 메뉴 항목 중 <span className="font-black text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-300">➕ 홈 화면에 추가</span>를 선택합니다.</p>
+                  </div>
+                  <div className="flex items-start space-x-2.5">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[11px] inline-flex items-center justify-center shrink-0">3</span>
+                    <p className="leading-relaxed">우측 상단 <span className="font-black text-indigo-700 bg-white px-1.5 py-0.5 rounded border border-slate-300">추가</span>를 누르면 스마트폰 앱처럼 즉시 설치됩니다!</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsIosPromptOpen(false)}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm rounded-xl shadow-md transition"
+                >
+                  확인했습니다
+                </button>
+              </div>
             </div>
           )}
         </div>

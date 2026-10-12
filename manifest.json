@@ -1,0 +1,24 @@
+﻿{
+  "name": "?곕━吏?而ㅻ꽖??& ?ы뻾 ?뚮옒??,
+  "short_name": "?곕━吏?,
+  "description": "?곕━ 媛議??섎（ ?쇱젙, ?ы뻾 ?뚮옒?? 移?갔?ㅽ떚而? ?낆꽌湲곕줉 ?ㅻ쭏??????,
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#059669",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://placehold.co/192x192/059669/ffffff.png?text=%F0%9F%8F%A1",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://placehold.co/512x512/059669/ffffff.png?text=%F0%9F%8F%A1",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

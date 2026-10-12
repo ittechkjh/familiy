@@ -12,6 +12,8 @@
   <meta name="apple-mobile-web-app-title" content="여행 일정 공유" />
   <meta name="theme-color" content="#059669" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌴</text></svg>" />
+  <!-- PWA 웹 앱 매니페스트 -->
+  <link rel="manifest" href="manifest.json" />
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -670,15 +672,150 @@
         });
       }, [currentTrip, selectedDay]);
 
-      // 친구 공유 URL 복사
-      const handleCopyShareUrl = () => {
+      // 비용 텍스트에서 숫자만 추출하는 파서 (예: '약 80,000원' -> 80000)
+      const parseCostNumber = (costStr) => {
+        if (!costStr) return 0;
+        const numStr = String(costStr).replace(/[^0-9]/g, '');
+        return numStr ? parseInt(numStr, 10) : 0;
+      };
+
+      // 여행 경비 통계 (선택된 일차 경비 및 전체 총 예상 경비 자동 합산)
+      const tripCostStats = useMemo(() => {
+        const allItems = currentTrip?.items || [];
+        const totalCost = allItems.reduce((sum, item) => sum + parseCostNumber(item.cost), 0);
+        const dayCost = displayedItems.reduce((sum, item) => sum + parseCostNumber(item.cost), 0);
+        const itemsWithCostCount = allItems.filter(i => parseCostNumber(i.cost) > 0).length;
+        const dayCostCount = displayedItems.filter(i => parseCostNumber(i.cost) > 0).length;
+        return { totalCost, dayCost, itemsWithCostCount, dayCostCount };
+      }, [currentTrip, displayedItems]);
+
+      // 친구 공유 (모바일 카카오톡/문자 원터치 공유 + 클립보드 복사)
+      const handleShareTrip = async () => {
         const shareUrl = `${window.location.origin}${window.location.pathname}?trip=${currentTrip?.id || ''}`;
+        const shareData = {
+          title: `🌴 ${currentTrip?.title || '여행 일정 플래너'}`,
+          text: `가족/친구와 함께하는 ${currentTrip?.destination || '여행'} 일정입니다! 코스 지도와 타임테이블을 확인해보세요.`,
+          url: shareUrl
+        };
+        if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+          try {
+            await navigator.share(shareData);
+            return;
+          } catch (e) {
+            if (e.name !== 'AbortError') console.warn("Share failed:", e);
+          }
+        }
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(shareUrl).then(() => {
-            showToast("🔗 친구 공유 링크가 복사되었습니다! 카톡이나 문자로 보내보세요.");
+            showToast("🔗 친구 공유 링크가 복사되었습니다! 카톡이나 문자로 붙여넣어 보내보세요.");
           }).catch(() => prompt("아래 공유 링크를 복사하세요:", shareUrl));
         } else {
           prompt("아래 공유 링크를 복사하세요:", shareUrl);
+        }
+      };
+
+      // 가족 짐싸기 체크리스트 (기본 추천 팩토리 + 로컬스토리지 백업)
+      const DEFAULT_CHECKLIST = [
+        { id: 'c1', text: '신분증 / 운전면허증 / 예약 바우처', done: false, category: '필수' },
+        { id: 'c2', text: '휴대폰 충전기 & 보조배터리', done: false, category: '전자기기' },
+        { id: 'c3', text: '가족 여벌옷 & 편한 신발 / 양말', done: false, category: '의류' },
+        { id: 'c4', text: '세면도구 & 칫솔 / 치약 / 선크림', done: false, category: '세면' },
+        { id: 'c5', text: '상비약 (소화제, 해열진통제, 밴드, 모기약)', done: false, category: '건강' },
+        { id: 'c6', text: '아이들 간식 & 생수 / 물티슈', done: false, category: '간식' }
+      ];
+
+      const [checklist, setChecklist] = useState(() => {
+        try {
+          const saved = localStorage.getItem(`trip_checklist_${currentTrip?.id || 'default'}`);
+          if (saved) return JSON.parse(saved);
+        } catch (e) {}
+        return DEFAULT_CHECKLIST;
+      });
+      const [newCheckText, setNewCheckText] = useState('');
+
+      useEffect(() => {
+        if (!currentTrip?.id) return;
+        try {
+          const saved = localStorage.getItem(`trip_checklist_${currentTrip.id}`);
+          if (saved) setChecklist(JSON.parse(saved));
+          else setChecklist(DEFAULT_CHECKLIST);
+        } catch (e) {}
+      }, [currentTrip?.id]);
+
+      const toggleCheckItem = (id) => {
+        setChecklist(prev => {
+          const updated = prev.map(item => item.id === id ? { ...item, done: !item.done } : item);
+          try { localStorage.setItem(`trip_checklist_${currentTrip?.id || 'default'}`, JSON.stringify(updated)); } catch (e) {}
+          return updated;
+        });
+      };
+
+      const handleAddCheckItem = (e) => {
+        e.preventDefault();
+        if (!newCheckText.trim()) return;
+        setChecklist(prev => {
+          const updated = [...prev, { id: 'c_' + Date.now(), text: newCheckText.trim(), done: false, category: '추가' }];
+          try { localStorage.setItem(`trip_checklist_${currentTrip?.id || 'default'}`, JSON.stringify(updated)); } catch (e) {}
+          return updated;
+        });
+        setNewCheckText('');
+        showToast("🎒 준비물이 추가되었습니다!");
+      };
+
+      const handleDeleteCheckItem = (id) => {
+        setChecklist(prev => {
+          const updated = prev.filter(item => item.id !== id);
+          try { localStorage.setItem(`trip_checklist_${currentTrip?.id || 'default'}`, JSON.stringify(updated)); } catch (e) {}
+          return updated;
+        });
+      };
+
+      // PWA 홈 화면 앱 설치 상태 및 지원 로직
+      const [deferredPrompt, setDeferredPrompt] = useState(null);
+      const [isInstallable, setIsInstallable] = useState(false);
+      const [isIosPromptOpen, setIsIosPromptOpen] = useState(false);
+      const [isAppInstalled, setIsAppInstalled] = useState(false);
+
+      useEffect(() => {
+        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+          setIsAppInstalled(true);
+        }
+        const handleBeforeInstall = (e) => {
+          e.preventDefault();
+          setDeferredPrompt(e);
+          setIsInstallable(true);
+        };
+        window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+        window.addEventListener('appinstalled', () => {
+          setIsAppInstalled(true);
+          setIsInstallable(false);
+          setDeferredPrompt(null);
+          showToast("🎉 스마트폰 홈 화면에 앱이 성공적으로 설치되었습니다!");
+        });
+
+        // PWA 서비스 워커 등록
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW reg:', err));
+        }
+
+        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      }, []);
+
+      const handleInstallApp = async () => {
+        const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        if (isIos && !window.navigator.standalone) {
+          setIsIosPromptOpen(true);
+          return;
+        }
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          if (outcome === 'accepted') {
+            setDeferredPrompt(null);
+            setIsInstallable(false);
+          }
+        } else {
+          setIsIosPromptOpen(true);
         }
       };
 
@@ -764,13 +901,24 @@
                 )}
                 <button
                   type="button"
-                  onClick={handleCopyShareUrl}
+                  onClick={handleShareTrip}
                   className="px-3 py-2 rounded-xl bg-white text-emerald-800 font-black text-xs shadow-md hover:bg-emerald-50 transition active:scale-95 flex items-center space-x-1"
-                  title="친구들에게 공유할 주소 복사"
+                  title="모바일 카톡/문자 원터치 공유 및 링크 복사"
                 >
-                  <span>🔗</span>
+                  <span>📤</span>
                   <span>일정 공유하기</span>
                 </button>
+                {!isAppInstalled && (
+                  <button
+                    type="button"
+                    onClick={handleInstallApp}
+                    className="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-xs shadow-md border border-emerald-300 transition active:scale-95 flex items-center space-x-1"
+                    title="스마트폰 홈 화면에 앱으로 설치"
+                  >
+                    <span>📲</span>
+                    <span>앱 설치</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -791,7 +939,7 @@
           <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs space-y-3 no-print">
             <div className="flex items-center justify-between flex-wrap gap-2">
               {/* 보기 방식 토글 */}
-              <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
+              <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl flex-wrap">
                 <button
                   type="button"
                   onClick={() => setViewMode('both')}
@@ -813,11 +961,27 @@
                 >
                   📋 타임테이블
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('checklist')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center space-x-1 ${viewMode === 'checklist' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-600'}`}
+                >
+                  <span>🧳</span>
+                  <span>짐싸기 목록</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-bold ml-1">
+                    {checklist.filter(c => c.done).length}/{checklist.length}
+                  </span>
+                </button>
               </div>
 
-              {/* 일정 총계 */}
-              <div className="text-xs font-bold text-slate-500">
-                총 {currentTrip.items?.length || 0}개 일정 등록됨
+              {/* 일정 총계 및 경비 미니 배지 */}
+              <div className="flex items-center space-x-2 text-xs font-bold text-slate-500">
+                <span>총 {currentTrip.items?.length || 0}개 코스</span>
+                {tripCostStats.totalCost > 0 && (
+                  <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 font-black">
+                    💰 {tripCostStats.totalCost.toLocaleString()}원
+                  </span>
+                )}
               </div>
             </div>
 
@@ -850,10 +1014,124 @@
             </div>
           </div>
 
+          {/* 스마트 여행 경비(가계부) 자동 합산 요약 바 */}
+          {tripCostStats.totalCost > 0 && viewMode !== 'checklist' && (
+            <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 p-3.5 sm:p-4 rounded-2xl border border-amber-200/80 shadow-2xs flex items-center justify-between gap-3">
+              <div className="flex items-center space-x-2.5">
+                <span className="text-2xl sm:text-3xl">💰</span>
+                <div>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-xs sm:text-sm font-black text-amber-950">
+                      {selectedDay === 'all' ? '전체 일정 예상 경비' : `${selectedDay}일차 예상 경비`}
+                    </span>
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 px-1.5 py-0.2 rounded-md">
+                      {selectedDay === 'all' ? `${tripCostStats.itemsWithCostCount}곳 합산` : `${tripCostStats.dayCostCount}곳 합산`}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800/80 font-medium">
+                    {selectedDay === 'all' ? '등록된 전체 코스의 예상 지출 합계입니다.' : `전체 총 예상 경비: ${tripCostStats.totalCost.toLocaleString()}원`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-right">
+                <div className="text-base sm:text-xl font-black text-amber-900 tracking-tight">
+                  {(selectedDay === 'all' ? tripCostStats.totalCost : tripCostStats.dayCost).toLocaleString()}
+                  <span className="text-xs font-bold text-amber-800 ml-0.5">원</span>
+                </div>
+                {selectedDay !== 'all' && (
+                  <span className="text-[10px] text-amber-700/80 font-bold block">
+                    전체 대비 {Math.round((tripCostStats.dayCost / Math.max(1, tripCostStats.totalCost)) * 100)}%
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 🧳 가족 짐싸기 체크리스트 화면 */}
+          {viewMode === 'checklist' && (
+            <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center space-x-2">
+                  <span className="text-2xl">🧳</span>
+                  <div>
+                    <h2 className="text-base font-black text-slate-900">가족 여행 짐싸기 체크리스트</h2>
+                    <p className="text-xs text-slate-500">빠뜨린 물건이 없는지 가족과 함께 체크해보세요!</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                    완료 {checklist.filter(c => c.done).length} / {checklist.length}개 ({Math.round((checklist.filter(c => c.done).length / Math.max(1, checklist.length)) * 100)}%)
+                  </span>
+                </div>
+              </div>
+
+              {/* 진행률 바 */}
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${Math.round((checklist.filter(c => c.done).length / Math.max(1, checklist.length)) * 100)}%` }}
+                />
+              </div>
+
+              {/* 새 준비물 추가 폼 */}
+              <form onSubmit={handleAddCheckItem} className="flex items-center space-x-2 pt-1">
+                <input
+                  type="text"
+                  value={newCheckText}
+                  onChange={(e) => setNewCheckText(e.target.value)}
+                  placeholder="예: 튜브, 카메라 배터리, 모자 등 준비물 추가"
+                  className="flex-1 px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-emerald-400 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs transition active:scale-95"
+                >
+                  + 추가
+                </button>
+              </form>
+
+              {/* 체크리스트 항목들 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {checklist.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => toggleCheckItem(item.id)}
+                    className={`p-3 rounded-2xl border transition cursor-pointer flex items-center justify-between space-x-2 select-none ${
+                      item.done
+                        ? 'bg-emerald-50/70 border-emerald-200 text-slate-400 line-through'
+                        : 'bg-white border-slate-200 text-slate-800 hover:border-emerald-300'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                      <span className={`text-base ${item.done ? 'text-emerald-500 font-bold' : 'text-slate-300'}`}>
+                        {item.done ? '✅' : '⬜'}
+                      </span>
+                      <span className="text-xs font-bold truncate">{item.text}</span>
+                    </div>
+                    <div className="flex items-center space-x-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                        {item.category || '준비물'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCheckItem(item.id)}
+                        className="text-slate-300 hover:text-rose-500 p-0.5 text-xs font-bold transition"
+                        title="삭제"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 인쇄 및 메인 콘텐츠 영역 */}
           <div id="trip-print-area" className="space-y-4">
             {/* 1. 지도 동선 뷰 */}
-            {(viewMode === 'both' || viewMode === 'map') && (
+            {viewMode !== 'checklist' && (viewMode === 'both' || viewMode === 'map') && (
               <SharedMapView
                 items={displayedItems}
                 selectedDay={selectedDay}
@@ -862,7 +1140,7 @@
             )}
 
             {/* 2. 일정 타임테이블 카드 목록 */}
-            {(viewMode === 'both' || viewMode === 'timetable') && (
+            {viewMode !== 'checklist' && (viewMode === 'both' || viewMode === 'timetable') && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-black text-slate-800 flex items-center space-x-1.5">
@@ -992,6 +1270,48 @@
               </div>
             )}
           </div>
+
+          {/* iOS Safari 및 PWA 홈 화면 추가 안내 모달 */}
+          {isIosPromptOpen && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-2xl">📲</span>
+                    <h3 className="text-base font-black text-slate-800">홈 화면에 앱으로 추가</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsIosPromptOpen(false)}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="space-y-3 text-xs text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <div className="flex items-start space-x-2.5">
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-black text-[11px] inline-flex items-center justify-center shrink-0">1</span>
+                    <p className="leading-relaxed">사파리(Safari) 또는 브라우저 하단/상단의 <span className="font-black text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-300">공유 버튼 [⬆]</span>을 누릅니다.</p>
+                  </div>
+                  <div className="flex items-start space-x-2.5">
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-black text-[11px] inline-flex items-center justify-center shrink-0">2</span>
+                    <p className="leading-relaxed">공유 메뉴 항목 중 <span className="font-black text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-300">➕ 홈 화면에 추가</span>를 선택합니다.</p>
+                  </div>
+                  <div className="flex items-start space-x-2.5">
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-black text-[11px] inline-flex items-center justify-center shrink-0">3</span>
+                    <p className="leading-relaxed">우측 상단 <span className="font-black text-emerald-700 bg-white px-1.5 py-0.5 rounded border border-slate-300">추가</span>를 누르면 스마트폰 앱처럼 즉시 설치됩니다!</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsIosPromptOpen(false)}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm rounded-xl shadow-md transition"
+                >
+                  확인했습니다
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* 하단 푸터 */}
           <div className="pt-6 pb-10 text-center text-xs text-slate-400 space-y-2 border-t border-slate-200 no-print">
