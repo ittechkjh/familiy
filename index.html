@@ -1436,13 +1436,24 @@
       handleStopTimer,
       handleResetTimer,
       notifPermission,
-      requestNotificationPermission
+      requestNotificationPermission,
+      showToast
     }) {
       const [isTimerOpen, setIsTimerOpen] = useState(false);
       const [timerForms, setTimerForms] = useState({
-        child1: { minutes: 25, customMinutes: '', timerType: 'reading', title: '' },
-        child2: { minutes: 25, customMinutes: '', timerType: 'reading', title: '' }
+        child1: { minutes: 25, customMinutes: '', timerType: isParent ? 'reading' : 'general', title: '' },
+        child2: { minutes: 25, customMinutes: '', timerType: isParent ? 'reading' : 'general', title: '' }
       });
+
+      // 부모가 아닐 때(자녀 계정) 독서 타이머가 선택되어 있으면 일반 단순 타이머로 강제 리셋
+      useEffect(() => {
+        if (!isParent) {
+          setTimerForms((prev) => ({
+            child1: { ...prev.child1, timerType: 'general' },
+            child2: { ...prev.child2, timerType: 'general' }
+          }));
+        }
+      }, [isParent]);
       const updateTimerForm = (kidId, patch) => {
         setTimerForms((prev) => ({
           ...prev,
@@ -1792,15 +1803,25 @@
                             <div className="grid grid-cols-2 gap-1.5 bg-black/40 p-1 rounded-xl">
                               <button
                                 type="button"
-                                onClick={() => updateTimerForm(kid.id, { timerType: 'reading' })}
+                                onClick={() => {
+                                  if (!isParent) {
+                                    if (typeof showToast === 'function') {
+                                      showToast("⚠️ 독서 타이머는 엄마, 아빠만 설정할 수 있습니다.");
+                                    }
+                                    return;
+                                  }
+                                  updateTimerForm(kid.id, { timerType: 'reading' });
+                                }}
                                 className={`py-1.5 px-2 rounded-lg text-xs font-black transition flex items-center justify-center space-x-1 ${
                                   isReadingMode
                                     ? 'bg-amber-500 text-white shadow-xs'
-                                    : 'text-slate-400 hover:text-white'
+                                    : isParent
+                                      ? 'text-slate-400 hover:text-white'
+                                      : 'text-slate-500/70 hover:text-slate-400 cursor-not-allowed'
                                 }`}
                               >
-                                <span>📖</span>
-                                <span>독서 타이머</span>
+                                <span>{isParent ? '📖' : '🔒'}</span>
+                                <span>{isParent ? '독서 타이머' : '독서 (부모전용)'}</span>
                               </button>
                               <button
                                 type="button"
@@ -1817,8 +1838,8 @@
                             </div>
                             <p className="text-[10px] text-amber-200/70 pt-0.5">
                               {isReadingMode
-                                ? '💡 독서 타이머: 완료 시 오늘 독서 일지 기록과 바로 연동됩니다.'
-                                : '💡 일반 단순 타이머: 독서 기록과 무관하게 시간 종료 시 알림만 울리는 타이머입니다.'}
+                                ? '💡 독서 타이머: 완료 시 오늘 독서 일지 기록 및 칭찬 스티커와 연동됩니다. (엄마·아빠 전용)'
+                                : '💡 일반 단순 타이머: 독서 기록/스티커와 무관하게 카운트다운 알림만 울리는 타이머입니다.'}
                             </p>
                           </div>
 
@@ -1873,7 +1894,15 @@
                             </div>
                             <button
                               type="button"
-                              onClick={() => handleStartTimer(kid.id, targetM, form.timerType, form.title)}
+                              onClick={() => {
+                                if (!isParent && form.timerType === 'reading') {
+                                  if (typeof showToast === 'function') {
+                                    showToast("⚠️ 독서 타이머는 엄마, 아빠만 시작할 수 있습니다.");
+                                  }
+                                  return;
+                                }
+                                handleStartTimer(kid.id, targetM, form.timerType, form.title);
+                              }}
                               className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs rounded-xl shadow-md transition active:scale-95 flex items-center space-x-1.5"
                             >
                               <span>▶</span>
@@ -7411,6 +7440,12 @@
       }, []);
 
       const handleStartTimer = async (childId = 'child1', targetMinutes = 25, timerType = 'reading', title = '') => {
+        const isParentRole = currentMemberId === 'mom' || currentMemberId === 'dad';
+        if (!isParentRole && timerType === 'reading') {
+          showToast("⚠️ 독서 타이머는 엄마, 아빠만 설정할 수 있습니다. (칭찬 스티커 및 독서 일지 연동)");
+          return;
+        }
+
         const mins = Math.max(1, Number(targetMinutes) || 25);
         const endsAt = Date.now() + mins * 60 * 1000;
         const timerData = {
@@ -9954,6 +9989,7 @@
                   handleResetTimer={handleResetTimer}
                   notifPermission={notifPermission}
                   requestNotificationPermission={requestNotificationPermission}
+                  showToast={showToast}
                 />
 
                 <PraiseSection
@@ -10097,6 +10133,7 @@
                 handleResetTimer={handleResetTimer}
                 notifPermission={notifPermission}
                 requestNotificationPermission={requestNotificationPermission}
+                showToast={showToast}
               />
             )}
 
