@@ -526,6 +526,90 @@
       } catch (e) { /* ignore */ }
     };
 
+    // Web Audio API 자체 신디사이저 효과음 (외부 파일 없이 100% 자체 재생)
+    const playNotificationSound = (type = 'complete') => {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        if (ctx.state === 'suspended') {
+          ctx.resume();
+        }
+        if (type === 'start') {
+          // 시작 알림음 (도-미-솔 경쾌한 톤)
+          const now = ctx.currentTime;
+          [523.25, 659.25, 783.99].forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.12, now + idx * 0.08);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.18);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + idx * 0.08);
+            osc.stop(now + idx * 0.08 + 0.18);
+          });
+        } else if (type === 'tick') {
+          // 째깍 틱 음
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.frequency.value = 1000;
+          gain.gain.setValueAtTime(0.04, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.04);
+        } else {
+          // 완료 팡파르 (솔-도-미-솔-도)
+          const notes = [392, 523.25, 659.25, 783.99, 1046.5];
+          const now = ctx.currentTime;
+          notes.forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.2, now + idx * 0.12);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.35);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + idx * 0.12);
+            osc.stop(now + idx * 0.12 + 0.35);
+          });
+        }
+      } catch (e) {
+        console.warn('Audio play error:', e);
+      }
+    };
+
+    // 브라우저 & 스마트폰 Web Notification 시스템 알림 발송
+    const sendSystemNotification = (title, body = '', options = {}) => {
+      triggerHaptic([200, 100, 200, 100, 300]);
+      if (typeof window === 'undefined' || !('Notification' in window)) return false;
+      if (Notification.permission === 'granted') {
+        try {
+          const n = new Notification(title, {
+            body,
+            icon: 'https://placehold.co/192x192/059669/ffffff.png?text=%F0%9F%8F%A1',
+            badge: 'https://placehold.co/96x96/059669/ffffff.png?text=%F0%9F%8F%A1',
+            ...options
+          });
+          return true;
+        } catch (e) {
+          if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready.then((reg) => {
+              reg.showNotification(title, {
+                body,
+                icon: 'https://placehold.co/192x192/059669/ffffff.png?text=%F0%9F%8F%A1',
+                ...options
+              });
+            }).catch(() => {});
+          }
+        }
+      }
+      return false;
+    };
+
     const formatRelativeTime = (timestamp) => {
       if (!timestamp) return '미등록';
       const diffMinutes = Math.floor((Date.now() - timestamp) / 60000);
@@ -1339,7 +1423,27 @@
     }
 
     // 신규: 주원·주아 독서 시간 기록, 1주일 단위 분석, 누적 명예의 전당 & 레벨 컴포넌트
-    function ReadingSection({ isParent, currentMember, readingLogs, handleOpenReadingModal, handleRequestDeleteReadingLog, handleRequestResetReading }) {
+    function ReadingSection({
+      isParent,
+      currentMember,
+      readingLogs,
+      handleOpenReadingModal,
+      handleRequestDeleteReadingLog,
+      handleRequestResetReading,
+      focusTimer,
+      handleStartTimer,
+      handleTogglePauseTimer,
+      handleStopTimer,
+      handleResetTimer,
+      notifPermission,
+      requestNotificationPermission
+    }) {
+      const [isTimerOpen, setIsTimerOpen] = useState(false);
+      const [timerKidId, setTimerKidId] = useState('child1');
+      const [timerMinutes, setTimerMinutes] = useState(25);
+      const [timerCustomMinutes, setTimerCustomMinutes] = useState('');
+      const [timerBookTitle, setTimerBookTitle] = useState('');
+
       const [selectedWeekOffset, setSelectedWeekOffset] = useState(0);
       const [isLevelGuideOpen, setIsLevelGuideOpen] = useState(false);
       const [isBookshelfOpen, setIsBookshelfOpen] = useState(false);
@@ -1522,6 +1626,21 @@
             <div className="flex items-center space-x-1.5 self-start sm:self-auto shrink-0 flex-wrap gap-y-1">
               <button
                 type="button"
+                onClick={() => setIsTimerOpen(!isTimerOpen)}
+                className={`px-3 py-1.5 text-xs font-extrabold rounded-xl border transition active:scale-95 flex items-center space-x-1.5 ${
+                  isTimerOpen || focusTimer?.isActive
+                    ? 'bg-amber-500 text-white border-amber-400 shadow-md shadow-amber-500/30'
+                    : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border-amber-400/40'
+                }`}
+              >
+                <span>⏱️</span>
+                <span>{focusTimer?.isActive ? '집중 타이머 가동 중' : '집중 타이머'}</span>
+                {focusTimer?.isActive && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping ml-0.5" />
+                )}
+              </button>
+              <button
+                type="button"
                 onClick={() => setIsLevelGuideOpen(true)}
                 className="px-3 py-1.5 text-xs font-bold rounded-xl bg-white/10 hover:bg-white/20 text-amber-200 border border-white/15 transition active:scale-95"
               >
@@ -1567,6 +1686,208 @@
               )}
             </div>
           </div>
+
+          {/* 독서 & 공부 집중 타이머 인터랙티브 카드 */}
+          {(isTimerOpen || focusTimer?.isActive) && (
+            <div className="bg-black/35 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-amber-500/40 shadow-inner space-y-4 animate-in fade-in duration-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+                <div className="flex items-center space-x-2">
+                  <span className="text-2xl animate-pulse">⏱️</span>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black text-amber-200 flex items-center space-x-1.5">
+                      <span>독서 & 공부 집중 타이머 (뽀모도로)</span>
+                      {focusTimer?.isActive && (
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${focusTimer.isPaused ? 'bg-amber-500/30 text-amber-200' : 'bg-emerald-500/30 text-emerald-200'}`}>
+                          {focusTimer.isPaused ? '⏸️ 일시정지됨' : '🔥 집중 진행 중'}
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-[11px] text-slate-300">
+                      정해진 시간 동안 집중하고, 끝나면 알림음과 함께 오늘 독서 기록으로 즉시 연동됩니다!
+                    </p>
+                  </div>
+                </div>
+
+                {/* 스마트폰/PC 알림 상태 및 토글 버튼 */}
+                <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={requestNotificationPermission}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-xl border transition flex items-center space-x-1 ${
+                      notifPermission === 'granted'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                        : 'bg-white/10 hover:bg-white/20 text-slate-300 border-white/20'
+                    }`}
+                    title="타이머 종료 시 스마트폰/PC 푸시 알림 받기"
+                  >
+                    <span>{notifPermission === 'granted' ? '🔔' : '🔕'}</span>
+                    <span className="text-[11px]">{notifPermission === 'granted' ? '시스템 알림 켜짐' : '시스템 알림 켜기'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsTimerOpen(false)}
+                    className="text-slate-400 hover:text-white p-1 text-xs font-bold"
+                    title="타이머 카드 접기"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* 대상 아이 선택 & 시간 프리셋 */}
+              {!focusTimer?.isActive ? (
+                <div className="space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-bold text-amber-200">집중할 어린이:</span>
+                      <div className="flex items-center space-x-1.5 bg-white/10 p-1 rounded-xl">
+                        {KIDS_MEMBERS.map(kid => (
+                          <button
+                            key={kid.id}
+                            type="button"
+                            onClick={() => setTimerKidId(kid.id)}
+                            className={`px-3 py-1 rounded-lg text-xs font-extrabold transition flex items-center space-x-1 ${
+                              timerKidId === kid.id
+                                ? 'bg-amber-500 text-white shadow-xs'
+                                : 'text-slate-300 hover:text-white'
+                            }`}
+                          >
+                            <span>{kid.avatar}</span>
+                            <span>{kid.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 읽을 책 / 공부 내용 (선택) */}
+                    <div className="flex-1 max-w-xs">
+                      <input
+                        type="text"
+                        value={timerBookTitle}
+                        onChange={(e) => setTimerBookTitle(e.target.value)}
+                        placeholder="읽을 책 제목 또는 과목 (선택 입력)"
+                        className="w-full px-3 py-1.5 bg-white/10 border border-white/20 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 시간 프리셋 버튼들 */}
+                  <div className="flex items-center space-x-1.5 flex-wrap gap-y-1.5">
+                    <span className="text-xs font-bold text-amber-200 mr-1">목표 시간:</span>
+                    {[15, 20, 25, 30, 45, 60].map(mins => (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => { setTimerMinutes(mins); setTimerCustomMinutes(''); }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                          timerMinutes === mins && !timerCustomMinutes
+                            ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md font-black'
+                            : 'bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10'
+                        }`}
+                      >
+                        {mins}분 {mins === 25 ? '🍅' : ''}
+                      </button>
+                    ))}
+                    <div className="flex items-center space-x-1 bg-white/10 px-2 py-1 rounded-xl border border-white/10">
+                      <input
+                        type="number"
+                        min="1"
+                        max="180"
+                        placeholder="직접"
+                        value={timerCustomMinutes}
+                        onChange={(e) => setTimerCustomMinutes(e.target.value)}
+                        className="w-12 bg-transparent text-xs font-bold text-white text-center focus:outline-none"
+                      />
+                      <span className="text-xs text-slate-300">분</span>
+                    </div>
+                  </div>
+
+                  {/* 타이머 대형 표시 및 시작 버튼 */}
+                  <div className="flex items-center justify-between pt-2">
+                    <div className="flex items-baseline space-x-2">
+                      <span className="text-3xl sm:text-4xl font-mono font-black tracking-widest text-amber-300">
+                        {String(timerCustomMinutes ? Number(timerCustomMinutes) : timerMinutes).padStart(2, '0')}:00
+                      </span>
+                      <span className="text-xs text-slate-400">목표</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleStartTimer(timerKidId, timerCustomMinutes ? Number(timerCustomMinutes) : timerMinutes, 'reading', timerBookTitle)}
+                      className="px-6 py-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/30 transition active:scale-95 flex items-center space-x-2"
+                    >
+                      <span>▶</span>
+                      <span>집중 타이머 시작</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* 타이머 가동 중 화면 */
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/5 p-4 rounded-2xl border border-white/10">
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-2xl">
+                          {KIDS_MEMBERS.find(k => k.id === focusTimer.childId)?.avatar || '👦'}
+                        </span>
+                        <span className="text-base font-black text-white">
+                          {KIDS_MEMBERS.find(k => k.id === focusTimer.childId)?.name || '주원'}의 독서 집중 시간
+                        </span>
+                        {focusTimer.bookTitle && (
+                          <span className="text-xs text-amber-200 bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-400/30">
+                            📖 {focusTimer.bookTitle}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-300">
+                        총 {focusTimer.targetMinutes}분 중 {Math.floor((focusTimer.targetMinutes * 60 - focusTimer.secondsLeft) / 60)}분 진행됨
+                      </p>
+                    </div>
+
+                    {/* 대형 카운트다운 디스플레이 */}
+                    <div className="text-center sm:text-right">
+                      <div className="text-4xl sm:text-5xl font-mono font-black tracking-widest text-amber-300 drop-shadow">
+                        {String(Math.floor(focusTimer.secondsLeft / 60)).padStart(2, '0')}:{String(focusTimer.secondsLeft % 60).padStart(2, '0')}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 프로그레스 바 */}
+                  <div className="w-full bg-white/10 h-3 rounded-full overflow-hidden p-0.5">
+                    <div
+                      className="bg-gradient-to-r from-amber-400 to-orange-500 h-full rounded-full transition-all duration-1000 shadow"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, ((focusTimer.targetMinutes * 60 - focusTimer.secondsLeft) / (focusTimer.targetMinutes * 60)) * 100))}%`
+                      }}
+                    />
+                  </div>
+
+                  {/* 컨트롤러 버튼들 */}
+                  <div className="flex items-center justify-end space-x-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleTogglePauseTimer}
+                      className={`px-4 py-2 rounded-xl text-xs font-black transition active:scale-95 flex items-center space-x-1.5 ${
+                        focusTimer.isPaused
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow'
+                          : 'bg-amber-600 hover:bg-amber-700 text-white shadow'
+                      }`}
+                    >
+                      <span>{focusTimer.isPaused ? '▶' : '⏸'}</span>
+                      <span>{focusTimer.isPaused ? '재개하기' : '일시정지'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStopTimer}
+                      className="px-4 py-2 rounded-xl bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-black transition active:scale-95 flex items-center space-x-1.5 shadow"
+                    >
+                      <span>⏹</span>
+                      <span>타이머 종료</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 1. 누적 명예의 전당 & 레벨 카드 (주원 & 주아) */}
           <div className="space-y-2.5">
@@ -6909,6 +7230,136 @@
         }
       };
 
+      // 📚 독서 & 공부 집중 타이머 전역 상태 (다른 탭으로 이동해도 지속 카운트다운)
+      const [focusTimer, setFocusTimer] = useState({
+        isActive: false,
+        isPaused: false,
+        childId: 'child1',
+        targetMinutes: 25,
+        secondsLeft: 25 * 60,
+        subject: 'reading',
+        bookTitle: ''
+      });
+
+      // 타이머 완료 축하 모달 상태
+      const [timerCompletedModal, setTimerCompletedModal] = useState(null);
+
+      // 브라우저 Web Notification 알림 권한 상태
+      const [notifPermission, setNotifPermission] = useState(() => {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          return Notification.permission;
+        }
+        return 'unsupported';
+      });
+
+      const requestNotificationPermission = async () => {
+        if (typeof window === 'undefined' || !('Notification' in window)) {
+          showToast('⚠️ 이 브라우저는 시스템 알림을 지원하지 않습니다.');
+          return;
+        }
+        try {
+          const perm = await Notification.requestPermission();
+          setNotifPermission(perm);
+          if (perm === 'granted') {
+            showToast('🔔 스마트폰/PC 시스템 알림이 활성화되었습니다!');
+            sendSystemNotification('우리집 커넥트 알림 활성화 🔔', '타이머가 끝나면 스마트폰/PC로 알림을 보내드립니다.');
+            playNotificationSound('start');
+          } else {
+            showToast('알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.');
+          }
+        } catch (e) {
+          console.warn(e);
+        }
+      };
+
+      // 타이머 실시간 카운트다운 인터벌
+      useEffect(() => {
+        let interval = null;
+        if (focusTimer.isActive && !focusTimer.isPaused) {
+          interval = setInterval(() => {
+            setFocusTimer((prev) => {
+              if (!prev.isActive || prev.isPaused) return prev;
+              if (prev.secondsLeft <= 1) {
+                playNotificationSound('complete');
+                const kid = FAMILY_MEMBERS.find(m => m.id === prev.childId) || { name: '아이' };
+                sendSystemNotification(
+                  `🎉 [${kid.name}] 집중 목표 달성!`,
+                  `약속한 ${prev.targetMinutes}분 ${prev.subject === 'reading' ? '독서' : '공부'}를 성공적으로 마쳤습니다! 👏`
+                );
+                setTimerCompletedModal({
+                  childId: prev.childId,
+                  childName: kid.name,
+                  minutes: prev.targetMinutes,
+                  subject: prev.subject,
+                  bookTitle: prev.bookTitle || ''
+                });
+                return {
+                  ...prev,
+                  isActive: false,
+                  isPaused: false,
+                  secondsLeft: 0
+                };
+              }
+              return {
+                ...prev,
+                secondsLeft: prev.secondsLeft - 1
+              };
+            });
+          }, 1000);
+        }
+        return () => {
+          if (interval) clearInterval(interval);
+        };
+      }, [focusTimer.isActive, focusTimer.isPaused]);
+
+      const handleStartTimer = (childId, targetMinutes, subject = 'reading', bookTitle = '') => {
+        const mins = Math.max(1, Number(targetMinutes) || 25);
+        setFocusTimer({
+          isActive: true,
+          isPaused: false,
+          childId: childId || 'child1',
+          targetMinutes: mins,
+          secondsLeft: mins * 60,
+          subject,
+          bookTitle: bookTitle || ''
+        });
+        playNotificationSound('start');
+        triggerHaptic(30);
+        const kid = FAMILY_MEMBERS.find(m => m.id === childId) || { name: '아이' };
+        showToast(`⏱️ [${kid.name}] ${mins}분 집중 타이머가 시작되었습니다!`);
+      };
+
+      const handleTogglePauseTimer = () => {
+        setFocusTimer((prev) => {
+          const nextPaused = !prev.isPaused;
+          triggerHaptic(20);
+          showToast(nextPaused ? '⏸️ 타이머가 일시정지되었습니다.' : '▶️ 타이머를 다시 시작합니다.');
+          return { ...prev, isPaused: nextPaused };
+        });
+      };
+
+      const handleStopTimer = () => {
+        setFocusTimer((prev) => ({
+          ...prev,
+          isActive: false,
+          isPaused: false,
+          secondsLeft: prev.targetMinutes * 60
+        }));
+        triggerHaptic(20);
+        showToast('⏹️ 타이머가 종료되었습니다.');
+      };
+
+      const handleResetTimer = (minutes) => {
+        const targetM = minutes || focusTimer.targetMinutes || 25;
+        setFocusTimer((prev) => ({
+          ...prev,
+          isActive: false,
+          isPaused: false,
+          targetMinutes: targetM,
+          secondsLeft: targetM * 60
+        }));
+      };
+
       const [myStatusInput, setMyStatusInput] = useState('');
 
       const [statusPresets, setStatusPresets] = useState(() => QUICK_STATUS_PRESETS.map((p, idx) => ({ id: `default_sp_${idx}`, ...p })));
@@ -8041,7 +8492,7 @@
       };
 
       // 신규: 주원·주아 독서 시간 기록 핸들러 (엄마, 아빠 전용)
-      const handleOpenReadingModal = (childId = 'child1', defaultBookTitle = '') => {
+      const handleOpenReadingModal = (childId = 'child1', defaultBookTitle = '', defaultMinutes = 30) => {
         if (!isParent) {
           showToast("⚠️ 엄마, 아빠만 독서 시간을 기록할 수 있습니다.");
           return;
@@ -8049,7 +8500,7 @@
         setReadingForm({
           childId: childId || 'child1',
           date: getTodayString(),
-          minutes: 30,
+          minutes: Number(defaultMinutes) || 30,
           bookTitle: defaultBookTitle || '',
           notes: '',
           isCompleted: false
@@ -8998,6 +9449,19 @@
                 </button>
                 <button
                   type="button"
+                  onClick={requestNotificationPermission}
+                  className={`px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-xl border transition shrink-0 active:scale-95 flex items-center space-x-1 ${
+                    notifPermission === 'granted'
+                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
+                  }`}
+                  title={notifPermission === 'granted' ? "스마트폰/PC 알림 활성화됨" : "스마트폰/PC 알림 켜기"}
+                >
+                  <span>{notifPermission === 'granted' ? '🔔' : '🔕'}</span>
+                  <span className="hidden sm:inline">{notifPermission === 'granted' ? '알림 켜짐' : '알림 켜기'}</span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleInstallApp}
                   className="px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition shrink-0 active:scale-95 flex items-center space-x-1"
                   title="스마트폰 홈 화면에 앱으로 설치 (PWA)"
@@ -9024,6 +9488,51 @@
               </div>
             </div>
           </header>
+
+          {/* 상단 스티키 미니 타이머 바 (타이머 작동 중 다른 탭 이동 시에도 항상 표시) */}
+          {focusTimer.isActive && (
+            <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white px-3 sm:px-4 py-2 sm:py-2.5 shadow-md flex items-center justify-between z-20 sticky top-[53px] sm:top-[61px] backdrop-blur-md border-b border-amber-400/30 animate-in slide-in-from-top duration-200">
+              <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                <span className="text-xl sm:text-2xl animate-pulse">⏱️</span>
+                <div className="min-w-0">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-xs sm:text-sm font-black truncate">
+                      {KIDS_MEMBERS.find(k => k.id === focusTimer.childId)?.name || '주원'}의 독서 집중 중
+                    </span>
+                    {focusTimer.isPaused && (
+                      <span className="text-[10px] bg-white/20 px-1.5 py-0.2 rounded font-bold">일시정지됨</span>
+                    )}
+                  </div>
+                  {focusTimer.bookTitle && (
+                    <p className="text-[11px] text-amber-100 truncate">📖 {focusTimer.bookTitle}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+                <span className="font-mono text-base sm:text-lg font-black tracking-wider bg-black/25 px-2.5 py-0.5 rounded-xl border border-white/20">
+                  {String(Math.floor(focusTimer.secondsLeft / 60)).padStart(2, '0')}:{String(focusTimer.secondsLeft % 60).padStart(2, '0')}
+                </span>
+                <div className="flex items-center space-x-1">
+                  <button
+                    type="button"
+                    onClick={handleTogglePauseTimer}
+                    className="px-2.5 py-1 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition active:scale-95"
+                    title={focusTimer.isPaused ? "재개" : "일시정지"}
+                  >
+                    {focusTimer.isPaused ? '▶ 재개' : '⏸ 일시정지'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStopTimer}
+                    className="px-2.5 py-1 rounded-xl bg-rose-500/80 hover:bg-rose-500 text-white text-xs font-bold transition active:scale-95"
+                    title="타이머 종료"
+                  >
+                    ⏹ 종료
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <main className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-5 w-full space-y-5 sm:space-y-6 flex-1">
             <nav className="flex items-center space-x-1.5 border-b border-slate-200 pb-2.5 overflow-x-auto no-scrollbar">
@@ -9197,6 +9706,13 @@
                   handleOpenReadingModal={handleOpenReadingModal}
                   handleRequestDeleteReadingLog={handleRequestDeleteReadingLog}
                   handleRequestResetReading={handleRequestResetReading}
+                  focusTimer={focusTimer}
+                  handleStartTimer={handleStartTimer}
+                  handleTogglePauseTimer={handleTogglePauseTimer}
+                  handleStopTimer={handleStopTimer}
+                  handleResetTimer={handleResetTimer}
+                  notifPermission={notifPermission}
+                  requestNotificationPermission={requestNotificationPermission}
                 />
 
                 <PraiseSection
@@ -9333,6 +9849,13 @@
                 handleOpenReadingModal={handleOpenReadingModal}
                 handleRequestDeleteReadingLog={handleRequestDeleteReadingLog}
                 handleRequestResetReading={handleRequestResetReading}
+                focusTimer={focusTimer}
+                handleStartTimer={handleStartTimer}
+                handleTogglePauseTimer={handleTogglePauseTimer}
+                handleStopTimer={handleStopTimer}
+                handleResetTimer={handleResetTimer}
+                notifPermission={notifPermission}
+                requestNotificationPermission={requestNotificationPermission}
               />
             )}
 
@@ -11507,6 +12030,75 @@
                 >
                   확인했습니다
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* 타이머 완료 축하 및 바로 기록 연동 모달 */}
+          {timerCompletedModal && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-sm w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 text-center">
+                <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-3xl animate-bounce shadow-inner">
+                  🎉
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800">
+                    집중 목표 달성 축하해요!
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    <span className="font-bold text-amber-600">{timerCompletedModal.childName}</span>이가 약속한 <span className="font-extrabold text-slate-700">{timerCompletedModal.minutes}분</span> 동안 집중을 마쳤습니다! 👏
+                  </p>
+                  {timerCompletedModal.bookTitle && (
+                    <div className="mt-2 py-1.5 px-3 bg-amber-50 rounded-xl border border-amber-200/60 inline-block text-xs font-bold text-amber-800">
+                      📖 {timerCompletedModal.bookTitle}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  {isParent && timerCompletedModal.subject === 'reading' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleOpenReadingModal(
+                          timerCompletedModal.childId,
+                          timerCompletedModal.bookTitle || '',
+                          timerCompletedModal.minutes
+                        );
+                        setTimerCompletedModal(null);
+                      }}
+                      className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition active:scale-95 flex items-center justify-center space-x-1.5"
+                    >
+                      <span>📖</span>
+                      <span>오늘 독서 기록에 바로 저장하기</span>
+                    </button>
+                  )}
+                  {isParent && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPraiseForm({
+                          toMemberId: timerCompletedModal.childId,
+                          stickerKey: 'trophy',
+                          reason: `${timerCompletedModal.minutes}분 집중 목표 달성!`
+                        });
+                        setIsPraiseModalOpen(true);
+                        setTimerCompletedModal(null);
+                      }}
+                      className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs sm:text-sm rounded-xl border border-indigo-200 transition active:scale-95 flex items-center justify-center space-x-1.5"
+                    >
+                      <span>⭐</span>
+                      <span>칭찬 스티커 선물하기</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setTimerCompletedModal(null)}
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs sm:text-sm rounded-xl transition active:scale-95"
+                  >
+                    확인 및 닫기
+                  </button>
+                </div>
               </div>
             </div>
           )}
