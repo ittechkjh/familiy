@@ -2846,6 +2846,9 @@
                   </button>
                 )}
                 <span className="text-xs font-bold text-slate-500">선택일: {selectedDate}</span>
+                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="일정 하루 전날 오후 9시에 스마트폰 시스템 알림이 자동으로 울립니다">
+                  🔔 전날 21:00 자동 알림
+                </span>
               </div>
             </div>
 
@@ -7184,7 +7187,14 @@
 
       const [selectedDate, setSelectedDate] = useState(getTodayString());
       const [currentMonth, setCurrentMonth] = useState(new Date());
-      const [mainTab, setMainTab] = useState('all');
+      const [mainTab, setMainTab] = useState(() => {
+        if (typeof window !== 'undefined' && window.location.search) {
+          const params = new URLSearchParams(window.location.search);
+          const tabParam = params.get('tab');
+          if (tabParam) return tabParam;
+        }
+        return 'all';
+      });
       const [viewMode, setViewMode] = useState('today');
       const [filterMemberId, setFilterMemberId] = useState('all');
 
@@ -7536,6 +7546,82 @@
           if (interval) clearInterval(interval);
         };
       }, []);
+
+      // 📅 일정 하루 전날 오후 9시(21:00) 스마트폰 시스템 자동 알림 검사 함수
+      const checkUpcomingScheduleAlerts = useCallback(() => {
+        if (!schedules || schedules.length === 0) return;
+        if (typeof window === 'undefined' || !('Notification' in window)) return;
+        if (Notification.permission !== 'granted') return;
+
+        const now = Date.now();
+
+        schedules.forEach((sch) => {
+          if (!sch || !sch.date || sch.isDone) return;
+
+          // sch.date는 'YYYY-MM-DD' 형식
+          const parts = sch.date.split('-');
+          if (parts.length < 3) return;
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const d = parseInt(parts[2], 10);
+
+          // 하루 전날(D-1) 오후 9시(21:00:00) 타임스탬프 계산
+          const alertDate = new Date(y, m, d - 1, 21, 0, 0, 0);
+          const alertTime = alertDate.getTime();
+
+          // 일정 당일 자정(23:59:59) 지나면 알림 불필요
+          const endOfDay = new Date(y, m, d, 23, 59, 59, 999).getTime();
+
+          // 현재 시각이 전날 21:00을 지났고, 아직 일정 당일이 끝나지 않은 경우
+          if (now >= alertTime && now <= endOfDay) {
+            const schIdentifier = sch.id || `${sch.memberId}_${sch.date}_${sch.title}`;
+            const alertKey = `family_sch_alert_d1_${schIdentifier}_${sch.date}`;
+
+            // 기기별 중복 발송 방지 (한 번 발송된 일정은 다시 울리지 않음)
+            if (!localStorage.getItem(alertKey)) {
+              localStorage.setItem(alertKey, new Date().toISOString());
+
+              const member = FAMILY_MEMBERS.find((m) => m.id === sch.memberId);
+              const memberName = member ? member.name : '가족';
+              const timeText = sch.startTime ? ` (${sch.startTime})` : '';
+              const notesText = sch.notes ? `\n📝 ${sch.notes}` : '';
+
+              sendSystemNotification(
+                `📅 [내일 일정 알림] ${memberName}: ${sch.title}`,
+                `내일(${sch.date})${timeText} 예정된 가족 일정이 있습니다.${notesText}`,
+                {
+                  tag: `sch-d1-${schIdentifier}`,
+                  data: { url: './?tab=schedule' }
+                }
+              );
+            }
+          }
+        });
+      }, [schedules]);
+
+      // 주기적 일정 알림 체크 (일정 데이터 로드 시 즉시 + 30초 주기 + 화면 켜짐/포커스 시)
+      useEffect(() => {
+        checkUpcomingScheduleAlerts();
+
+        const alertTimer = setInterval(() => {
+          checkUpcomingScheduleAlerts();
+        }, 30000);
+
+        const handleVisibilityChange = () => {
+          if (document.visibilityState === 'visible') {
+            checkUpcomingScheduleAlerts();
+          }
+        };
+
+        window.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', checkUpcomingScheduleAlerts);
+
+        return () => {
+          if (alertTimer) clearInterval(alertTimer);
+          window.removeEventListener('visibilitychange', handleVisibilityChange);
+          window.removeEventListener('focus', checkUpcomingScheduleAlerts);
+        };
+      }, [checkUpcomingScheduleAlerts]);
 
       const handleStartTimer = async (childId = 'child1', targetMinutes = 25, timerType = 'reading', title = '') => {
         const isParentRole = currentMemberId === 'mom' || currentMemberId === 'dad';
@@ -10612,6 +10698,11 @@
                       <span>📅 등록 후 구글 캘린더에 바로 연결하기</span>
                     </label>
                   )}
+
+                  <div className="flex items-center space-x-2 p-2.5 bg-amber-50 rounded-xl border border-amber-200/80 text-[11px] text-amber-800 font-medium">
+                    <span className="text-sm">🔔</span>
+                    <span>일정 전날 오후 9시(21:00)에 스마트폰으로 알림이 자동 발송됩니다.</span>
+                  </div>
 
                   <div className="pt-2 flex items-center space-x-2">
                     <button
