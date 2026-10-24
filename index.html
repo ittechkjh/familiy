@@ -7389,7 +7389,7 @@
       );
     }
 
-    // ==================== 신규: 주원·주아 학교 & 방과후 시간표 섹션 ====================
+    // ==================== 신규: 주원·주아 학교 & 방과후 시간표 섹션 (모바일 최적화) ====================
     function TimetableSection({
       timetableCells = DEFAULT_TIMETABLE_CELLS,
       onSaveCell,
@@ -7398,7 +7398,64 @@
       isParent,
       showToast
     }) {
-      const [viewMode, setViewMode] = useState('both'); // 'both', 'child1', 'child2'
+      // 뷰 모드: 'both'(함께), 'child1'(주원만), 'child2'(주아만)
+      const [viewMode, setViewMode] = useState('both');
+      // 레이아웃 모드: 'day'(모바일 편한 요일별 뷰), 'week'(주간 전체 비교표)
+      const [layoutMode, setLayoutMode] = useState('day');
+
+      // 오늘 요일 인덱스 (0: 일, 1: 월, 2: 화, 3: 수, 4: 목, 5: 금, 6: 토)
+      const currentDayIdx = new Date().getDay();
+      const currentDayKey = useMemo(() => {
+        const found = TIMETABLE_DAYS.find(d => d.dayIdx === currentDayIdx);
+        return found ? found.key : null;
+      }, [currentDayIdx]);
+
+      // 현재 선택된 요일 (기본값: 오늘 요일이 월~금이면 오늘, 주말이면 월요일)
+      const [selectedDayKey, setSelectedDayKey] = useState(() => {
+        const found = TIMETABLE_DAYS.find(d => d.dayIdx === currentDayIdx);
+        return found ? found.key : 'mon';
+      });
+
+      // 현재 시각(HH:mm) 추적 (현재 진행 중인 교시 실시간 하이라이트용)
+      const [currentMinutes, setCurrentMinutes] = useState(() => {
+        const now = new Date();
+        return now.getHours() * 60 + now.getMinutes();
+      });
+
+      useEffect(() => {
+        const timer = setInterval(() => {
+          const now = new Date();
+          setCurrentMinutes(now.getHours() * 60 + now.getMinutes());
+        }, 60000);
+        return () => clearInterval(timer);
+      }, []);
+
+      // 교시별 시작/종료 분(minutes) 매핑
+      const isPeriodCurrent = (periodId) => {
+        if (selectedDayKey !== currentDayKey) return false;
+        // p123: 09:00 ~ 11:20
+        // p4: 11:30 ~ 12:10
+        // lunch: 12:10 ~ 13:00
+        // p5: 13:00 ~ 13:40
+        // p6: 13:40 ~ 14:20
+        // after1: 14:30 ~ 15:10
+        // after2: 15:20 ~ 16:40
+        // extra: 16:40 ~ 18:00
+        const ranges = {
+          p123: [9 * 60, 11 * 60 + 20],
+          p4: [11 * 60 + 20, 12 * 60 + 10],
+          lunch: [12 * 60 + 10, 13 * 60],
+          p5: [13 * 60, 13 * 60 + 40],
+          p6: [13 * 60 + 40, 14 * 60 + 20],
+          after1: [14 * 60 + 20, 15 * 60 + 15],
+          after2: [15 * 60 + 15, 16 * 60 + 40],
+          extra: [16 * 60 + 40, 18 * 60]
+        };
+        const range = ranges[periodId];
+        if (!range) return false;
+        return currentMinutes >= range[0] && currentMinutes < range[1];
+      };
+
       const [isEditModalOpen, setIsEditModalOpen] = useState(false);
       const [editingKey, setEditingKey] = useState(null);
       const [editChildId, setEditChildId] = useState('child1');
@@ -7409,13 +7466,6 @@
       const [editColor, setEditColor] = useState('sky');
       const [editIsSchool, setEditIsSchool] = useState(false);
       const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
-
-      // 오늘 요일 인덱스 (0: 일, 1: 월, 2: 화, 3: 수, 4: 목, 5: 금, 6: 토)
-      const currentDayIdx = new Date().getDay();
-      const currentDayKey = useMemo(() => {
-        const found = TIMETABLE_DAYS.find(d => d.dayIdx === currentDayIdx);
-        return found ? found.key : null;
-      }, [currentDayIdx]);
 
       const handleOpenEdit = (childId, dayKey, periodId) => {
         const key = `${childId}_${dayKey}_${periodId}`;
@@ -7471,335 +7521,707 @@
         return TIMETABLE_COLOR_THEMES.find(c => c.id === colorId) || TIMETABLE_COLOR_THEMES[0];
       };
 
+      // 요일 이동 핸들러
+      const handlePrevDay = () => {
+        const currentIdx = TIMETABLE_DAYS.findIndex(d => d.key === selectedDayKey);
+        if (currentIdx > 0) {
+          setSelectedDayKey(TIMETABLE_DAYS[currentIdx - 1].key);
+        } else {
+          setSelectedDayKey(TIMETABLE_DAYS[TIMETABLE_DAYS.length - 1].key);
+        }
+      };
+
+      const handleNextDay = () => {
+        const currentIdx = TIMETABLE_DAYS.findIndex(d => d.key === selectedDayKey);
+        if (currentIdx < TIMETABLE_DAYS.length - 1) {
+          setSelectedDayKey(TIMETABLE_DAYS[currentIdx + 1].key);
+        } else {
+          setSelectedDayKey(TIMETABLE_DAYS[0].key);
+        }
+      };
+
       const activeChildObj = editChildId === 'child1'
         ? { name: '주원', avatar: '👦', role: '첫째' }
         : { name: '주아', avatar: '👧', role: '둘째' };
 
       const activeDayObj = TIMETABLE_DAYS.find(d => d.key === editDayKey) || TIMETABLE_DAYS[0];
       const activePeriodObj = TIMETABLE_PERIODS.find(p => p.id === editPeriodId) || TIMETABLE_PERIODS[0];
+      const selectedDayObj = TIMETABLE_DAYS.find(d => d.key === selectedDayKey) || TIMETABLE_DAYS[0];
 
       return (
-        <section className="space-y-4">
-          {/* 상단 헤더 및 컨트롤 바 */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/80 shadow-xs space-y-3.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="space-y-1">
+        <section className="space-y-3.5">
+          {/* 상단 헤더 및 뷰 전환 컨트롤 바 */}
+          <div className="bg-white rounded-3xl p-3.5 sm:p-5 border border-slate-200/80 shadow-xs space-y-3">
+            {/* 타이틀 및 상단 버튼 */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="space-y-0.5">
                 <div className="flex items-center space-x-2">
                   <span className="text-2xl">🕒</span>
                   <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
                     주원·주아 학교 & 방과후 시간표
                   </h2>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                    월~금 주간표
-                  </span>
+                  {currentDayKey && (
+                    <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      오늘 {TIMETABLE_DAYS.find(d => d.key === currentDayKey)?.short}요일
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs text-slate-500 font-medium">
-                  원하는 칸을 터치하여 과목명, 방과후, 학원 일정을 자유롭게 채워 넣으세요!
+                <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
+                  스마트폰에서 보기 편한 요일별 맞춤 뷰와 주간 전체 비교표를 지원합니다.
                 </p>
               </div>
 
               {/* 우측 상단 액션 버튼 */}
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1.5 self-end sm:self-auto">
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center space-x-1"
+                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center space-x-1"
                   title="시간표 출력하기"
                 >
                   <span>🖨️</span>
-                  <span className="hidden sm:inline">인쇄하기</span>
+                  <span className="hidden sm:inline">인쇄</span>
                 </button>
                 {isParent && (
                   <button
                     type="button"
                     onClick={() => setIsResetConfirmOpen(true)}
-                    className="px-3 py-1.5 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold transition flex items-center space-x-1"
+                    className="px-2.5 py-1.5 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold transition flex items-center space-x-1"
                     title="사진 시간표 기본값으로 복원"
                   >
                     <span>🔄</span>
-                    <span className="hidden sm:inline">사진 기본값 복원</span>
+                    <span className="hidden sm:inline">사진 기본값</span>
                   </button>
                 )}
               </div>
             </div>
 
-            {/* 뷰 모드 전환 탭 */}
-            <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-              <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar">
+            {/* 1. 레이아웃 모드 토글: [📱 요일별 뷰 (모바일 편한 뷰)] vs [📋 주간 전체표 (월~금)] */}
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+              <div className="inline-flex p-1 bg-slate-100/90 rounded-2xl border border-slate-200/60 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setLayoutMode('day')}
+                  className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center justify-center space-x-1.5 ${
+                    layoutMode === 'day'
+                      ? 'bg-white text-indigo-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>📱</span>
+                  <span>요일별 뷰</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 font-extrabold hidden xs:inline">
+                    모바일 추천
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLayoutMode('week')}
+                  className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center justify-center space-x-1.5 ${
+                    layoutMode === 'week'
+                      ? 'bg-white text-indigo-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>📋</span>
+                  <span>주간 전체표</span>
+                  <span className="text-[10px] text-slate-400 font-normal hidden xs:inline">
+                    (월~금)
+                  </span>
+                </button>
+              </div>
+
+              {/* 자녀 필터 (함께 / 주원 / 주아) */}
+              <div className="hidden sm:flex items-center space-x-1">
                 <button
                   type="button"
                   onClick={() => setViewMode('both')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition ${
+                    viewMode === 'both' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  함께 보기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('child1')}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition ${
+                    viewMode === 'child1' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  👦 주원만
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('child2')}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition ${
+                    viewMode === 'child2' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  👧 주아만
+                </button>
+              </div>
+            </div>
+
+            {/* 모바일용 자녀 필터 버튼 바 */}
+            <div className="flex sm:hidden items-center justify-between gap-1 pt-0.5">
+              <span className="text-[11px] font-bold text-slate-400 shrink-0">보기:</span>
+              <div className="grid grid-cols-3 gap-1 flex-1">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('both')}
+                  className={`py-1.5 px-1 rounded-xl text-[11px] font-black transition text-center ${
                     viewMode === 'both'
                       ? 'bg-indigo-600 text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  <span>📊 함께 보기 (주원 & 주아)</span>
+                  👦👧 함께 보기
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode('child1')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
+                  className={`py-1.5 px-1 rounded-xl text-[11px] font-black transition text-center ${
                     viewMode === 'child1'
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  <span>👦 주원이만 보기</span>
+                  👦 주원이만
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode('child2')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0 ${
+                  className={`py-1.5 px-1 rounded-xl text-[11px] font-black transition text-center ${
                     viewMode === 'child2'
                       ? 'bg-amber-500 text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  <span>👧 주아만 보기</span>
+                  👧 주아만
                 </button>
               </div>
+            </div>
 
-              {currentDayKey && (
-                <div className="hidden sm:flex items-center space-x-1 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-xl shrink-0">
-                  <span className="animate-pulse">✨</span>
-                  <span>오늘은 <b>{TIMETABLE_DAYS.find(d => d.key === currentDayKey)?.label}</b>입니다</span>
+            {/* 2. 요일별 뷰 전용 요일 퀵 탭 네비게이터 ([◀] [월] [화] [수] [목] [금] [▶]) */}
+            {layoutMode === 'day' && (
+              <div className="pt-1.5 border-t border-slate-100">
+                <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/70">
+                  <button
+                    type="button"
+                    onClick={handlePrevDay}
+                    className="w-8 h-9 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-2xs transition active:scale-95 shrink-0"
+                    title="이전 요일"
+                  >
+                    ◀
+                  </button>
+
+                  <div className="grid grid-cols-5 gap-1 flex-1">
+                    {TIMETABLE_DAYS.map((day) => {
+                      const isSelected = day.key === selectedDayKey;
+                      const isToday = day.key === currentDayKey;
+                      return (
+                        <button
+                          key={day.key}
+                          type="button"
+                          onClick={() => setSelectedDayKey(day.key)}
+                          className={`relative py-1.5 rounded-xl font-black text-xs transition flex flex-col items-center justify-center active:scale-95 ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500'
+                              : isToday
+                              ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100/80 border border-indigo-200'
+                              : 'bg-white/80 text-slate-700 hover:bg-white'
+                          }`}
+                        >
+                          <span className="leading-tight">{day.label}</span>
+                          {isToday && (
+                            <span className={`text-[9px] font-extrabold px-1 rounded-full leading-tight mt-0.5 ${
+                              isSelected ? 'bg-amber-300 text-slate-900' : 'bg-indigo-600 text-white'
+                            }`}>
+                              오늘
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleNextDay}
+                    className="w-8 h-9 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-2xs transition active:scale-95 shrink-0"
+                    title="다음 요일"
+                  >
+                    ▶
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ==================== 1. 모바일 최적화: 요일별 뷰 (가로스크롤 없는 2인 비교/1인 집중 뷰) ==================== */}
+          {layoutMode === 'day' && (
+            <div className="space-y-2">
+              {/* 요일 정보 헤더 바 */}
+              <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl px-3.5 py-2 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="text-base font-black text-indigo-950">
+                    📅 {selectedDayObj.label} 시간표
+                  </span>
+                  {selectedDayObj.key === currentDayKey && (
+                    <span className="text-[10px] bg-indigo-600 text-white font-extrabold px-2 py-0.5 rounded-full animate-pulse">
+                      ✨ 오늘
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-slate-500 font-medium">
+                  {viewMode === 'both' ? '👦 주원 & 👧 주아 나란히 비교' : viewMode === 'child1' ? '👦 주원 타임라인' : '👧 주아 타임라인'}
+                </div>
+              </div>
+
+              {/* (1-A) 요일별 뷰: 함께 보기 (주원 & 주아 2컬럼 비교 - 가로 스크롤 완전 제거) */}
+              {viewMode === 'both' && (
+                <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden">
+                  {/* 테이블 상단 헤더: 교시(24%) | 👦 주원(38%) | 👧 주아(38%) */}
+                  <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-200 text-xs font-black text-slate-700 py-2.5 px-2">
+                    <div className="col-span-3 sm:col-span-2 text-center text-slate-500 font-extrabold">
+                      교시/시간
+                    </div>
+                    <div className="col-span-4 sm:col-span-5 text-center text-blue-700 bg-blue-50/80 py-0.5 rounded-lg border border-blue-100">
+                      👦 주원 (첫째)
+                    </div>
+                    <div className="col-span-5 sm:col-span-5 text-center text-amber-800 bg-amber-50/80 py-0.5 rounded-lg border border-amber-100 ml-1">
+                      👧 주아 (둘째)
+                    </div>
+                  </div>
+
+                  {/* 교시별 행 리스트 */}
+                  <div className="divide-y divide-slate-100">
+                    {TIMETABLE_PERIODS.map((period) => {
+                      const isLive = isPeriodCurrent(period.id);
+                      const isLunch = period.id === 'lunch';
+                      const cellJuwon = getCellData('child1', selectedDayKey, period.id);
+                      const cellJua = getCellData('child2', selectedDayKey, period.id);
+
+                      const themeJuwon = getColorTheme(cellJuwon.color || (cellJuwon.isSchool ? 'sky' : 'slate'));
+                      const themeJua = getColorTheme(cellJua.color || (cellJua.isSchool ? 'amber' : 'slate'));
+
+                      return (
+                        <div
+                          key={period.id}
+                          className={`grid grid-cols-12 p-1.5 sm:p-2 items-center gap-1 transition ${
+                            isLive
+                              ? 'bg-amber-50/70 ring-2 ring-amber-400/80 rounded-xl my-0.5 shadow-xs'
+                              : isLunch
+                              ? 'bg-slate-50/60'
+                              : 'hover:bg-slate-50/40'
+                          }`}
+                        >
+                          {/* 1열: 교시 및 시간 정보 (3칸) */}
+                          <div className="col-span-3 sm:col-span-2 pr-1 text-center flex flex-col justify-center">
+                            <div className="flex items-center justify-center space-x-1">
+                              <span className="font-extrabold text-[11px] sm:text-xs text-slate-800 leading-tight">
+                                {period.label}
+                              </span>
+                            </div>
+                            <span className="text-[9px] sm:text-[10px] text-slate-400 font-mono tracking-tight mt-0.5">
+                              {period.time}
+                            </span>
+                            {isLive && (
+                              <span className="inline-block mt-0.5 text-[9px] bg-red-500 text-white font-extrabold px-1 py-0.2 rounded-md animate-pulse">
+                                진행중
+                              </span>
+                            )}
+                          </div>
+
+                          {/* 2열: 👦 주원 셀 (4~5칸) */}
+                          <div
+                            onClick={() => handleOpenEdit('child1', selectedDayKey, period.id)}
+                            className="col-span-4 sm:col-span-5 cursor-pointer active:scale-[0.98] transition"
+                            title={`[주원] ${selectedDayObj.label} ${period.label} 터치하여 수정`}
+                          >
+                            {cellJuwon.subject ? (
+                              <div className={`p-2 rounded-2xl border text-left min-h-[52px] flex flex-col justify-center shadow-2xs hover:shadow-xs transition ${themeJuwon.bg}`}>
+                                <div className="text-[11px] sm:text-xs font-black truncate leading-tight flex items-center justify-between">
+                                  <span className="truncate">{cellJuwon.subject}</span>
+                                  {cellJuwon.isSchool && (
+                                    <span className="text-[9px] opacity-80 shrink-0 ml-0.5">🏫</span>
+                                  )}
+                                </div>
+                                {cellJuwon.note ? (
+                                  <div className="text-[9px] sm:text-[10px] opacity-80 font-medium truncate mt-0.5">
+                                    {cellJuwon.note}
+                                  </div>
+                                ) : (
+                                  <div className="text-[9px] opacity-50 font-normal">
+                                    {cellJuwon.isSchool ? '정규수업' : '방과후/학원'}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="min-h-[52px] rounded-2xl border border-dashed border-slate-200/90 hover:border-blue-300 hover:bg-blue-50/30 flex items-center justify-center text-[11px] text-slate-300 font-bold transition">
+                                <span className="opacity-70">+ 추가</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 3열: 👧 주아 셀 (5칸) */}
+                          <div
+                            onClick={() => handleOpenEdit('child2', selectedDayKey, period.id)}
+                            className="col-span-5 sm:col-span-5 cursor-pointer active:scale-[0.98] transition"
+                            title={`[주아] ${selectedDayObj.label} ${period.label} 터치하여 수정`}
+                          >
+                            {cellJua.subject ? (
+                              <div className={`p-2 rounded-2xl border text-left min-h-[52px] flex flex-col justify-center shadow-2xs hover:shadow-xs transition ${themeJua.bg}`}>
+                                <div className="text-[11px] sm:text-xs font-black truncate leading-tight flex items-center justify-between">
+                                  <span className="truncate">{cellJua.subject}</span>
+                                  {cellJua.isSchool && (
+                                    <span className="text-[9px] opacity-80 shrink-0 ml-0.5">🏫</span>
+                                  )}
+                                </div>
+                                {cellJua.note ? (
+                                  <div className="text-[9px] sm:text-[10px] opacity-80 font-medium truncate mt-0.5">
+                                    {cellJua.note}
+                                  </div>
+                                ) : (
+                                  <div className="text-[9px] opacity-50 font-normal">
+                                    {cellJua.isSchool ? '정규수업' : '방과후/돌봄'}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="min-h-[52px] rounded-2xl border border-dashed border-slate-200/90 hover:border-amber-300 hover:bg-amber-50/30 flex items-center justify-center text-[11px] text-slate-300 font-bold transition">
+                                <span className="opacity-70">+ 추가</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* (1-B) 요일별 뷰: 주원이만 or 주아만 보기 (1인 단독 타임라인 카드 뷰) */}
+              {(viewMode === 'child1' || viewMode === 'child2') && (
+                <div className="space-y-2">
+                  {TIMETABLE_PERIODS.map((period) => {
+                    const targetChild = viewMode === 'child1' ? 'child1' : 'child2';
+                    const childName = viewMode === 'child1' ? '주원' : '주아';
+                    const childAvatar = viewMode === 'child1' ? '👦' : '👧';
+                    const cell = getCellData(targetChild, selectedDayKey, period.id);
+                    const theme = getColorTheme(cell.color || (cell.isSchool ? (targetChild === 'child1' ? 'sky' : 'amber') : 'slate'));
+                    const isLive = isPeriodCurrent(period.id);
+
+                    return (
+                      <div
+                        key={period.id}
+                        onClick={() => handleOpenEdit(targetChild, selectedDayKey, period.id)}
+                        className={`p-3 rounded-2xl border cursor-pointer transition active:scale-[0.99] flex items-center justify-between gap-3 ${
+                          cell.subject
+                            ? `${theme.bg} shadow-2xs hover:shadow-xs`
+                            : 'bg-white border-dashed border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                        } ${isLive ? 'ring-2 ring-amber-400' : ''}`}
+                      >
+                        <div className="flex items-center space-x-3 min-w-0 flex-1">
+                          {/* 교시 시간 뱃지 */}
+                          <div className="w-16 text-center py-1 rounded-xl bg-white/70 border border-slate-200/60 shrink-0">
+                            <div className="text-[11px] font-black text-slate-800 leading-tight">
+                              {period.label}
+                            </div>
+                            <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                              {period.time}
+                            </div>
+                          </div>
+
+                          {/* 과목 및 메모 정보 */}
+                          <div className="min-w-0 flex-1">
+                            {cell.subject ? (
+                              <div>
+                                <div className="text-sm font-black flex items-center space-x-1.5 leading-tight">
+                                  <span className="truncate">{cell.subject}</span>
+                                  {cell.isSchool && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-white/60 font-medium">🏫 학교</span>
+                                  )}
+                                  {isLive && (
+                                    <span className="text-[10px] bg-red-500 text-white font-extrabold px-1.5 py-0.2 rounded-md animate-pulse">
+                                      진행중
+                                    </span>
+                                  )}
+                                </div>
+                                {cell.note && (
+                                  <div className="text-xs opacity-80 font-medium mt-1 truncate">
+                                    📍 {cell.note}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-slate-400 font-bold">
+                                + 터치하여 {childName}이의 일정을 등록하세요
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 우측 편집 아이콘 */}
+                        <div className="text-slate-400 text-xs font-bold shrink-0">
+                          ✏️
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
-          </div>
+          )}
 
-          {/* 메인 뷰: 함께 보기 (주원 & 주아 2열 표) */}
-          {viewMode === 'both' && (
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-              <div className="overflow-x-auto no-scrollbar">
-                <table className="w-full text-center border-collapse min-w-[760px] sm:min-w-[850px]">
-                  <thead>
-                    {/* 상단 1행: 요일 헤더 */}
-                    <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
-                      <th className="p-2 sm:p-2.5 text-xs font-extrabold w-28 sm:w-32 sticky left-0 z-10 bg-slate-100 border-r border-slate-200">
-                        교시 / 시간
-                      </th>
-                      {TIMETABLE_DAYS.map((day) => {
-                        const isToday = day.key === currentDayKey;
-                        return (
-                          <th
-                            key={day.key}
-                            colSpan={2}
-                            className={`p-2 sm:p-2.5 text-xs sm:text-sm font-black border-r border-slate-200 ${
-                              isToday ? 'bg-indigo-100/90 text-indigo-900 ring-2 ring-indigo-400 inset-0' : 'text-slate-800'
-                            }`}
-                          >
-                            <div className="flex items-center justify-center space-x-1">
-                              <span>{day.label}</span>
-                              {isToday && (
-                                <span className="text-[10px] bg-indigo-600 text-white font-extrabold px-1.5 py-0.2 rounded-full">
-                                  오늘
-                                </span>
-                              )}
-                            </div>
+          {/* ==================== 2. 주간 전체표 (월~금 5일 전체 비교 와이드 테이블) ==================== */}
+          {layoutMode === 'week' && (
+            <div className="space-y-2">
+              <div className="bg-amber-50/80 border border-amber-200/70 rounded-2xl px-3.5 py-2 flex items-center justify-between text-xs text-amber-900 font-medium">
+                <div className="flex items-center space-x-1.5">
+                  <span>💡</span>
+                  <span>화면을 좌우로 스크롤하여 월~금 주간 시간표 전체를 비교할 수 있습니다.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLayoutMode('day')}
+                  className="text-xs font-black text-indigo-700 underline underline-offset-2 shrink-0 ml-2"
+                >
+                  📱 요일별 뷰로 보기
+                </button>
+              </div>
+
+              {/* 주간 전체표: 함께 보기 (주원 & 주아 11열 표) */}
+              {viewMode === 'both' && (
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+                  <div className="overflow-x-auto no-scrollbar">
+                    <table className="w-full text-center border-collapse min-w-[760px] sm:min-w-[850px]">
+                      <thead>
+                        {/* 상단 1행: 요일 헤더 */}
+                        <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
+                          <th className="p-2 sm:p-2.5 text-xs font-extrabold w-28 sm:w-32 sticky left-0 z-10 bg-slate-100 border-r border-slate-200">
+                            교시 / 시간
                           </th>
-                        );
-                      })}
-                    </tr>
-                    {/* 상단 2행: 자녀 이름 헤더 (주원 / 주아) */}
-                    <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold">
-                      <th className="p-1.5 text-slate-400 sticky left-0 z-10 bg-slate-50 border-r border-slate-200 text-[10px]">
-                        자녀 구분
-                      </th>
-                      {TIMETABLE_DAYS.map((day) => {
-                        const isToday = day.key === currentDayKey;
-                        return (
-                          <React.Fragment key={`${day.key}_sub`}>
-                            <th className={`p-1.5 border-r border-slate-200 font-extrabold text-blue-700 ${isToday ? 'bg-indigo-50/70' : 'bg-blue-50/40'}`}>
-                              👦 주원
-                            </th>
-                            <th className={`p-1.5 border-r border-slate-200 font-extrabold text-amber-700 ${isToday ? 'bg-indigo-50/70' : 'bg-amber-50/40'}`}>
-                              👧 주아
-                            </th>
-                          </React.Fragment>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {TIMETABLE_PERIODS.map((period) => {
-                      const isLunch = period.id === 'lunch';
-                      return (
-                        <tr
-                          key={period.id}
-                          className={`transition ${isLunch ? 'bg-slate-50/70' : 'hover:bg-slate-50/40'}`}
-                        >
-                          {/* 고정 첫 번째 컬럼: 교시 및 시간 정보 */}
-                          <td className="p-2 text-left sticky left-0 z-10 bg-white border-r border-slate-200 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">
-                            <div className="font-extrabold text-xs text-slate-800 leading-tight">
-                              {period.label}
-                            </div>
-                            <div className="text-[10px] text-slate-400 font-medium tracking-tight mt-0.5">
-                              {period.time}
-                            </div>
-                          </td>
-
-                          {/* 요일별 주원/주아 셀 */}
                           {TIMETABLE_DAYS.map((day) => {
                             const isToday = day.key === currentDayKey;
-                            const cellJuwon = getCellData('child1', day.key, period.id);
-                            const cellJua = getCellData('child2', day.key, period.id);
-
-                            const themeJuwon = getColorTheme(cellJuwon.color || (cellJuwon.isSchool ? 'sky' : 'slate'));
-                            const themeJua = getColorTheme(cellJua.color || (cellJua.isSchool ? 'amber' : 'slate'));
-
                             return (
-                              <React.Fragment key={`${day.key}_${period.id}`}>
-                                {/* 주원 셀 */}
-                                <td
-                                  onClick={() => handleOpenEdit('child1', day.key, period.id)}
-                                  className={`p-1.5 border-r border-slate-100 cursor-pointer transition active:scale-[0.98] ${
-                                    isToday ? 'bg-indigo-50/20' : ''
-                                  }`}
-                                  title={`[주원] ${day.label} ${period.label} 클릭하여 수정`}
-                                >
-                                  {cellJuwon.subject ? (
-                                    <div className={`p-1.5 sm:p-2 rounded-xl border text-left transition hover:shadow-xs min-h-[46px] flex flex-col justify-center ${themeJuwon.bg}`}>
-                                      <div className="text-xs font-black truncate leading-tight flex items-center justify-between">
-                                        <span>{cellJuwon.subject}</span>
-                                        {cellJuwon.isSchool && (
-                                          <span className="text-[9px] opacity-75 font-normal ml-0.5">🏫</span>
-                                        )}
-                                      </div>
-                                      {cellJuwon.note && (
-                                        <div className="text-[10px] opacity-80 font-medium truncate mt-0.5">
-                                          {cellJuwon.note}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <div className="min-h-[46px] rounded-xl border border-dashed border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/80 flex items-center justify-center text-[11px] text-slate-300 font-bold transition">
-                                      +
-                                    </div>
+                              <th
+                                key={day.key}
+                                colSpan={2}
+                                className={`p-2 sm:p-2.5 text-xs sm:text-sm font-black border-r border-slate-200 ${
+                                  isToday ? 'bg-indigo-100/90 text-indigo-900 ring-2 ring-indigo-400 inset-0' : 'text-slate-800'
+                                }`}
+                              >
+                                <div className="flex items-center justify-center space-x-1">
+                                  <span>{day.label}</span>
+                                  {isToday && (
+                                    <span className="text-[10px] bg-indigo-600 text-white font-extrabold px-1.5 py-0.2 rounded-full">
+                                      오늘
+                                    </span>
                                   )}
-                                </td>
-
-                                {/* 주아 셀 */}
-                                <td
-                                  onClick={() => handleOpenEdit('child2', day.key, period.id)}
-                                  className={`p-1.5 border-r border-slate-200 cursor-pointer transition active:scale-[0.98] ${
-                                    isToday ? 'bg-indigo-50/20' : ''
-                                  }`}
-                                  title={`[주아] ${day.label} ${period.label} 클릭하여 수정`}
-                                >
-                                  {cellJua.subject ? (
-                                    <div className={`p-1.5 sm:p-2 rounded-xl border text-left transition hover:shadow-xs min-h-[46px] flex flex-col justify-center ${themeJua.bg}`}>
-                                      <div className="text-xs font-black truncate leading-tight flex items-center justify-between">
-                                        <span>{cellJua.subject}</span>
-                                        {cellJua.isSchool && (
-                                          <span className="text-[9px] opacity-75 font-normal ml-0.5">🏫</span>
-                                        )}
-                                      </div>
-                                      {cellJua.note && (
-                                        <div className="text-[10px] opacity-80 font-medium truncate mt-0.5">
-                                          {cellJua.note}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <div className="min-h-[46px] rounded-xl border border-dashed border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/80 flex items-center justify-center text-[11px] text-slate-300 font-bold transition">
-                                      +
-                                    </div>
-                                  )}
-                                </td>
+                                </div>
+                              </th>
+                            );
+                          })}
+                        </tr>
+                        {/* 상단 2행: 자녀 이름 헤더 (주원 / 주아) */}
+                        <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold">
+                          <th className="p-1.5 text-slate-400 sticky left-0 z-10 bg-slate-50 border-r border-slate-200 text-[10px]">
+                            자녀 구분
+                          </th>
+                          {TIMETABLE_DAYS.map((day) => {
+                            const isToday = day.key === currentDayKey;
+                            return (
+                              <React.Fragment key={`${day.key}_sub`}>
+                                <th className={`p-1.5 border-r border-slate-200 font-extrabold text-blue-700 ${isToday ? 'bg-indigo-50/70' : 'bg-blue-50/40'}`}>
+                                  👦 주원
+                                </th>
+                                <th className={`p-1.5 border-r border-slate-200 font-extrabold text-amber-700 ${isToday ? 'bg-indigo-50/70' : 'bg-amber-50/40'}`}>
+                                  👧 주아
+                                </th>
                               </React.Fragment>
                             );
                           })}
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* 개별 뷰: 주원만 보기 or 주아만 보기 (모바일 및 요일별 카드 뷰) */}
-          {(viewMode === 'child1' || viewMode === 'child2') && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3.5">
-                {TIMETABLE_DAYS.map((day) => {
-                  const isToday = day.key === currentDayKey;
-                  const targetChild = viewMode === 'child1' ? 'child1' : 'child2';
-                  const childName = viewMode === 'child1' ? '주원' : '주아';
-                  const childAvatar = viewMode === 'child1' ? '👦' : '👧';
-
-                  return (
-                    <div
-                      key={day.key}
-                      className={`bg-white rounded-3xl border transition shadow-xs overflow-hidden flex flex-col ${
-                        isToday
-                          ? 'border-indigo-400 ring-2 ring-indigo-300/60 shadow-indigo-100'
-                          : 'border-slate-200/80'
-                      }`}
-                    >
-                      {/* 카드 상단 요일 헤더 */}
-                      <div className={`px-4 py-2.5 flex items-center justify-between border-b ${
-                        isToday ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-800'
-                      }`}>
-                        <div className="flex items-center space-x-1.5 font-black text-sm">
-                          <span>{day.label}</span>
-                          {isToday && (
-                            <span className="text-[10px] bg-white text-indigo-700 px-1.5 py-0.2 rounded-full font-black">
-                              오늘
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-xs opacity-80">{childAvatar} {childName}</span>
-                      </div>
-
-                      {/* 시간대 리스트 */}
-                      <div className="p-2.5 space-y-2 flex-1">
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
                         {TIMETABLE_PERIODS.map((period) => {
-                          const cell = getCellData(targetChild, day.key, period.id);
-                          const theme = getColorTheme(cell.color || (cell.isSchool ? (targetChild === 'child1' ? 'sky' : 'amber') : 'slate'));
-
+                          const isLunch = period.id === 'lunch';
                           return (
-                            <div
+                            <tr
                               key={period.id}
-                              onClick={() => handleOpenEdit(targetChild, day.key, period.id)}
-                              className={`p-2 rounded-2xl border cursor-pointer transition active:scale-[0.98] ${
-                                cell.subject
-                                  ? `${theme.bg} hover:shadow-xs`
-                                  : 'border-dashed border-slate-200 hover:bg-slate-50 hover:border-slate-300'
-                              }`}
+                              className={`transition ${isLunch ? 'bg-slate-50/70' : 'hover:bg-slate-50/40'}`}
                             >
-                              <div className="flex items-center justify-between text-[11px] mb-1">
-                                <span className="font-extrabold opacity-75">{period.label}</span>
-                                <span className="text-[10px] opacity-60 font-mono">{period.time}</span>
-                              </div>
-                              {cell.subject ? (
-                                <div>
-                                  <div className="text-xs font-black truncate flex items-center justify-between">
-                                    <span>{cell.subject}</span>
-                                    {cell.isSchool && <span className="text-[9px]">🏫</span>}
-                                  </div>
-                                  {cell.note && (
-                                    <div className="text-[10px] opacity-80 font-medium truncate mt-0.5">
-                                      {cell.note}
-                                    </div>
-                                  )}
+                              {/* 고정 첫 번째 컬럼: 교시 및 시간 정보 */}
+                              <td className="p-2 text-left sticky left-0 z-10 bg-white border-r border-slate-200 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">
+                                <div className="font-extrabold text-xs text-slate-800 leading-tight">
+                                  {period.label}
                                 </div>
-                              ) : (
-                                <div className="text-center text-[10px] text-slate-300 font-bold py-0.5">
-                                  + 등록하기
+                                <div className="text-[10px] text-slate-400 font-medium tracking-tight mt-0.5">
+                                  {period.time}
                                 </div>
-                              )}
-                            </div>
+                              </td>
+
+                              {/* 요일별 주원/주아 셀 */}
+                              {TIMETABLE_DAYS.map((day) => {
+                                const isToday = day.key === currentDayKey;
+                                const cellJuwon = getCellData('child1', day.key, period.id);
+                                const cellJua = getCellData('child2', day.key, period.id);
+
+                                const themeJuwon = getColorTheme(cellJuwon.color || (cellJuwon.isSchool ? 'sky' : 'slate'));
+                                const themeJua = getColorTheme(cellJua.color || (cellJua.isSchool ? 'amber' : 'slate'));
+
+                                return (
+                                  <React.Fragment key={`${day.key}_${period.id}`}>
+                                    {/* 주원 셀 */}
+                                    <td
+                                      onClick={() => handleOpenEdit('child1', day.key, period.id)}
+                                      className={`p-1.5 border-r border-slate-100 cursor-pointer transition active:scale-[0.98] ${
+                                        isToday ? 'bg-indigo-50/20' : ''
+                                      }`}
+                                      title={`[주원] ${day.label} ${period.label} 클릭하여 수정`}
+                                    >
+                                      {cellJuwon.subject ? (
+                                        <div className={`p-1.5 sm:p-2 rounded-xl border text-left transition hover:shadow-xs min-h-[46px] flex flex-col justify-center ${themeJuwon.bg}`}>
+                                          <div className="text-xs font-black truncate leading-tight flex items-center justify-between">
+                                            <span>{cellJuwon.subject}</span>
+                                            {cellJuwon.isSchool && (
+                                              <span className="text-[9px] opacity-75 font-normal ml-0.5">🏫</span>
+                                            )}
+                                          </div>
+                                          {cellJuwon.note && (
+                                            <div className="text-[10px] opacity-80 font-medium truncate mt-0.5">
+                                              {cellJuwon.note}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div className="min-h-[46px] rounded-xl border border-dashed border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/80 flex items-center justify-center text-[11px] text-slate-300 font-bold transition">
+                                          +
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    {/* 주아 셀 */}
+                                    <td
+                                      onClick={() => handleOpenEdit('child2', day.key, period.id)}
+                                      className={`p-1.5 border-r border-slate-200 cursor-pointer transition active:scale-[0.98] ${
+                                        isToday ? 'bg-indigo-50/20' : ''
+                                      }`}
+                                      title={`[주아] ${day.label} ${period.label} 클릭하여 수정`}
+                                    >
+                                      {cellJua.subject ? (
+                                        <div className={`p-1.5 sm:p-2 rounded-xl border text-left transition hover:shadow-xs min-h-[46px] flex flex-col justify-center ${themeJua.bg}`}>
+                                          <div className="text-xs font-black truncate leading-tight flex items-center justify-between">
+                                            <span>{cellJua.subject}</span>
+                                            {cellJua.isSchool && (
+                                              <span className="text-[9px] opacity-75 font-normal ml-0.5">🏫</span>
+                                            )}
+                                          </div>
+                                          {cellJua.note && (
+                                            <div className="text-[10px] opacity-80 font-medium truncate mt-0.5">
+                                              {cellJua.note}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div className="min-h-[46px] rounded-xl border border-dashed border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/80 flex items-center justify-center text-[11px] text-slate-300 font-bold transition">
+                                          +
+                                        </div>
+                                      )}
+                                    </td>
+                                  </React.Fragment>
+                                );
+                              })}
+                            </tr>
                           );
                         })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* 주간 전체표: 개별 뷰 (주원만 / 주아만 5일 카드 뷰) */}
+              {(viewMode === 'child1' || viewMode === 'child2') && (
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3.5">
+                  {TIMETABLE_DAYS.map((day) => {
+                    const isToday = day.key === currentDayKey;
+                    const targetChild = viewMode === 'child1' ? 'child1' : 'child2';
+                    const childName = viewMode === 'child1' ? '주원' : '주아';
+                    const childAvatar = viewMode === 'child1' ? '👦' : '👧';
+
+                    return (
+                      <div
+                        key={day.key}
+                        className={`bg-white rounded-3xl border transition shadow-xs overflow-hidden flex flex-col ${
+                          isToday
+                            ? 'border-indigo-400 ring-2 ring-indigo-300/60 shadow-indigo-100'
+                            : 'border-slate-200/80'
+                        }`}
+                      >
+                        {/* 카드 상단 요일 헤더 */}
+                        <div className={`px-4 py-2.5 flex items-center justify-between border-b ${
+                          isToday ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-800'
+                        }`}>
+                          <div className="flex items-center space-x-1.5 font-black text-sm">
+                            <span>{day.label}</span>
+                            {isToday && (
+                              <span className="text-[10px] bg-white text-indigo-700 px-1.5 py-0.2 rounded-full font-black">
+                                오늘
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs opacity-80">{childAvatar} {childName}</span>
+                        </div>
+
+                        {/* 시간대 리스트 */}
+                        <div className="p-2.5 space-y-2 flex-1">
+                          {TIMETABLE_PERIODS.map((period) => {
+                            const cell = getCellData(targetChild, day.key, period.id);
+                            const theme = getColorTheme(cell.color || (cell.isSchool ? (targetChild === 'child1' ? 'sky' : 'amber') : 'slate'));
+
+                            return (
+                              <div
+                                key={period.id}
+                                onClick={() => handleOpenEdit(targetChild, day.key, period.id)}
+                                className={`p-2 rounded-2xl border cursor-pointer transition active:scale-[0.98] ${
+                                  cell.subject
+                                    ? `${theme.bg} hover:shadow-xs`
+                                    : 'border-dashed border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between text-[11px] mb-1">
+                                  <span className="font-extrabold opacity-75">{period.label}</span>
+                                  <span className="text-[10px] opacity-60 font-mono">{period.time}</span>
+                                </div>
+                                {cell.subject ? (
+                                  <div>
+                                    <div className="text-xs font-black truncate flex items-center justify-between">
+                                      <span>{cell.subject}</span>
+                                      {cell.isSchool && <span className="text-[9px]">🏫</span>}
+                                    </div>
+                                    {cell.note && (
+                                      <div className="text-[10px] opacity-80 font-medium truncate mt-0.5">
+                                        {cell.note}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-center text-[10px] text-slate-300 font-bold py-0.5">
+                                    + 등록하기
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
