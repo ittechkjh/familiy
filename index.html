@@ -240,6 +240,14 @@
       return { ...READING_LEVELS[0], progress: 0, next: READING_LEVELS[1], remainingForNext: 300 };
     };
 
+    // 신규: 독서 연속일 마일스톤별 칭찬스티커 지급 수 계산 헬퍼 함수
+    // (10일: 3개, 20일: 5개, 30일: 7개, 40일: 9개... 10일 늘어날 때마다 2개씩 증가)
+    const getStreakRewardStickers = (milestone) => {
+      const k = Math.floor((Number(milestone) || 0) / 10);
+      if (k <= 0) return 0;
+      return 3 + (k - 1) * 2;
+    };
+
     // 신규: 독서 20분 이상 연속일(Streak) 및 10일 단위 마일스톤(10일, 20일, 30일 등) 산출 헬퍼 함수
     const calculateReadingStreakMilestones = (kidLogs) => {
       // 1. 날짜별 총 독서 시간 집계 (하루에 여러 번 나눠 읽어도 합산 20분 이상이면 인정)
@@ -279,11 +287,12 @@
           }
         }
 
-        // 10일, 20일, 30일 등 10의 배수일 때 마일스톤 기록
+        // 10일, 20일, 30일 등 10의 배수일 때 마일스톤 기록 (10일: 3개, 20일: 5개, 30일: 7개...)
         if (currentRun > 0 && currentRun % 10 === 0) {
           milestones.push({
             milestone: currentRun,
-            milestoneDate: curDateStr
+            milestoneDate: curDateStr,
+            rewardStickers: getStreakRewardStickers(currentRun)
           });
         }
 
@@ -322,6 +331,7 @@
 
       const nextMilestone = currentStreak === 0 ? 10 : (Math.floor(currentStreak / 10) + 1) * 10;
       const daysUntilNextMilestone = Math.max(1, nextMilestone - currentStreak);
+      const nextMilestoneReward = getStreakRewardStickers(nextMilestone);
 
       return {
         currentStreak,
@@ -329,7 +339,8 @@
         validDates,
         milestones,
         nextMilestone,
-        daysUntilNextMilestone
+        daysUntilNextMilestone,
+        nextMilestoneReward
       };
     };
 
@@ -1813,12 +1824,13 @@
           // 최근 읽은 책 로그 (최대 5건)
           const recentLogs = [...kidLogs].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
 
-          // 1. 연속 독서 스트릭 (하루 20분 이상 완독 기준, 10일마다 칭찬스티커 3개 보상)
+          // 1. 연속 독서 스트릭 (하루 20분 이상 완독 기준, 10일마다 스티커 차등 보상: 10일 3개, 20일 5개, 30일 7개...)
           const streakInfo = calculateReadingStreakMilestones(kidLogs);
           const streak = streakInfo.currentStreak;
           const readToday = streakInfo.readToday;
           const daysUntilNextMilestone = streakInfo.daysUntilNextMilestone;
           const nextMilestone = streakInfo.nextMilestone;
+          const nextMilestoneReward = streakInfo.nextMilestoneReward;
 
           // 2. 완독한 책 목록
           const completedLogs = kidLogs.filter(l => l.isCompleted && l.bookTitle);
@@ -1839,6 +1851,7 @@
             readToday,
             daysUntilNextMilestone,
             nextMilestone,
+            nextMilestoneReward,
             completedLogs,
             completedCount: completedLogs.length
           };
@@ -2305,7 +2318,7 @@
                               <span>{kid.streak}일 연속 독서 {kid.readToday ? '달성!' : '유지 중'}</span>
                             </span>
                             <span className="text-[9px] text-amber-300 font-bold">
-                              🎁 10일마다 스티커 3개 (다음 보상까지 {kid.daysUntilNextMilestone}일)
+                              🎁 다음 {kid.nextMilestone}일 달성 시 스티커 {kid.nextMilestoneReward}개 (+{kid.daysUntilNextMilestone}일 남음)
                             </span>
                           </div>
                         ) : (
@@ -2315,7 +2328,7 @@
                               <span>오늘 독서 도전!</span>
                             </span>
                             <span className="text-[9px] text-slate-400 font-medium">
-                              매일 20분 이상 시 10일마다 스티커 3개 🎁
+                              매일 20분 이상 시 10일마다 스티커 차등 보상(10일 3개, 20일 5개...) 🎁
                             </span>
                           </div>
                         )}
@@ -10227,7 +10240,7 @@
         }
       }, []);
 
-      // 신규: 독서 20분 이상 연속일 10일마다(10일, 20일, 30일 등) 칭찬 스티커 3개 자동 부여 동기화
+      // 신규: 독서 20분 이상 연속일 10일마다(10일: 3개, 20일: 5개, 30일: 7개...) 칭찬 스티커 차등 자동 부여 동기화
       const autoAwardingStreakRef = useRef(false);
       useEffect(() => {
         if (!readingLogs || readingLogs.length === 0) return;
@@ -10254,6 +10267,7 @@
                 );
 
                 if (!isAlreadyAwarded) {
+                  const rewardCount = getStreakRewardStickers(m.milestone);
                   const praiseData = {
                     id: docId,
                     fromMemberId: currentMemberId || 'system',
@@ -10262,7 +10276,7 @@
                     toMemberName: kid.name,
                     stickerKey: 'fire',
                     stickerEmoji: '🔥',
-                    count: 3,
+                    count: rewardCount,
                     streakMilestone: m.milestone,
                     milestoneDate: m.milestoneDate,
                     reason: `🔥 독서 ${m.milestone}일 연속 달성 축하 선물! (${m.milestoneDate} 기준, 매일 20분 이상 완독)`,
@@ -10274,7 +10288,7 @@
                   } else {
                     setPraiseLogs(prev => [...prev, praiseData]);
                   }
-                  showToast(`🔥 대단해요! ${kid.name} 독서 ${m.milestone}일 연속 달성! 칭찬스티커 3개가 자동 지급되었습니다! 🎉`);
+                  showToast(`🔥 대단해요! ${kid.name} 독서 ${m.milestone}일 연속 달성! 칭찬스티커 +${rewardCount}개가 자동 지급되었습니다! 🎉`);
                   triggerHaptic([100, 100, 100, 100, 100]);
                 }
               }
@@ -11170,7 +11184,7 @@
           }
         }
 
-        // 독서 20분 이상 연속일(10일마다) 판별 및 칭찬 스티커 3개씩 자동 부여
+        // 독서 20분 이상 연속일(10일마다) 판별 및 칭찬 스티커 차등(10일 3개, 20일 5개, 30일 7개...) 자동 부여
         const newKidLogs = [...kidLogs, logData];
         const { milestones: newMilestones } = calculateReadingStreakMilestones(newKidLogs);
 
@@ -11186,7 +11200,7 @@
             unawardedStreakMilestones.push(m);
           }
         }
-        const totalStreakStickers = unawardedStreakMilestones.length * 3;
+        const totalStreakStickers = unawardedStreakMilestones.reduce((acc, m) => acc + getStreakRewardStickers(m.milestone), 0);
 
         try {
           if (dbRef.current) {
@@ -11206,9 +11220,10 @@
               };
               await dbRef.current.collection('praise_stickers').add(praiseData);
             }
-            // 연속일 10일 단위 마일스톤 칭찬스티커 3개씩 자동 지급
+            // 연속일 10일 단위 마일스톤 칭찬스티커 차등 자동 지급
             for (const m of unawardedStreakMilestones) {
               const docId = `praise_streak_${kid.id}_${m.milestone}_${m.milestoneDate}`;
+              const rewardCount = getStreakRewardStickers(m.milestone);
               const praiseData = {
                 id: docId,
                 fromMemberId: currentMember.id,
@@ -11217,7 +11232,7 @@
                 toMemberName: kid.name,
                 stickerKey: 'fire',
                 stickerEmoji: '🔥',
-                count: 3,
+                count: rewardCount,
                 streakMilestone: m.milestone,
                 milestoneDate: m.milestoneDate,
                 reason: `🔥 독서 ${m.milestone}일 연속 달성 축하 선물! (${m.milestoneDate} 기준, 매일 20분 이상 완독)`,
@@ -11244,6 +11259,7 @@
             });
             unawardedStreakMilestones.forEach(m => {
               const docId = `praise_streak_${kid.id}_${m.milestone}_${m.milestoneDate}`;
+              const rewardCount = getStreakRewardStickers(m.milestone);
               const praiseData = {
                 id: docId,
                 fromMemberId: currentMember.id,
@@ -11252,7 +11268,7 @@
                 toMemberName: kid.name,
                 stickerKey: 'fire',
                 stickerEmoji: '🔥',
-                count: 3,
+                count: rewardCount,
                 streakMilestone: m.milestone,
                 milestoneDate: m.milestoneDate,
                 reason: `🔥 독서 ${m.milestone}일 연속 달성 축하 선물! (${m.milestoneDate} 기준, 매일 20분 이상 완독)`,
@@ -14210,7 +14226,7 @@
                           <span>연속 독서 칭찬스티커 보상 혜택:</span>
                         </div>
                         <p className="text-[10px] text-amber-800 leading-relaxed">
-                          하루 <strong>20분 이상</strong> 독서 시 연속일로 인정되며, <strong>10일마다(10일, 20일, 30일...) 칭찬스티커 3개</strong>가 자동으로 지급됩니다! 🎁
+                          하루 <strong>20분 이상</strong> 독서 시 연속일로 인정되며, <strong>10일마다 칭찬스티커가 2개씩 늘어납니다!</strong> (10일: 3개, 20일: 5개, 30일: 7개, 40일: 9개…) 🎁
                         </p>
                       </div>
                     </div>
