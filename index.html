@@ -3707,6 +3707,39 @@
       );
     }
 
+    // 가족 편지 & 답글용 추천 이모티콘 및 문구 목록
+    const LETTER_EMOJI_CATEGORIES = [
+      {
+        name: '축하·사랑',
+        icon: '💖',
+        emojis: ['❤️', '💖', '🎉', '🎂', '🥳', '🎁', '✨', '💌', '💐', '🌸', '🍰', '🎈']
+      },
+      {
+        name: '칭찬·응원',
+        icon: '👏',
+        emojis: ['👏', '👍', '🌟', '🔥', '💪', '🥰', '👑', '🏆', '💯', '🍀', '🌈', '☀️']
+      },
+      {
+        name: '표정·기분',
+        icon: '😊',
+        emojis: ['😊', '😆', '😍', '🥺', '🤗', '😋', '😘', '😎', '🙌', '🤩', '😻', '😇']
+      },
+      {
+        name: '재미·선물',
+        icon: '🍕',
+        emojis: ['🍕', '🍦', '🍔', '🍭', '🎮', '📚', '🐶', '🐱', '🚀', '⚽', '🎨', '🧸']
+      }
+    ];
+
+    const QUICK_LETTER_PHRASES = [
+      '생일 축하해! 🎂🎉',
+      '사랑해 ❤️💖',
+      '오늘도 최고야! 👍🌟',
+      '항상 응원해! 💪✨',
+      '고마워요 🥰💕',
+      '행복한 하루 보내! 🌈☀️'
+    ];
+
     // 신규: 우리 가족 소통 & 소원 보드 (위시리스트, 편지/하고싶은말, 축하편지, 하루 감정)
     function FamilyBoardSection({
       currentMember,
@@ -3726,6 +3759,98 @@
       handleDeleteDailyMood
     }) {
       const [boardTab, setBoardTab] = useState('wish'); // 'wish', 'letter', 'celebration', 'mood'
+
+      // 이모티콘 피커 카테고리 탭 상태
+      const [letterEmojiCategory, setLetterEmojiCategory] = useState(0);
+      const [celebEmojiCategory, setCelebEmojiCategory] = useState(0);
+      const [editEmojiCategory, setEditEmojiCategory] = useState(0);
+
+      // 공통 이모티콘 피커 렌더러
+      const renderEmojiPicker = (onSelectEmoji, onSelectPhrase, currentCategory, setCurrentCategory) => {
+        return (
+          <div className="bg-slate-50/90 rounded-2xl p-2.5 border border-slate-200/80 space-y-1.5">
+            {/* 상단 카테고리 탭 & 빠른 문구 */}
+            <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar pb-0.5">
+              <div className="flex items-center space-x-1 shrink-0">
+                <span className="text-[11px] font-black text-slate-500 mr-0.5 flex items-center space-x-0.5">
+                  <span>😊</span>
+                  <span>이모티콘:</span>
+                </span>
+                {LETTER_EMOJI_CATEGORIES.map((cat, idx) => (
+                  <button
+                    key={cat.name}
+                    type="button"
+                    onClick={() => {
+                      setCurrentCategory(idx);
+                      triggerHaptic(15);
+                    }}
+                    className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition flex items-center space-x-1 shrink-0 ${
+                      currentCategory === idx
+                        ? 'bg-white text-indigo-600 shadow-2xs border border-indigo-200'
+                        : 'text-slate-600 hover:bg-white/60'
+                    }`}
+                  >
+                    <span>{cat.icon}</span>
+                    <span>{cat.name}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentCategory('phrase');
+                    triggerHaptic(15);
+                  }}
+                  className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition flex items-center space-x-1 shrink-0 ${
+                    currentCategory === 'phrase'
+                      ? 'bg-amber-100 text-amber-800 shadow-2xs border border-amber-300'
+                      : 'text-slate-600 hover:bg-white/60'
+                  }`}
+                >
+                  <span>💬</span>
+                  <span>빠른 문구</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 이모티콘 또는 빠른 문구 버튼 목록 */}
+            {currentCategory === 'phrase' ? (
+              <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {QUICK_LETTER_PHRASES.map((ph, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      if (onSelectPhrase) onSelectPhrase(ph);
+                      else onSelectEmoji(ph);
+                      triggerHaptic(20);
+                    }}
+                    className="px-2.5 py-1 rounded-xl bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 text-[11px] font-bold text-slate-700 hover:text-amber-900 transition active:scale-95 shrink-0 shadow-2xs"
+                  >
+                    {ph}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {(LETTER_EMOJI_CATEGORIES[currentCategory] || LETTER_EMOJI_CATEGORIES[0]).emojis.map((emo, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      onSelectEmoji(emo);
+                      triggerHaptic(15);
+                    }}
+                    className="w-8 h-8 rounded-xl bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-base flex items-center justify-center transition active:scale-90 hover:scale-110 shrink-0 shadow-2xs"
+                    title="편지에 추가하기"
+                  >
+                    {emo}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      };
 
       // 위시리스트 폼 상태
       const [wishForm, setWishForm] = useState({
@@ -4116,43 +4241,67 @@
 
             {/* 답글 달기 입력창 */}
             {canReply && (
-              <div className="pt-2 flex items-center space-x-2">
-                <input
-                  type="text"
-                  value={replyInputMap[letter.id] || ''}
-                  onChange={(e) => setReplyInputMap({ ...replyInputMap, [letter.id]: e.target.value })}
-                  placeholder={
-                    isCelebration
-                      ? `${currentMember.name}의 감사와 사랑이 담긴 축하 답글 남기기... 💖`
-                      : `${currentMember.name}의 사랑이 담긴 답글 남기기...`
-                  }
-                  className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-pink-400"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
+              <div className="pt-2 space-y-1.5">
+                {/* 빠른 답글 이모티콘 & 문구 칩 */}
+                <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar py-0.5">
+                  <span className="text-[10px] text-slate-400 font-bold shrink-0">이모티콘:</span>
+                  {['❤️', '💖', '🎉', '🎂', '👏', '👍', '🥰', '✨', '감사해요! 💕', '사랑해요 ❤️', '최고야! 👍', '축하해! 🎂'].map((emo, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        const prev = replyInputMap[letter.id] || '';
+                        setReplyInputMap({
+                          ...replyInputMap,
+                          [letter.id]: prev ? `${prev} ${emo}` : emo
+                        });
+                        triggerHaptic(15);
+                      }}
+                      className="px-2 py-0.5 bg-slate-100 hover:bg-pink-100 text-slate-700 hover:text-pink-700 rounded-lg text-xs font-bold shrink-0 transition active:scale-95 shadow-2xs"
+                    >
+                      {emo}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={replyInputMap[letter.id] || ''}
+                    onChange={(e) => setReplyInputMap({ ...replyInputMap, [letter.id]: e.target.value })}
+                    placeholder={
+                      isCelebration
+                        ? `${currentMember.name}의 감사와 사랑이 담긴 축하 답글 남기기... 💖`
+                        : `${currentMember.name}의 사랑이 담긴 답글 남기기...`
+                    }
+                    className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-pink-400"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        const val = replyInputMap[letter.id];
+                        if (val && val.trim()) {
+                          handleSaveLetterReply(letter.id, val.trim());
+                          setReplyInputMap({ ...replyInputMap, [letter.id]: '' });
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
                       const val = replyInputMap[letter.id];
                       if (val && val.trim()) {
                         handleSaveLetterReply(letter.id, val.trim());
                         setReplyInputMap({ ...replyInputMap, [letter.id]: '' });
                       }
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const val = replyInputMap[letter.id];
-                    if (val && val.trim()) {
-                      handleSaveLetterReply(letter.id, val.trim());
-                      setReplyInputMap({ ...replyInputMap, [letter.id]: '' });
-                    }
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-white font-bold text-xs shrink-0 shadow-2xs transition active:scale-95 ${
-                    isCelebration ? 'bg-amber-500 hover:bg-amber-600' : 'bg-pink-500 hover:bg-pink-600'
-                  }`}
-                >
-                  답글 💬
-                </button>
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-white font-bold text-xs shrink-0 shadow-2xs transition active:scale-95 ${
+                      isCelebration ? 'bg-amber-500 hover:bg-amber-600' : 'bg-pink-500 hover:bg-pink-600'
+                    }`}
+                  >
+                    답글 💬
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -4644,6 +4793,19 @@
                     </label>
                   </div>
 
+                  {renderEmojiPicker(
+                    (emo) => setLetterForm(prev => ({
+                      ...prev,
+                      content: prev.content ? `${prev.content} ${emo}` : emo
+                    })),
+                    (phrase) => setLetterForm(prev => ({
+                      ...prev,
+                      content: prev.content ? `${prev.content}\n${phrase}` : phrase
+                    })),
+                    letterEmojiCategory,
+                    setLetterEmojiCategory
+                  )}
+
                   <div>
                     <textarea
                       required
@@ -4778,6 +4940,29 @@
                   </div>
 
                   <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-amber-900 font-bold text-xs">축하 제목 (선택)</label>
+                      <div className="flex items-center space-x-1">
+                        <span className="text-[10px] text-amber-800">제목 아이콘:</span>
+                        {['🎂', '🎉', '🥳', '👑', '🌟', '🏆', '💖'].map((emo) => (
+                          <button
+                            key={emo}
+                            type="button"
+                            onClick={() => {
+                              setCelebrationForm(prev => ({
+                                ...prev,
+                                title: prev.title ? `${emo} ${prev.title}` : `${emo} `
+                              }));
+                              triggerHaptic(15);
+                            }}
+                            className="text-xs hover:scale-125 transition-transform"
+                            title="제목 앞에 추가"
+                          >
+                            {emo}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <input
                       type="text"
                       value={celebrationForm.title}
@@ -4786,6 +4971,19 @@
                       className="w-full p-2.5 bg-white border border-amber-200 rounded-xl font-bold focus:ring-2 focus:ring-amber-400 placeholder-slate-400"
                     />
                   </div>
+
+                  {renderEmojiPicker(
+                    (emo) => setCelebrationForm(prev => ({
+                      ...prev,
+                      content: prev.content ? `${prev.content} ${emo}` : emo
+                    })),
+                    (phrase) => setCelebrationForm(prev => ({
+                      ...prev,
+                      content: prev.content ? `${prev.content}\n${phrase}` : phrase
+                    })),
+                    celebEmojiCategory,
+                    setCelebEmojiCategory
+                  )}
 
                   <div>
                     <textarea
@@ -5167,6 +5365,20 @@
                   {/* 편지 본문 */}
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">편지 내용</label>
+                    <div className="mb-2">
+                      {renderEmojiPicker(
+                        (emo) => setEditLetterForm(prev => ({
+                          ...prev,
+                          content: prev.content ? `${prev.content} ${emo}` : emo
+                        })),
+                        (phrase) => setEditLetterForm(prev => ({
+                          ...prev,
+                          content: prev.content ? `${prev.content}\n${phrase}` : phrase
+                        })),
+                        editEmojiCategory,
+                        setEditEmojiCategory
+                      )}
+                    </div>
                     <textarea
                       required
                       rows={8}
