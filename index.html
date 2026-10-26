@@ -3765,6 +3765,38 @@
       const [celebEmojiCategory, setCelebEmojiCategory] = useState(0);
       const [editEmojiCategory, setEditEmojiCategory] = useState(0);
 
+      // 입력창 커서 위치 참조를 위한 Refs
+      const letterTextareaRef = useRef(null);
+      const celebTextareaRef = useRef(null);
+      const editTextareaRef = useRef(null);
+      const replyInputRefs = useRef({});
+
+      // 커서 위치에 텍스트/이모티콘 삽입 헬퍼 함수
+      const insertAtCursor = (targetRef, currentVal, setFormCallback, textToInsert) => {
+        const el = targetRef?.current;
+        if (el) {
+          const start = (typeof el.selectionStart === 'number') ? el.selectionStart : (el.value?.length || 0);
+          const end = (typeof el.selectionEnd === 'number') ? el.selectionEnd : (el.value?.length || 0);
+          const val = el.value !== undefined ? el.value : (currentVal || '');
+          const before = val.substring(0, start);
+          const after = val.substring(end);
+          const newVal = before + textToInsert + after;
+
+          setFormCallback(newVal);
+
+          // 다음 애니메이션 프레임에서 포커스를 유지하고 커서를 삽입된 이모티콘 바로 뒤로 이동
+          requestAnimationFrame(() => {
+            if (el) {
+              el.focus();
+              const newPos = start + textToInsert.length;
+              el.setSelectionRange(newPos, newPos);
+            }
+          });
+        } else {
+          setFormCallback(currentVal ? `${currentVal} ${textToInsert}` : textToInsert);
+        }
+      };
+
       // 공통 이모티콘 피커 렌더러
       const renderEmojiPicker = (onSelectEmoji, onSelectPhrase, currentCategory, setCurrentCategory) => {
         return (
@@ -3780,6 +3812,7 @@
                   <button
                     key={cat.name}
                     type="button"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
                       setCurrentCategory(idx);
                       triggerHaptic(15);
@@ -3796,6 +3829,7 @@
                 ))}
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     setCurrentCategory('phrase');
                     triggerHaptic(15);
@@ -3819,6 +3853,7 @@
                   <button
                     key={idx}
                     type="button"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
                       if (onSelectPhrase) onSelectPhrase(ph);
                       else onSelectEmoji(ph);
@@ -3836,6 +3871,7 @@
                   <button
                     key={idx}
                     type="button"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
                       onSelectEmoji(emo);
                       triggerHaptic(15);
@@ -4249,12 +4285,15 @@
                     <button
                       key={idx}
                       type="button"
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
-                        const prev = replyInputMap[letter.id] || '';
-                        setReplyInputMap({
-                          ...replyInputMap,
-                          [letter.id]: prev ? `${prev} ${emo}` : emo
-                        });
+                        const targetRef = { current: replyInputRefs.current[letter.id] };
+                        insertAtCursor(
+                          targetRef,
+                          replyInputMap[letter.id] || '',
+                          (val) => setReplyInputMap(prev => ({ ...prev, [letter.id]: val })),
+                          emo
+                        );
                         triggerHaptic(15);
                       }}
                       className="px-2 py-0.5 bg-slate-100 hover:bg-pink-100 text-slate-700 hover:text-pink-700 rounded-lg text-xs font-bold shrink-0 transition active:scale-95 shadow-2xs"
@@ -4266,6 +4305,7 @@
 
                 <div className="flex items-center space-x-2">
                   <input
+                    ref={(el) => { replyInputRefs.current[letter.id] = el; }}
                     type="text"
                     value={replyInputMap[letter.id] || ''}
                     onChange={(e) => setReplyInputMap({ ...replyInputMap, [letter.id]: e.target.value })}
@@ -4794,20 +4834,25 @@
                   </div>
 
                   {renderEmojiPicker(
-                    (emo) => setLetterForm(prev => ({
-                      ...prev,
-                      content: prev.content ? `${prev.content} ${emo}` : emo
-                    })),
-                    (phrase) => setLetterForm(prev => ({
-                      ...prev,
-                      content: prev.content ? `${prev.content}\n${phrase}` : phrase
-                    })),
+                    (emo) => insertAtCursor(
+                      letterTextareaRef,
+                      letterForm.content,
+                      (val) => setLetterForm(prev => ({ ...prev, content: val })),
+                      emo
+                    ),
+                    (phrase) => insertAtCursor(
+                      letterTextareaRef,
+                      letterForm.content,
+                      (val) => setLetterForm(prev => ({ ...prev, content: val })),
+                      phrase
+                    ),
                     letterEmojiCategory,
                     setLetterEmojiCategory
                   )}
 
                   <div>
                     <textarea
+                      ref={letterTextareaRef}
                       required
                       rows={3}
                       value={letterForm.content}
@@ -4955,6 +5000,7 @@
                               }));
                               triggerHaptic(15);
                             }}
+                            onMouseDown={(e) => e.preventDefault()}
                             className="text-xs hover:scale-125 transition-transform"
                             title="제목 앞에 추가"
                           >
@@ -4973,20 +5019,25 @@
                   </div>
 
                   {renderEmojiPicker(
-                    (emo) => setCelebrationForm(prev => ({
-                      ...prev,
-                      content: prev.content ? `${prev.content} ${emo}` : emo
-                    })),
-                    (phrase) => setCelebrationForm(prev => ({
-                      ...prev,
-                      content: prev.content ? `${prev.content}\n${phrase}` : phrase
-                    })),
+                    (emo) => insertAtCursor(
+                      celebTextareaRef,
+                      celebrationForm.content,
+                      (val) => setCelebrationForm(prev => ({ ...prev, content: val })),
+                      emo
+                    ),
+                    (phrase) => insertAtCursor(
+                      celebTextareaRef,
+                      celebrationForm.content,
+                      (val) => setCelebrationForm(prev => ({ ...prev, content: val })),
+                      phrase
+                    ),
                     celebEmojiCategory,
                     setCelebEmojiCategory
                   )}
 
                   <div>
                     <textarea
+                      ref={celebTextareaRef}
                       required
                       rows={5}
                       value={celebrationForm.content}
@@ -5367,19 +5418,24 @@
                     <label className="block text-slate-700 font-bold mb-1">편지 내용</label>
                     <div className="mb-2">
                       {renderEmojiPicker(
-                        (emo) => setEditLetterForm(prev => ({
-                          ...prev,
-                          content: prev.content ? `${prev.content} ${emo}` : emo
-                        })),
-                        (phrase) => setEditLetterForm(prev => ({
-                          ...prev,
-                          content: prev.content ? `${prev.content}\n${phrase}` : phrase
-                        })),
+                        (emo) => insertAtCursor(
+                          editTextareaRef,
+                          editLetterForm.content,
+                          (val) => setEditLetterForm(prev => ({ ...prev, content: val })),
+                          emo
+                        ),
+                        (phrase) => insertAtCursor(
+                          editTextareaRef,
+                          editLetterForm.content,
+                          (val) => setEditLetterForm(prev => ({ ...prev, content: val })),
+                          phrase
+                        ),
                         editEmojiCategory,
                         setEditEmojiCategory
                       )}
                     </div>
                     <textarea
+                      ref={editTextareaRef}
                       required
                       rows={8}
                       value={editLetterForm.content}
