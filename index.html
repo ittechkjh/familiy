@@ -240,6 +240,99 @@
       return { ...READING_LEVELS[0], progress: 0, next: READING_LEVELS[1], remainingForNext: 300 };
     };
 
+    // 신규: 독서 20분 이상 연속일(Streak) 및 10일 단위 마일스톤(10일, 20일, 30일 등) 산출 헬퍼 함수
+    const calculateReadingStreakMilestones = (kidLogs) => {
+      // 1. 날짜별 총 독서 시간 집계 (하루에 여러 번 나눠 읽어도 합산 20분 이상이면 인정)
+      const dailyTotalMinutesMap = {};
+      (kidLogs || []).forEach(l => {
+        if (l.date && Number(l.minutes) > 0) {
+          dailyTotalMinutesMap[l.date] = (dailyTotalMinutesMap[l.date] || 0) + Number(l.minutes);
+        }
+      });
+
+      // 2. 20분 이상인 유효 날짜 목록 추출 및 정렬 (오름차순 YYYY-MM-DD)
+      const validDates = Object.keys(dailyTotalMinutesMap)
+        .filter(d => dailyTotalMinutesMap[d] >= 20)
+        .sort();
+
+      // 3. 연속일 구간(streak chunks) 탐색 및 10일 단위 마일스톤 수집
+      const milestones = [];
+      let currentRun = 0;
+      let prevDate = null;
+
+      for (let i = 0; i < validDates.length; i++) {
+        const curDateStr = validDates[i];
+        const curParts = curDateStr.split('-').map(Number);
+        const curD = new Date(curParts[0], curParts[1] - 1, curParts[2]);
+
+        if (!prevDate) {
+          currentRun = 1;
+        } else {
+          const prevParts = prevDate.split('-').map(Number);
+          const prevD = new Date(prevParts[0], prevParts[1] - 1, prevParts[2]);
+          const diffDays = Math.round((curD - prevD) / (1000 * 60 * 60 * 24));
+
+          if (diffDays === 1) {
+            currentRun++;
+          } else {
+            currentRun = 1;
+          }
+        }
+
+        // 10일, 20일, 30일 등 10의 배수일 때 마일스톤 기록
+        if (currentRun > 0 && currentRun % 10 === 0) {
+          milestones.push({
+            milestone: currentRun,
+            milestoneDate: curDateStr
+          });
+        }
+
+        prevDate = curDateStr;
+      }
+
+      // 4. 오늘 기준 현재 활성 스트릭(연속일) 계산
+      const now = new Date();
+      const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const todayStr = fmt(now);
+      const validSet = new Set(validDates);
+      const readToday = validSet.has(todayStr);
+
+      let currentStreak = 0;
+      let checkD = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      if (readToday) {
+        currentStreak = 1;
+        checkD.setDate(checkD.getDate() - 1);
+        while (validSet.has(fmt(checkD))) {
+          currentStreak++;
+          checkD.setDate(checkD.getDate() - 1);
+        }
+      } else {
+        // 오늘 아직 20분 미달성이면 어제까지의 연속 기록 유지 여부 확인
+        checkD.setDate(checkD.getDate() - 1);
+        if (validSet.has(fmt(checkD))) {
+          currentStreak = 1;
+          checkD.setDate(checkD.getDate() - 1);
+          while (validSet.has(fmt(checkD))) {
+            currentStreak++;
+            checkD.setDate(checkD.getDate() - 1);
+          }
+        }
+      }
+
+      const nextMilestone = currentStreak === 0 ? 10 : (Math.floor(currentStreak / 10) + 1) * 10;
+      const daysUntilNextMilestone = Math.max(1, nextMilestone - currentStreak);
+
+      return {
+        currentStreak,
+        readToday,
+        validDates,
+        milestones,
+        nextMilestone,
+        daysUntilNextMilestone
+      };
+    };
+
     const DEFAULT_READING_LOGS = [
       { id: 'rl_1', childId: 'child1', childName: '김주원', date: '2026-10-05', minutes: 35, bookTitle: '삼국지 1권', notes: '도원결의 부분 완독!', createdAt: Date.now() - 86400000 * 2, loggedBy: '김주원' },
       { id: 'rl_2', childId: 'child2', childName: '김주아', date: '2026-10-06', minutes: 30, bookTitle: '백설공주와 일곱 난쟁이', notes: '사과 조심해! 🍎', createdAt: Date.now() - 86400000, loggedBy: '김주아' },
@@ -1720,35 +1813,12 @@
           // 최근 읽은 책 로그 (최대 5건)
           const recentLogs = [...kidLogs].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
 
-          // 1. 연속 독서 스트릭 (Streak, N일 연속 독서 달성) 계산
-          const validDates = new Set(kidLogs.filter(l => (Number(l.minutes) || 0) > 0).map(l => l.date));
-          const now = new Date();
-          const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-          const todayStr = fmt(now);
-          const readToday = validDates.has(todayStr);
-
-          let streak = 0;
-          let checkD = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-          if (readToday) {
-            streak = 1;
-            checkD.setDate(checkD.getDate() - 1);
-            while (validDates.has(fmt(checkD))) {
-              streak++;
-              checkD.setDate(checkD.getDate() - 1);
-            }
-          } else {
-            // 오늘 아직 안 읽었으면 어제부터 거슬러 올라감
-            checkD.setDate(checkD.getDate() - 1);
-            if (validDates.has(fmt(checkD))) {
-              streak = 1;
-              checkD.setDate(checkD.getDate() - 1);
-              while (validDates.has(fmt(checkD))) {
-                streak++;
-                checkD.setDate(checkD.getDate() - 1);
-              }
-            }
-          }
+          // 1. 연속 독서 스트릭 (하루 20분 이상 완독 기준, 10일마다 칭찬스티커 3개 보상)
+          const streakInfo = calculateReadingStreakMilestones(kidLogs);
+          const streak = streakInfo.currentStreak;
+          const readToday = streakInfo.readToday;
+          const daysUntilNextMilestone = streakInfo.daysUntilNextMilestone;
+          const nextMilestone = streakInfo.nextMilestone;
 
           // 2. 완독한 책 목록
           const completedLogs = kidLogs.filter(l => l.isCompleted && l.bookTitle);
@@ -1767,6 +1837,8 @@
             recentLogs,
             streak,
             readToday,
+            daysUntilNextMilestone,
+            nextMilestone,
             completedLogs,
             completedCount: completedLogs.length
           };
@@ -2227,15 +2299,25 @@
                       {/* 트로피 / 왕관 & 연속 독서 스트릭 뱃지 */}
                       <div className="flex flex-col items-end space-y-1">
                         {kid.streak > 0 ? (
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs flex items-center space-x-0.5 ${kid.readToday ? 'bg-orange-500 text-white animate-pulse' : 'bg-orange-400/30 text-orange-200 border border-orange-400/40'}`}>
-                            <span>🔥</span>
-                            <span>{kid.streak}일 연속 독서 {kid.readToday ? '달성!' : '유지 중'}</span>
-                          </span>
+                          <div className="flex flex-col items-end space-y-0.5">
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs flex items-center space-x-0.5 ${kid.readToday ? 'bg-orange-500 text-white animate-pulse' : 'bg-orange-400/30 text-orange-200 border border-orange-400/40'}`}>
+                              <span>🔥</span>
+                              <span>{kid.streak}일 연속 독서 {kid.readToday ? '달성!' : '유지 중'}</span>
+                            </span>
+                            <span className="text-[9px] text-amber-300 font-bold">
+                              🎁 10일마다 스티커 3개 (다음 보상까지 {kid.daysUntilNextMilestone}일)
+                            </span>
+                          </div>
                         ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-slate-300 flex items-center space-x-0.5">
-                            <span>🌱</span>
-                            <span>오늘 독서 도전!</span>
-                          </span>
+                          <div className="flex flex-col items-end space-y-0.5">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-slate-300 flex items-center space-x-0.5">
+                              <span>🌱</span>
+                              <span>오늘 독서 도전!</span>
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-medium">
+                              매일 20분 이상 시 10일마다 스티커 3개 🎁
+                            </span>
+                          </div>
                         )}
                         {kid.completedCount > 0 && (
                           <span className="text-[10px] font-extrabold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full flex items-center space-x-0.5">
@@ -10145,6 +10227,68 @@
         }
       }, []);
 
+      // 신규: 독서 20분 이상 연속일 10일마다(10일, 20일, 30일 등) 칭찬 스티커 3개 자동 부여 동기화
+      const autoAwardingStreakRef = useRef(false);
+      useEffect(() => {
+        if (!readingLogs || readingLogs.length === 0) return;
+        if (autoAwardingStreakRef.current) return;
+
+        const checkAndAwardStreaks = async () => {
+          autoAwardingStreakRef.current = true;
+          try {
+            const kids = [
+              { id: 'child1', name: '김주원' },
+              { id: 'child2', name: '김주아' }
+            ];
+
+            for (const kid of kids) {
+              const kidLogs = readingLogs.filter(l => l.childId === kid.id);
+              const { milestones } = calculateReadingStreakMilestones(kidLogs);
+
+              for (const m of milestones) {
+                const docId = `praise_streak_${kid.id}_${m.milestone}_${m.milestoneDate}`;
+                const isAlreadyAwarded = praiseLogs.some(p =>
+                  p.id === docId ||
+                  (p.toMemberId === kid.id && p.streakMilestone === m.milestone && p.milestoneDate === m.milestoneDate) ||
+                  (p.toMemberId === kid.id && p.reason && p.reason.includes(`독서 ${m.milestone}일 연속 달성`) && p.reason.includes(m.milestoneDate))
+                );
+
+                if (!isAlreadyAwarded) {
+                  const praiseData = {
+                    id: docId,
+                    fromMemberId: currentMemberId || 'system',
+                    fromMemberName: `${currentMember?.name || '가족'} (독서 연속 달성)`,
+                    toMemberId: kid.id,
+                    toMemberName: kid.name,
+                    stickerKey: 'fire',
+                    stickerEmoji: '🔥',
+                    count: 3,
+                    streakMilestone: m.milestone,
+                    milestoneDate: m.milestoneDate,
+                    reason: `🔥 독서 ${m.milestone}일 연속 달성 축하 선물! (${m.milestoneDate} 기준, 매일 20분 이상 완독)`,
+                    createdAt: Date.now()
+                  };
+
+                  if (dbRef.current) {
+                    await dbRef.current.collection('praise_stickers').doc(docId).set(praiseData, { merge: true });
+                  } else {
+                    setPraiseLogs(prev => [...prev, praiseData]);
+                  }
+                  showToast(`🔥 대단해요! ${kid.name} 독서 ${m.milestone}일 연속 달성! 칭찬스티커 3개가 자동 지급되었습니다! 🎉`);
+                  triggerHaptic([100, 100, 100, 100, 100]);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Streak auto-award error:", err);
+          } finally {
+            autoAwardingStreakRef.current = false;
+          }
+        };
+
+        checkAndAwardStreaks();
+      }, [readingLogs, praiseLogs]);
+
       const handleAddStatusPreset = async (text, emoji) => {
         if (!text.trim()) return;
         const newObj = { text: text.trim(), emoji: emoji || '💬', createdAt: Date.now() };
@@ -11026,6 +11170,24 @@
           }
         }
 
+        // 독서 20분 이상 연속일(10일마다) 판별 및 칭찬 스티커 3개씩 자동 부여
+        const newKidLogs = [...kidLogs, logData];
+        const { milestones: newMilestones } = calculateReadingStreakMilestones(newKidLogs);
+
+        const unawardedStreakMilestones = [];
+        for (const m of newMilestones) {
+          const docId = `praise_streak_${kid.id}_${m.milestone}_${m.milestoneDate}`;
+          const isAwarded = praiseLogs.some(p =>
+            p.id === docId ||
+            (p.toMemberId === kid.id && p.streakMilestone === m.milestone && p.milestoneDate === m.milestoneDate) ||
+            (p.toMemberId === kid.id && p.reason && p.reason.includes(`독서 ${m.milestone}일 연속 달성`) && p.reason.includes(m.milestoneDate))
+          );
+          if (!isAwarded) {
+            unawardedStreakMilestones.push(m);
+          }
+        }
+        const totalStreakStickers = unawardedStreakMilestones.length * 3;
+
         try {
           if (dbRef.current) {
             await dbRef.current.collection('reading_logs').add(logData);
@@ -11044,6 +11206,25 @@
               };
               await dbRef.current.collection('praise_stickers').add(praiseData);
             }
+            // 연속일 10일 단위 마일스톤 칭찬스티커 3개씩 자동 지급
+            for (const m of unawardedStreakMilestones) {
+              const docId = `praise_streak_${kid.id}_${m.milestone}_${m.milestoneDate}`;
+              const praiseData = {
+                id: docId,
+                fromMemberId: currentMember.id,
+                fromMemberName: `${currentMember.name} (독서 연속 달성)`,
+                toMemberId: kid.id,
+                toMemberName: kid.name,
+                stickerKey: 'fire',
+                stickerEmoji: '🔥',
+                count: 3,
+                streakMilestone: m.milestone,
+                milestoneDate: m.milestoneDate,
+                reason: `🔥 독서 ${m.milestone}일 연속 달성 축하 선물! (${m.milestoneDate} 기준, 매일 20분 이상 완독)`,
+                createdAt: Date.now() + (m.milestone * 5)
+              };
+              await dbRef.current.collection('praise_stickers').doc(docId).set(praiseData, { merge: true });
+            }
           } else {
             setReadingLogs(prev => [...prev, { id: 'rl_' + Date.now(), ...logData }]);
             awardedLevels.forEach(lvlConfig => {
@@ -11061,10 +11242,39 @@
               };
               setPraiseLogs(prev => [...prev, praiseData]);
             });
+            unawardedStreakMilestones.forEach(m => {
+              const docId = `praise_streak_${kid.id}_${m.milestone}_${m.milestoneDate}`;
+              const praiseData = {
+                id: docId,
+                fromMemberId: currentMember.id,
+                fromMemberName: `${currentMember.name} (독서 연속 달성)`,
+                toMemberId: kid.id,
+                toMemberName: kid.name,
+                stickerKey: 'fire',
+                stickerEmoji: '🔥',
+                count: 3,
+                streakMilestone: m.milestone,
+                milestoneDate: m.milestoneDate,
+                reason: `🔥 독서 ${m.milestone}일 연속 달성 축하 선물! (${m.milestoneDate} 기준, 매일 20분 이상 완독)`,
+                createdAt: Date.now() + (m.milestone * 5)
+              };
+              setPraiseLogs(prev => [...prev, praiseData]);
+            });
           }
           setIsReadingModalOpen(false);
 
-          if (isLevelUp && totalAwardedStickers > 0) {
+          if (isLevelUp && totalAwardedStickers > 0 && totalStreakStickers > 0) {
+            setLevelUpCelebration({
+              kidName: kid.name,
+              oldLevel: prevLevelInfo.level,
+              newLevel: newLevelInfo.level,
+              newTitle: newLevelInfo.title,
+              newIcon: newLevelInfo.icon,
+              stickers: totalAwardedStickers + totalStreakStickers
+            });
+            showToast(`🎉 레벨업 & 독서 연속 달성! Lv.${newLevelInfo.level} 승급 및 연속 달성으로 칭찬스티커 총 +${totalAwardedStickers + totalStreakStickers}개 지급! 🌟`);
+            triggerHaptic([100, 100, 100, 100, 100]);
+          } else if (isLevelUp && totalAwardedStickers > 0) {
             setLevelUpCelebration({
               kidName: kid.name,
               oldLevel: prevLevelInfo.level,
@@ -11074,6 +11284,10 @@
               stickers: totalAwardedStickers
             });
             showToast(`🎉 레벨업 축하합니다! ${kid.name}이(가) Lv.${newLevelInfo.level} [${newLevelInfo.title}] 승급! 칭찬스티커 +${totalAwardedStickers}개가 자동 지급되었습니다! 🌟`);
+            triggerHaptic([100, 100, 100, 100, 100]);
+          } else if (totalStreakStickers > 0) {
+            const latestM = unawardedStreakMilestones[unawardedStreakMilestones.length - 1].milestone;
+            showToast(`🔥 대단해요! ${kid.name} 독서 ${latestM}일 연속 달성! 칭찬스티커 +${totalStreakStickers}개가 자동 지급되었습니다! 🎁`);
             triggerHaptic([100, 100, 100, 100, 100]);
           } else {
             showToast(`📚 ${kid.name}의 독서 시간(${mins}분)이 기록되었습니다! 🎉`);
@@ -13988,6 +14202,16 @@
                             +{mins}분
                           </button>
                         ))}
+                      </div>
+
+                      <div className="bg-amber-50 rounded-xl p-2.5 border border-amber-200/80 text-[11px] text-amber-900 space-y-0.5">
+                        <div className="font-extrabold flex items-center space-x-1">
+                          <span>🔥</span>
+                          <span>연속 독서 칭찬스티커 보상 혜택:</span>
+                        </div>
+                        <p className="text-[10px] text-amber-800 leading-relaxed">
+                          하루 <strong>20분 이상</strong> 독서 시 연속일로 인정되며, <strong>10일마다(10일, 20일, 30일...) 칭찬스티커 3개</strong>가 자동으로 지급됩니다! 🎁
+                        </p>
                       </div>
                     </div>
                   </div>
