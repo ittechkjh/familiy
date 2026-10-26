@@ -3830,13 +3830,15 @@
         let count = 0;
         familyLetters.forEach(l => {
           const isAuthor = currentMemberId === l.fromMemberId;
-          const canView = isAuthor ||
-            (l.toRole === 'mom' && (currentMemberId === 'mom' || (!l.isSecret && isParent))) ||
-            (l.toRole === 'dad' && (currentMemberId === 'dad' || (!l.isSecret && isParent))) ||
-            (l.toRole === 'parents' && (!l.isSecret || isParent)) ||
-            (l.toRole === 'child1' && (currentMemberId === 'child1' || (!l.isSecret && isParent))) ||
-            (l.toRole === 'child2' && (currentMemberId === 'child2' || (!l.isSecret && isParent))) ||
-            (l.toRole === 'kids' && (currentMemberId === 'child1' || currentMemberId === 'child2' || isParent));
+          const isRecipient = (
+            (l.toRole === 'child1' && currentMemberId === 'child1') ||
+            (l.toRole === 'child2' && currentMemberId === 'child2') ||
+            (l.toRole === 'mom' && currentMemberId === 'mom') ||
+            (l.toRole === 'dad' && currentMemberId === 'dad') ||
+            (l.toRole === 'kids' && (currentMemberId === 'child1' || currentMemberId === 'child2')) ||
+            (l.toRole === 'parents' && isParent)
+          );
+          const canView = isAuthor || isRecipient || (!l.isSecret && (isParent || l.toRole === 'kids' || l.toRole === 'parents' || l.toRole === 'child1' || l.toRole === 'child2'));
 
           if (!canView) return;
 
@@ -3928,41 +3930,51 @@
       const renderLetterCard = (letter) => {
         const isCelebration = isCelebrationLetter(letter);
         const isAuthor = currentMemberId === letter.fromMemberId;
-        let canViewLetter = false;
-        let restrictedMsg = "🔒 작성자와 수신인만 읽을 수 있는 비밀 편지입니다.";
+        const isRecipient = (
+          (letter.toRole === 'child1' && currentMemberId === 'child1') ||
+          (letter.toRole === 'child2' && currentMemberId === 'child2') ||
+          (letter.toRole === 'mom' && currentMemberId === 'mom') ||
+          (letter.toRole === 'dad' && currentMemberId === 'dad') ||
+          (letter.toRole === 'kids' && (currentMemberId === 'child1' || currentMemberId === 'child2')) ||
+          (letter.toRole === 'parents' && isParent)
+        );
 
-        if (isAuthor) {
-          canViewLetter = true;
-        } else if (letter.toRole === 'mom') {
-          canViewLetter = currentMemberId === 'mom';
-          restrictedMsg = letter.fromMemberId === 'dad'
-            ? "🔒 여보(엄마)에게만 보낸 부부 비밀 이야기입니다."
-            : "🔒 엄마에게만 보낸 편지입니다. (엄마와 작성자만 읽을 수 있어요)";
-        } else if (letter.toRole === 'dad') {
-          canViewLetter = currentMemberId === 'dad';
-          restrictedMsg = letter.fromMemberId === 'mom'
-            ? "🔒 여보(아빠)에게만 보낸 부부 비밀 이야기입니다."
-            : "🔒 아빠에게만 보낸 편지입니다. (아빠와 작성자만 읽을 수 있어요)";
-        } else if (letter.toRole === 'child1') {
-          canViewLetter = currentMemberId === 'child1' || (!letter.isSecret && isParent);
-          restrictedMsg = "🔒 주원이에게만 보낸 비밀 이야기입니다. (주원이와 작성자만 읽을 수 있어요)";
-        } else if (letter.toRole === 'child2') {
-          canViewLetter = currentMemberId === 'child2' || (!letter.isSecret && isParent);
-          restrictedMsg = "🔒 주아에게만 보낸 비밀 이야기입니다. (주아와 작성자만 읽을 수 있어요)";
-        } else if (letter.toRole === 'kids') {
-          canViewLetter = true;
+        let canViewLetter = false;
+        let restrictedMsg = "🔒 작성자와 받는 사람만 읽을 수 있는 비밀 편지입니다.";
+
+        if (letter.isSecret) {
+          canViewLetter = isAuthor || isRecipient;
+          if (letter.toRole === 'mom') {
+            restrictedMsg = letter.fromMemberId === 'dad'
+              ? "🔒 여보(엄마)에게만 보낸 둘만의 비밀 이야기입니다."
+              : "🔒 엄마에게만 보낸 비밀 편지입니다. (엄마와 작성자만 읽을 수 있어요)";
+          } else if (letter.toRole === 'dad') {
+            restrictedMsg = letter.fromMemberId === 'mom'
+              ? "🔒 여보(아빠)에게만 보낸 둘만의 비밀 이야기입니다."
+              : "🔒 아빠에게만 보낸 비밀 편지입니다. (아빠와 작성자만 읽을 수 있어요)";
+          } else if (letter.toRole === 'child1') {
+            restrictedMsg = "🔒 주원이에게만 보낸 비밀 이야기입니다. (주원이와 작성자만 읽을 수 있어요)";
+          } else if (letter.toRole === 'child2') {
+            restrictedMsg = "🔒 주아에게만 보낸 비밀 이야기입니다. (주아와 작성자만 읽을 수 있어요)";
+          } else if (letter.toRole === 'kids') {
+            restrictedMsg = "🔒 아이들에게만 보낸 비밀 이야기입니다. (아이들과 작성자만 읽을 수 있어요)";
+          } else {
+            restrictedMsg = "🔒 부모님에게 보낸 비밀 편지입니다. (부모님과 작성자만 읽을 수 있어요)";
+          }
         } else {
-          canViewLetter = !letter.isSecret || isParent;
-          restrictedMsg = "🔒 엄마, 아빠에게 보낸 비밀 편지입니다.";
+          // 공개 편지 / 일반 축하 편지
+          if (letter.toRole === 'mom' || letter.toRole === 'dad') {
+            canViewLetter = isAuthor || isRecipient || isParent;
+            restrictedMsg = "🔒 부모님 전용 편지입니다.";
+          } else {
+            canViewLetter = true;
+          }
         }
 
         const canReply = canViewLetter && (
-          (letter.toRole === 'child1' && (currentMemberId === 'child1' || isParent)) ||
-          (letter.toRole === 'child2' && (currentMemberId === 'child2' || isParent)) ||
-          (letter.toRole === 'kids' && (currentMemberId === 'child1' || currentMemberId === 'child2' || isParent)) ||
-          (letter.toRole === 'mom' && (currentMemberId === 'mom' || letter.fromMemberId === currentMemberId)) ||
-          (letter.toRole === 'dad' && (currentMemberId === 'dad' || letter.fromMemberId === currentMemberId)) ||
-          (letter.toRole === 'parents' && isParent)
+          isAuthor ||
+          isRecipient ||
+          (!letter.isSecret && (isParent || letter.toRole === 'kids' || letter.toRole === 'parents'))
         );
 
         const renderRecipientLabel = () => {
@@ -4014,9 +4026,9 @@
                         🎉 축하편지
                       </span>
                     )}
-                    {(letter.isSecret || letter.toRole === 'mom' || letter.toRole === 'dad' || letter.toRole === 'child1' || letter.toRole === 'child2') && (
-                      <span className="text-[10px] bg-pink-100 text-pink-700 px-1.5 py-0.2 rounded font-bold">
-                        🔒 전용/비밀
+                    {letter.isSecret && (
+                      <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.2 rounded font-bold shadow-2xs">
+                        🔒 비밀편지
                       </span>
                     )}
                     {!isAuthor && (letter.createdAt || 0) > lastReadLetterTime && (
@@ -4035,7 +4047,7 @@
               </div>
 
               {/* 우측 상단 수정 & 삭제 액션 버튼 */}
-              {(isParent || currentMemberId === letter.fromMemberId) && (
+              {(isAuthor || (!letter.isSecret && isParent)) && (
                 <div className="flex items-center space-x-1 shrink-0">
                   <button
                     type="button"
@@ -14171,22 +14183,22 @@
                       <div className="space-y-2 max-h-72 overflow-y-auto no-scrollbar pr-0.5">
                         {[...filteredFamilyLetters].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map((letter) => {
                           const isAuthor = currentMemberId === letter.fromMemberId;
+                          const isRecipient = (
+                            (letter.toRole === 'child1' && currentMemberId === 'child1') ||
+                            (letter.toRole === 'child2' && currentMemberId === 'child2') ||
+                            (letter.toRole === 'mom' && currentMemberId === 'mom') ||
+                            (letter.toRole === 'dad' && currentMemberId === 'dad') ||
+                            (letter.toRole === 'kids' && (currentMemberId === 'child1' || currentMemberId === 'child2')) ||
+                            (letter.toRole === 'parents' && isParent)
+                          );
                           let canViewLetter = false;
 
-                          if (isAuthor) {
-                            canViewLetter = true;
-                          } else if (letter.toRole === 'mom') {
-                            canViewLetter = currentMemberId === 'mom';
-                          } else if (letter.toRole === 'dad') {
-                            canViewLetter = currentMemberId === 'dad';
-                          } else if (letter.toRole === 'child1') {
-                            canViewLetter = currentMemberId === 'child1' || (!letter.isSecret && isParent);
-                          } else if (letter.toRole === 'child2') {
-                            canViewLetter = currentMemberId === 'child2' || (!letter.isSecret && isParent);
-                          } else if (letter.toRole === 'kids') {
-                            canViewLetter = true;
+                          if (letter.isSecret) {
+                            canViewLetter = isAuthor || isRecipient;
+                          } else if (letter.toRole === 'mom' || letter.toRole === 'dad') {
+                            canViewLetter = isAuthor || isRecipient || isParent;
                           } else {
-                            canViewLetter = !letter.isSecret || isParent;
+                            canViewLetter = true;
                           }
 
                           const fromMember = FAMILY_MEMBERS.find(m => m.id === letter.fromMemberId) || { name: letter.fromMemberName, avatar: '👦' };
