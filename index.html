@@ -1759,8 +1759,8 @@
     }) {
       const [isTimerOpen, setIsTimerOpen] = useState(false);
       const [timerForms, setTimerForms] = useState({
-        child1: { mode: 'countdown', minutes: 25, customMinutes: '', title: '' },
-        child2: { mode: 'countdown', minutes: 25, customMinutes: '', title: '' }
+        child1: { mode: 'stopwatch', title: '' },
+        child2: { mode: 'stopwatch', title: '' }
       });
       const updateTimerForm = (kidId, patch) => {
         setTimerForms((prev) => ({
@@ -2005,10 +2005,10 @@
                   <span className="text-2xl animate-pulse">⏱️</span>
                   <div>
                     <h3 className="text-sm sm:text-base font-black text-amber-200 flex items-center space-x-2">
-                      <span>독서 & 집중 타이머 (자녀별 독립 동시 가동)</span>
+                      <span>독서 자율 스톱워치 (자녀별 독립 동시 가동)</span>
                     </h3>
                     <p className="text-[11px] text-slate-300">
-                      주원이와 주아가 각자 원하는 시간과 목적(독서 vs 별개 공부)으로 동시에 타이머를 실행할 수 있습니다!
+                      주원이와 주아가 자율 스톱워치로 책 읽은 시간을 자유롭게 측정하고 일지에 자동 저장할 수 있습니다!
                     </p>
                   </div>
                 </div>
@@ -2023,7 +2023,7 @@
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
                         : 'bg-white/10 hover:bg-white/20 text-slate-300 border-white/20'
                     }`}
-                    title="타이머 종료 시 스마트폰/PC 푸시 알림 받기"
+                    title="스마트폰/PC 푸시 알림 상태"
                   >
                     <span>{notifPermission === 'granted' ? '🔔' : '🔕'}</span>
                     <span className="text-[11px]">{notifPermission === 'granted' ? '시스템 알림 켜짐' : '시스템 알림 켜기'}</span>
@@ -2043,8 +2043,7 @@
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {KIDS_MEMBERS.map((kid) => {
                   const timer = focusTimers?.[kid.id] || { isActive: false };
-                  const form = timerForms[kid.id] || { minutes: 25, customMinutes: '', title: '' };
-                  const targetM = form.customMinutes ? Math.max(1, Number(form.customMinutes) || 25) : form.minutes;
+                  const form = timerForms[kid.id] || { mode: 'stopwatch', title: '' };
 
                   return (
                     <div
@@ -2062,7 +2061,7 @@
                           <div>
                             <h4 className="text-sm font-black text-white flex items-center space-x-1.5">
                               <span>{kid.name}</span>
-                              <span className="text-[10px] text-amber-300 font-bold">독서 타이머</span>
+                              <span className="text-[10px] text-amber-300 font-bold">독서 스톱워치</span>
                             </h4>
                           </div>
                         </div>
@@ -2082,60 +2081,30 @@
                         </div>
                       </div>
 
-                      {/* 대기 상태일 때: 타이머 설정 폼 */}
+                      {/* 대기 상태일 때: 자율 스톱워치 설정 폼 */}
                       {!timer.isActive ? (
                         !isParent ? (
                           /* 자녀 로그인 시: 부모 전용 안내 카드 */
                           <div className="py-4 px-3 my-2 bg-white/5 rounded-xl border border-white/10 text-center space-y-2">
                             <div className="text-2xl">📖</div>
                             <p className="text-xs font-bold text-amber-200">
-                              독서 타이머는 엄마, 아빠(부모님)가 시작할 수 있어요!
+                              독서 스톱워치는 엄마, 아빠(부모님)가 시작할 수 있어요!
                             </p>
                             <p className="text-[11px] text-slate-300 leading-relaxed">
-                              부모님이 타이머를 시작해주시면, 이 화면에서 실시간으로 카운트다운을 함께 보며 독서할 수 있습니다. 👏
+                              부모님이 스톱워치를 시작해주시면, 이 화면에서 실시간으로 경과 시간을 함께 보며 독서할 수 있습니다. 👏
                             </p>
                           </div>
                         ) : (
-                          /* 부모 로그인 시: 독서 목표 설정 폼 */
+                          /* 부모 로그인 시: 자율 스톱워치 폼 */
                           <div className="space-y-3 pt-3">
-                            {/* 타이머 모드 탭: 카운트다운 vs 스톱워치(1초부터 증가) */}
-                            <div className="flex items-center space-x-1 p-1 bg-white/10 rounded-xl border border-white/10">
-                              <button
-                                type="button"
-                                onClick={() => updateTimerForm(kid.id, { mode: 'countdown' })}
-                                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1 ${
-                                  (form.mode || 'countdown') === 'countdown'
-                                    ? 'bg-amber-500 text-white shadow-xs font-black'
-                                    : 'text-slate-300 hover:text-white'
-                                }`}
-                              >
-                                <span>⏳</span>
-                                <span>목표 시간 설정 (카운트다운)</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updateTimerForm(kid.id, { mode: 'stopwatch' })}
-                                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1 ${
-                                  form.mode === 'stopwatch'
-                                    ? 'bg-emerald-500 text-white shadow-xs font-black'
-                                    : 'text-slate-300 hover:text-white'
-                                }`}
-                              >
-                                <span>⏱️</span>
-                                <span>자율 스톱워치 (1초부터 증가)</span>
-                              </button>
-                            </div>
-
                             {/* 안내 문구 */}
                             <div className="space-y-0.5">
-                              <p className="text-[11px] font-bold text-amber-200 flex items-center space-x-1">
-                                <span>{form.mode === 'stopwatch' ? '⏱️' : '📖'}</span>
-                                <span>{form.mode === 'stopwatch' ? '자율 독서 스톱워치' : '오늘의 독서 목표 설정'}</span>
+                              <p className="text-[11px] font-bold text-emerald-300 flex items-center space-x-1">
+                                <span>⏱️</span>
+                                <span>자율 독서 스톱워치</span>
                               </p>
-                              <p className="text-[10px] text-amber-200/70">
-                                {form.mode === 'stopwatch'
-                                  ? '💡 1초부터 측정되며, 중간에 일시정지(⏸️) 및 정지(⏹️)를 누르면 읽은 시간만큼 독서 기록으로 저장됩니다.'
-                                  : '💡 설정한 시간이 끝나면 스마트폰 알람이 울리고 오늘 독서 일지 기록과 연동됩니다.'}
+                              <p className="text-[10px] text-amber-200/80">
+                                💡 1초부터 측정되며, 중간에 일시정지(⏸️) 및 정지(⏹️)를 누르면 읽은 시간만큼 오늘 독서 기록으로 자동 저장됩니다.
                               </p>
                               <p className="text-[10px] text-emerald-300/80 flex items-center space-x-1">
                                 <span>💡</span>
@@ -2147,64 +2116,25 @@
                             <div>
                               <input
                                 type="text"
-                                value={form.title}
+                                value={form.title || ''}
                                 onChange={(e) => updateTimerForm(kid.id, { title: e.target.value })}
                                 placeholder="읽을 책 제목 (선택 입력)"
-                                className="w-full px-3 py-1.5 bg-white/10 border border-white/20 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                className="w-full px-3 py-1.5 bg-white/10 border border-white/20 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                               />
                             </div>
 
-                            {/* 2. 카운트다운 모드일 때만 목표 시간 프리셋 버튼 노출 */}
-                            {form.mode !== 'stopwatch' && (
-                              <div className="space-y-1">
-                                <span className="text-[11px] font-bold text-amber-200">목표 시간:</span>
-                                <div className="flex items-center space-x-1 flex-wrap gap-y-1">
-                                  {[15, 20, 25, 30, 45, 60].map((mins) => (
-                                    <button
-                                      key={mins}
-                                      type="button"
-                                      onClick={() => updateTimerForm(kid.id, { minutes: mins, customMinutes: '' })}
-                                      className={`px-2 py-1 rounded-lg text-xs font-bold transition ${
-                                        form.minutes === mins && !form.customMinutes
-                                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black shadow-xs'
-                                          : 'bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10'
-                                      }`}
-                                    >
-                                      {mins}분{mins === 25 ? '🍅' : ''}
-                                    </button>
-                                  ))}
-                                  <div className="flex items-center space-x-1 bg-white/10 px-1.5 py-0.5 rounded-lg border border-white/10">
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      max="180"
-                                      placeholder="직접"
-                                      value={form.customMinutes}
-                                      onChange={(e) => updateTimerForm(kid.id, { customMinutes: e.target.value })}
-                                      className="w-8 bg-transparent text-xs font-bold text-white text-center focus:outline-none"
-                                    />
-                                    <span className="text-[10px] text-slate-300">분</span>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* 3. 시작 버튼 & 목표/시작 디스플레이 */}
+                            {/* 2. 시작 버튼 & 디스플레이 */}
                             <div className="flex items-center justify-between pt-1">
-                              <div className="flex items-baseline space-x-1 font-mono text-xl sm:text-2xl font-black text-amber-300">
-                                <span>{form.mode === 'stopwatch' ? '00:00 ➔' : `${String(targetM).padStart(2, '0')}:00`}</span>
+                              <div className="flex items-baseline space-x-1 font-mono text-xl sm:text-2xl font-black text-emerald-300">
+                                <span>00:00 ➔</span>
                               </div>
                               <button
                                 type="button"
-                                onClick={() => handleStartTimer(kid.id, targetM, 'reading', form.title, form.mode || 'countdown')}
-                                className={`px-4 py-2 text-white font-black text-xs rounded-xl shadow-md transition active:scale-95 flex items-center space-x-1.5 ${
-                                  form.mode === 'stopwatch'
-                                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-emerald-500/20'
-                                    : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-amber-500/20'
-                                }`}
+                                onClick={() => handleStartTimer(kid.id, 0, 'reading', form.title, 'stopwatch')}
+                                className="px-4 py-2 text-white font-black text-xs rounded-xl shadow-md transition active:scale-95 flex items-center space-x-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-emerald-500/20"
                               >
                                 <span>▶</span>
-                                <span>{kid.name} {form.mode === 'stopwatch' ? '스톱워치 시작' : '독서 시작'}</span>
+                                <span>{kid.name} 스톱워치 시작</span>
                               </button>
                             </div>
                           </div>
@@ -9728,7 +9658,7 @@
         };
       }, [checkUpcomingScheduleAlerts]);
 
-      const handleStartTimer = async (childId = 'child1', targetMinutes = 25, timerType = 'reading', title = '', mode = 'countdown') => {
+      const handleStartTimer = async (childId = 'child1', targetMinutes = 0, timerType = 'reading', title = '', mode = 'stopwatch') => {
         const isParentRole = currentMemberId === 'mom' || currentMemberId === 'dad';
         if (!isParentRole) {
           showToast("⚠️ 독서 타이머는 엄마, 아빠만 설정할 수 있습니다.");
