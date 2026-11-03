@@ -91,9 +91,21 @@
 
     const KIDS_MEMBERS = FAMILY_MEMBERS.filter(m => !m.isParent);
 
-    // 일정 전용 대상 목록 (아빠, 엄마, 주원, 주아 + 가족 전체)
+    // 일정 전용 대상 목록 (아빠, 엄마, 주원, 주아 + 자녀 공동 + 가족 전체)
     const SCHEDULE_MEMBERS = [
       ...FAMILY_MEMBERS,
+      {
+        id: 'children',
+        name: '자녀(주원·주아)',
+        role: '자녀',
+        avatar: '👦👧',
+        isParent: false,
+        badgeBg: 'bg-teal-100 text-teal-800 border-teal-300',
+        activeBg: 'bg-teal-600 text-white shadow-teal-200',
+        cardBg: 'bg-teal-50/90 border-teal-200/80',
+        barColor: 'bg-teal-500',
+        ringColor: 'ring-teal-400'
+      },
       {
         id: 'family',
         name: '가족',
@@ -110,8 +122,8 @@
 
     // 엄격한 일정 관리 권한 규칙
     const canManageMemberSchedule = (currentMemberId, targetMemberId) => {
-      if (targetMemberId === 'family') {
-        // 가족 전체 일정은 부모(아빠, 엄마) 모두 등록/수정/삭제 가능
+      if (targetMemberId === 'family' || targetMemberId === 'children') {
+        // 가족 전체 및 자녀 공동 일정은 부모(아빠, 엄마) 모두 등록/수정/삭제 가능
         return currentMemberId === 'dad' || currentMemberId === 'mom';
       }
       if (currentMemberId === 'dad') return targetMemberId !== 'mom';
@@ -3149,25 +3161,57 @@
       );
     }
 
-    function CalendarSection({ viewMode, setViewMode, selectedDate, setSelectedDate, weekDays, monthCalendarDays, currentMonth, setCurrentMonth, stats, filterMemberId, setFilterMemberId, schedules, filteredSchedules, currentMember, isParent, handleStatusChange, handleOpenEditScheduleModal, handleDeleteSchedule, setNewSchedule, setIsAddModalOpen, categories }) {
+    function CalendarSection({
+      viewMode,
+      setViewMode,
+      selectedDate,
+      setSelectedDate,
+      weekDays,
+      monthCalendarDays,
+      currentMonth,
+      setCurrentMonth,
+      stats,
+      filterMemberId,
+      setFilterMemberId,
+      schedules,
+      filteredSchedules,
+      currentMember,
+      isParent,
+      handleStatusChange,
+      handleOpenEditScheduleModal,
+      handleDeleteSchedule,
+      setNewSchedule,
+      setIsAddModalOpen,
+      categories,
+      notifPermission,
+      requestNotificationPermission,
+      showToast
+    }) {
+      const handleScheduleAlertClick = () => {
+        triggerHaptic(20);
+        if (notifPermission !== 'granted') {
+          if (requestNotificationPermission) {
+            requestNotificationPermission();
+          }
+          return;
+        }
+        // 이미 알림 권한이 활성화된 경우 테스트 알림 발송 및 검증
+        sendSystemNotification(
+          '📅 [일정 알림 테스트] 우리집 커넥트',
+          '내일 예정된 가족 일정 알림이 정상적으로 수신됩니다! 🔔',
+          { tag: 'sch-test-alarm' }
+        );
+        playNotificationSound('alarm');
+        if (showToast) {
+          showToast('🔔 테스트 알림을 발송했습니다! 소리와 팝업을 확인해보세요.');
+        }
+      };
+
       return (
         <div className="space-y-4">
           <section className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setViewMode('today');
-                    setSelectedDate(getTodayString());
-                    triggerHaptic(15);
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                    viewMode === 'today' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
-                  }`}
-                >
-                  📋 오늘 일정
-                </button>
                 <button
                   type="button"
                   onClick={() => { setViewMode('week'); triggerHaptic(15); }}
@@ -3187,7 +3231,7 @@
                   🗓️ 월간 달력
                 </button>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap">
                 {selectedDate !== getTodayString() && (
                   <button
                     type="button"
@@ -3202,9 +3246,21 @@
                   </button>
                 )}
                 <span className="text-xs font-bold text-slate-500">선택일: {selectedDate}</span>
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="일정 하루 전날 오후 9시에 스마트폰 시스템 알림이 자동으로 울립니다">
-                  🔔 전날 21:00 자동 알림
-                </span>
+                <button
+                  type="button"
+                  onClick={handleScheduleAlertClick}
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold border transition active:scale-95 ${
+                    notifPermission === 'granted'
+                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
+                  }`}
+                  title={notifPermission === 'granted' ? '클릭 시 테스트 알림을 발송하여 동작을 확인합니다' : '클릭하여 전날 21:00 자동 알림을 켭니다'}
+                >
+                  <span>🔔</span>
+                  <span className="ml-1">
+                    {notifPermission === 'granted' ? '전날 21:00 알림 ON (테스트)' : '전날 21:00 알림 켜기'}
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -3297,7 +3353,7 @@
                         {/* 모바일 화면에서는 도트(Dot) 뱃지로 오버플로우 방지 */}
                         <div className="sm:hidden flex items-center justify-center space-x-0.5 pt-1 overflow-hidden">
                           {d.schedules.slice(0, 3).map((sc) => {
-                            const mb = FAMILY_MEMBERS.find(m => m.id === sc.memberId);
+                            const mb = SCHEDULE_MEMBERS.find(m => m.id === sc.memberId);
                             return (
                               <span
                                 key={sc.id}
@@ -3314,7 +3370,7 @@
                         {/* 데스크톱/태블릿 화면에서는 텍스트 표시 */}
                         <div className="hidden sm:block space-y-0.5 overflow-hidden">
                           {d.schedules.slice(0, 2).map((sc) => {
-                            const mb = FAMILY_MEMBERS.find(m => m.id === sc.memberId);
+                            const mb = SCHEDULE_MEMBERS.find(m => m.id === sc.memberId);
                             return (
                               <div key={sc.id} className="text-[9px] truncate px-1 rounded bg-slate-100 text-slate-700 font-medium">
                                 {mb?.avatar} {sc.title}
@@ -3341,7 +3397,7 @@
                   <button
                     type="button"
                     onClick={() => {
-                      setViewMode('today');
+                      setViewMode('week');
                       triggerHaptic(15);
                     }}
                     className="text-xs font-bold text-indigo-700 hover:underline"
@@ -3405,7 +3461,7 @@
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-3 pt-3 border-t border-white/10">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mt-3 pt-3 border-t border-white/10">
               {stats.memberStats.map((m) => (
                 <div key={m.id} className="bg-white/5 rounded-xl p-2 border border-white/10">
                   <div className="flex items-center justify-between mb-1">
@@ -9218,7 +9274,7 @@
         }
         return 'all';
       });
-      const [viewMode, setViewMode] = useState('today');
+      const [viewMode, setViewMode] = useState('week');
       const [filterMemberId, setFilterMemberId] = useState('all');
 
       const [schedules, setSchedules] = useState([]);
@@ -9629,7 +9685,7 @@
             if (!localStorage.getItem(alertKey)) {
               localStorage.setItem(alertKey, new Date().toISOString());
 
-              const member = FAMILY_MEMBERS.find((m) => m.id === sch.memberId);
+              const member = SCHEDULE_MEMBERS.find((m) => m.id === sch.memberId);
               const memberName = member ? member.name : '가족';
               const timeText = sch.startTime ? ` (${sch.startTime})` : '';
               const notesText = sch.notes ? `\n📝 ${sch.notes}` : '';
@@ -9642,6 +9698,7 @@
                   data: { url: './?tab=schedule' }
                 }
               );
+              playNotificationSound('complete');
             }
           }
         });
@@ -12058,7 +12115,19 @@
 
       const filteredSchedules = useMemo(() => {
         return currentDisplaySchedules
-          .filter(s => filterMemberId === 'all' || s.memberId === filterMemberId)
+          .filter(s => {
+            if (filterMemberId === 'all') return true;
+            if (filterMemberId === 'children') {
+              return s.memberId === 'children' || s.memberId === 'child1' || s.memberId === 'child2';
+            }
+            if (filterMemberId === 'child1') {
+              return s.memberId === 'child1' || s.memberId === 'children';
+            }
+            if (filterMemberId === 'child2') {
+              return s.memberId === 'child2' || s.memberId === 'children';
+            }
+            return s.memberId === filterMemberId;
+          })
           .sort((a, b) => {
             if (a.date !== b.date) return (a.date || '').localeCompare(b.date || '');
             return (a.startTime || '').localeCompare(b.startTime || '');
@@ -12564,6 +12633,9 @@
                   setNewSchedule={setNewSchedule}
                   setIsAddModalOpen={setIsAddModalOpen}
                   categories={categories}
+                  notifPermission={notifPermission}
+                  requestNotificationPermission={requestNotificationPermission}
+                  showToast={showToast}
                 />
 
                 <TodoListSection
@@ -12693,6 +12765,9 @@
                   setNewSchedule={setNewSchedule}
                   setIsAddModalOpen={setIsAddModalOpen}
                   categories={categories}
+                  notifPermission={notifPermission}
+                  requestNotificationPermission={requestNotificationPermission}
+                  showToast={showToast}
                 />
               </div>
             )}
@@ -12972,7 +13047,7 @@
                 <form onSubmit={handleSaveScheduleSubmit} className="space-y-3 text-xs sm:text-sm">
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">담당 가족 (권한에 따라 선택 가능)</label>
-                    <div className="grid grid-cols-5 gap-1">
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                       {SCHEDULE_MEMBERS.map((m) => {
                         const isAllowed = canManageMemberSchedule(currentMember.id, m.id);
                         return (
