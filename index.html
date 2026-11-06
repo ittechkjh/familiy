@@ -928,6 +928,59 @@
       }
     };
 
+    // ==================== Web Push 백그라운드 푸시 알림 시스템 (사이트 미접속 시에도 수신) ====================
+    const VAPID_PUBLIC_KEY = 'BKBMPraKK0JLJddN66OjYoDCiFyTfUdiYLVmSnJwebiOWL_TWfnR4WWxcdwpIcgZL3tFkBRmPqAiGJXZ_wNpN14';
+
+    const urlBase64ToUint8Array = (base64String) => {
+      const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    };
+
+    const registerPushSubscription = async (memberId, memberName, db) => {
+      if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+        return false;
+      }
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (!reg || !reg.pushManager) return false;
+
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey
+          });
+        }
+
+        const subJson = sub.toJSON();
+        if (subJson && subJson.endpoint && subJson.keys) {
+          if (db) {
+            const endpointSuffix = btoa(subJson.endpoint).slice(-32).replace(/[^a-zA-Z0-9]/g, '_');
+            const docId = `sub_${memberId || 'guest'}_${endpointSuffix}`;
+            await db.collection('push_subscriptions').doc(docId).set({
+              endpoint: subJson.endpoint,
+              keys: subJson.keys,
+              memberId: memberId || 'family',
+              memberName: memberName || '가족',
+              userAgent: navigator.userAgent,
+              updatedAt: Date.now()
+            }, { merge: true });
+          }
+          return true;
+        }
+      } catch (err) {
+        console.warn('Push subscription registration error:', err);
+      }
+      return false;
+    };
+
     const formatRelativeTime = (timestamp) => {
       if (!timestamp) return '미등록';
       const diffMinutes = Math.floor((Date.now() - timestamp) / 60000);
@@ -3128,12 +3181,12 @@
         // 이미 알림 권한이 활성화된 경우 테스트 알림 발송 및 검증
         sendSystemNotification(
           '📅 [일정 알림 테스트] 우리집 커넥트',
-          '내일 예정된 가족 일정 알림이 정상적으로 수신됩니다! 🔔',
+          '내일 예정된 가족 일정 알림이 정상적으로 수신됩니다! 🔔\n(사이트를 닫아두어도 매일 밤 9시 스마트폰으로 푸시 전송)',
           { tag: 'sch-test-alarm' }
         );
         playNotificationSound('alarm');
         if (showToast) {
-          showToast('🔔 테스트 알림을 발송했습니다! 소리와 팝업을 확인해보세요.');
+          showToast('🔔 백그라운드 푸시가 켜져 있습니다! 사이트를 닫아도 매일 밤 9시에 알림이 전송됩니다.');
         }
       };
 
@@ -3184,11 +3237,11 @@
                       ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
                   }`}
-                  title={notifPermission === 'granted' ? '클릭 시 테스트 알림을 발송하여 동작을 확인합니다' : '클릭하여 전날 21:00 자동 알림을 켭니다'}
+                  title={notifPermission === 'granted' ? '클릭 시 테스트 알림을 발송하여 동작을 확인합니다' : '클릭하여 전날 21:00 자동 백그라운드 푸시 알림을 켭니다'}
                 >
                   <span>🔔</span>
                   <span className="ml-1">
-                    {notifPermission === 'granted' ? '전날 21:00 알림 ON (테스트)' : '전날 21:00 알림 켜기'}
+                    {notifPermission === 'granted' ? '전날 21:00 백그라운드 푸시 ON' : '전날 21:00 푸시 알림 켜기'}
                   </span>
                 </button>
               </div>
@@ -9481,9 +9534,11 @@
           const perm = await Notification.requestPermission();
           setNotifPermission(perm);
           if (perm === 'granted') {
-            showToast('🔔 스마트폰/PC 시스템 알림이 활성화되었습니다!');
-            sendSystemNotification('우리집 커넥트 알림 활성화 🔔', '타이머가 끝나면 스마트폰/PC로 알림을 보내드립니다.');
+            showToast('🔔 스마트폰 백그라운드 푸시가 활성화되었습니다!');
+            sendSystemNotification('우리집 커넥트 알림 활성화 🔔', '사이트에 접속하지 않아도 전날 저녁 9시에 내일 일정을 스마트폰으로 알려드립니다.');
             playNotificationSound('start');
+            // Firestore에 백그라운드 Web Push 구독 토큰 자동 등록
+            registerPushSubscription(currentMemberId, currentMember?.name, dbRef.current);
           } else {
             showToast('알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.');
           }
@@ -9491,6 +9546,15 @@
           console.warn(e);
         }
       };
+
+      // 알림 권한이 이미 허용되어 있는 경우 백그라운드 Web Push 토큰 자동 등록/동기화
+      useEffect(() => {
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          if (dbRef.current) {
+            registerPushSubscription(currentMemberId, currentMember?.name, dbRef.current);
+          }
+        }
+      }, [currentMemberId, currentMember]);
 
       // 타이머 실시간 카운트다운/스톱워치 인터벌 (자녀별 개별 독립 동시 가동 및 타임스탬프 동기화)
       useEffect(() => {

@@ -1,0 +1,10 @@
+{
+  "name": "family-connect-schedule-alerts",
+  "version": "1.0.0",
+  "description": "Daily Schedule Push Alerts via Web-Push and GitHub Actions",
+  "main": "send-schedule-alerts.js",
+  "type": "commonjs",
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
+}
