@@ -8228,12 +8228,17 @@
     // ==================== 신규: 주원·주아 학교 & 방과후 시간표 섹션 (모바일 최적화) ====================
     function TimetableSection({
       timetableCells = DEFAULT_TIMETABLE_CELLS,
+      timetablePeriods = TIMETABLE_PERIODS,
       onSaveCell,
+      onSavePeriods,
       onResetToDefault,
+      onResetPeriodsToDefault,
       currentMember,
       isParent,
       showToast
     }) {
+      const periods = timetablePeriods || TIMETABLE_PERIODS;
+
       // 뷰 모드: 'both'(함께), 'child1'(주원만), 'child2'(주아만)
       const [viewMode, setViewMode] = useState('both');
       // 레이아웃 모드: 'day'(모바일 편한 요일별 뷰), 'week'(주간 전체 비교표)
@@ -8266,30 +8271,22 @@
         return () => clearInterval(timer);
       }, []);
 
-      // 교시별 시작/종료 분(minutes) 매핑
+      // 교시별 시작/종료 분(minutes) 매핑 (수정된 period.time 도 동적 반영)
       const isPeriodCurrent = (periodId) => {
         if (selectedDayKey !== currentDayKey) return false;
-        // p123: 09:00 ~ 11:20
-        // p4: 11:30 ~ 12:10
-        // lunch: 12:10 ~ 13:00
-        // p5: 13:00 ~ 13:40
-        // p6: 13:40 ~ 14:20
-        // after1: 14:30 ~ 15:10
-        // after2: 15:20 ~ 16:40
-        // extra: 16:40 ~ 18:00
-        const ranges = {
-          p123: [9 * 60, 11 * 60 + 20],
-          p4: [11 * 60 + 20, 12 * 60 + 10],
-          lunch: [12 * 60 + 10, 13 * 60],
-          p5: [13 * 60, 13 * 60 + 40],
-          p6: [13 * 60 + 40, 14 * 60 + 20],
-          after1: [14 * 60 + 20, 15 * 60 + 15],
-          after2: [15 * 60 + 15, 16 * 60 + 40],
-          extra: [16 * 60 + 40, 18 * 60]
-        };
-        const range = ranges[periodId];
-        if (!range) return false;
-        return currentMinutes >= range[0] && currentMinutes < range[1];
+        const pObj = periods.find(p => p.id === periodId);
+        if (!pObj || !pObj.time) return false;
+        const parts = pObj.time.split('~').map(s => s.trim());
+        if (parts.length === 2) {
+          const [sh, sm] = parts[0].split(':').map(Number);
+          const [eh, em] = parts[1].split(':').map(Number);
+          if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) {
+            const startM = sh * 60 + sm;
+            const endM = eh * 60 + em;
+            return currentMinutes >= startM && currentMinutes < endM;
+          }
+        }
+        return false;
       };
 
       const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -8299,9 +8296,20 @@
       const [editPeriodId, setEditPeriodId] = useState('p123');
       const [editSubject, setEditSubject] = useState('');
       const [editNote, setEditNote] = useState('');
+      const [editCustomTime, setEditCustomTime] = useState('');
       const [editColor, setEditColor] = useState('sky');
       const [editIsSchool, setEditIsSchool] = useState(false);
       const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+
+      // 교시별 시간대 전체 수정 모달 상태
+      const [isPeriodModalOpen, setIsPeriodModalOpen] = useState(false);
+      const [tempPeriods, setTempPeriods] = useState(() => periods);
+
+      useEffect(() => {
+        if (isPeriodModalOpen) {
+          setTempPeriods(JSON.parse(JSON.stringify(periods)));
+        }
+      }, [isPeriodModalOpen, periods]);
 
       const handleOpenEdit = (childId, dayKey, periodId) => {
         const key = `${childId}_${dayKey}_${periodId}`;
@@ -8312,6 +8320,7 @@
         setEditPeriodId(periodId);
         setEditSubject(existing.subject || '');
         setEditNote(existing.note || '');
+        setEditCustomTime(existing.customTime || '');
         setEditColor(existing.color || (childId === 'child1' ? 'sky' : 'amber'));
         setEditIsSchool(!!existing.isSchool);
         setIsEditModalOpen(true);
@@ -8329,6 +8338,7 @@
         onSaveCell(editChildId, editDayKey, editPeriodId, {
           subject: editSubject.trim(),
           note: editNote.trim(),
+          customTime: editCustomTime.trim(),
           color: editColor,
           isSchool: editIsSchool,
           isLunch: editPeriodId === 'lunch'
@@ -8341,6 +8351,7 @@
         onSaveCell(editChildId, editDayKey, editPeriodId, {
           subject: '',
           note: '',
+          customTime: '',
           color: 'slate',
           isSchool: false
         });
@@ -8381,7 +8392,7 @@
         : { name: '주아', avatar: '👧', role: '둘째' };
 
       const activeDayObj = TIMETABLE_DAYS.find(d => d.key === editDayKey) || TIMETABLE_DAYS[0];
-      const activePeriodObj = TIMETABLE_PERIODS.find(p => p.id === editPeriodId) || TIMETABLE_PERIODS[0];
+      const activePeriodObj = periods.find(p => p.id === editPeriodId) || periods[0];
       const selectedDayObj = TIMETABLE_DAYS.find(d => d.key === selectedDayKey) || TIMETABLE_DAYS[0];
 
       return (
@@ -8409,6 +8420,15 @@
 
               {/* 우측 상단 액션 버튼 */}
               <div className="flex items-center space-x-1.5 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsPeriodModalOpen(true)}
+                  className="px-2.5 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition flex items-center space-x-1"
+                  title="교시별 시간대(시작/종료 시간) 수정하기"
+                >
+                  <span>⏰</span>
+                  <span>시간 수정</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -8633,7 +8653,7 @@
 
                   {/* 교시별 행 리스트 */}
                   <div className="divide-y divide-slate-100">
-                    {TIMETABLE_PERIODS.map((period) => {
+                    {periods.map((period) => {
                       const isLive = isPeriodCurrent(period.id);
                       const isLunch = period.id === 'lunch';
                       const cellJuwon = getCellData('child1', selectedDayKey, period.id);
@@ -8684,6 +8704,11 @@
                                     <span className="text-[9px] opacity-80 shrink-0 ml-0.5">🏫</span>
                                   )}
                                 </div>
+                                {cellJuwon.customTime && (
+                                  <div className="text-[9px] font-mono text-blue-700 bg-white/80 px-1 py-0.2 rounded font-extrabold w-fit mt-0.5 border border-blue-200">
+                                    ⏰ {cellJuwon.customTime}
+                                  </div>
+                                )}
                                 {cellJuwon.note ? (
                                   <div className="text-[9px] sm:text-[10px] opacity-80 font-medium truncate mt-0.5">
                                     {cellJuwon.note}
@@ -8715,6 +8740,11 @@
                                     <span className="text-[9px] opacity-80 shrink-0 ml-0.5">🏫</span>
                                   )}
                                 </div>
+                                {cellJua.customTime && (
+                                  <div className="text-[9px] font-mono text-amber-800 bg-white/80 px-1 py-0.2 rounded font-extrabold w-fit mt-0.5 border border-amber-200">
+                                    ⏰ {cellJua.customTime}
+                                  </div>
+                                )}
                                 {cellJua.note ? (
                                   <div className="text-[9px] sm:text-[10px] opacity-80 font-medium truncate mt-0.5">
                                     {cellJua.note}
@@ -8741,7 +8771,7 @@
               {/* (1-B) 요일별 뷰: 주원이만 or 주아만 보기 (1인 단독 타임라인 카드 뷰) */}
               {(viewMode === 'child1' || viewMode === 'child2') && (
                 <div className="space-y-2">
-                  {TIMETABLE_PERIODS.map((period) => {
+                  {periods.map((period) => {
                     const targetChild = viewMode === 'child1' ? 'child1' : 'child2';
                     const childName = viewMode === 'child1' ? '주원' : '주아';
                     const childAvatar = viewMode === 'child1' ? '👦' : '👧';
@@ -8765,9 +8795,14 @@
                             <div className="text-[11px] font-black text-slate-800 leading-tight">
                               {period.label}
                             </div>
-                            <div className="text-[9px] text-slate-400 font-mono mt-0.5">
-                              {period.time}
+                            <div className={`text-[9px] font-mono mt-0.5 ${cell.customTime ? 'text-indigo-600 font-bold' : 'text-slate-400'}`}>
+                              {cell.customTime || period.time}
                             </div>
+                            {cell.customTime && (
+                              <div className="text-[8px] text-slate-400 scale-90">
+                                (기본 {period.time})
+                              </div>
+                            )}
                           </div>
 
                           {/* 과목 및 메모 정보 */}
@@ -8778,6 +8813,11 @@
                                   <span className="truncate">{cell.subject}</span>
                                   {cell.isSchool && (
                                     <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-white/60 font-medium">🏫 학교</span>
+                                  )}
+                                  {cell.customTime && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+                                      ⏰ {cell.customTime}
+                                    </span>
                                   )}
                                   {isLive && (
                                     <span className="text-[10px] bg-red-500 text-white font-extrabold px-1.5 py-0.2 rounded-md animate-pulse">
@@ -8882,7 +8922,7 @@
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {TIMETABLE_PERIODS.map((period) => {
+                        {periods.map((period) => {
                           const isLunch = period.id === 'lunch';
                           return (
                             <tr
@@ -8926,6 +8966,11 @@
                                               <span className="text-[9px] opacity-75 font-normal ml-0.5">🏫</span>
                                             )}
                                           </div>
+                                          {cellJuwon.customTime && (
+                                            <div className="text-[9px] font-mono text-blue-700 bg-white/90 px-1 py-0.2 rounded font-extrabold w-fit mt-0.5 border border-blue-200">
+                                              ⏰ {cellJuwon.customTime}
+                                            </div>
+                                          )}
                                           {cellJuwon.note && (
                                             <div className="text-[10px] opacity-80 font-medium truncate mt-0.5">
                                               {cellJuwon.note}
@@ -8955,6 +9000,11 @@
                                               <span className="text-[9px] opacity-75 font-normal ml-0.5">🏫</span>
                                             )}
                                           </div>
+                                          {cellJua.customTime && (
+                                            <div className="text-[9px] font-mono text-amber-800 bg-white/90 px-1 py-0.2 rounded font-extrabold w-fit mt-0.5 border border-amber-200">
+                                              ⏰ {cellJua.customTime}
+                                            </div>
+                                          )}
                                           {cellJua.note && (
                                             <div className="text-[10px] opacity-80 font-medium truncate mt-0.5">
                                               {cellJua.note}
@@ -9014,7 +9064,7 @@
 
                         {/* 시간대 리스트 */}
                         <div className="p-2.5 space-y-2 flex-1">
-                          {TIMETABLE_PERIODS.map((period) => {
+                          {periods.map((period) => {
                             const cell = getCellData(targetChild, day.key, period.id);
                             const theme = getColorTheme(cell.color || (cell.isSchool ? (targetChild === 'child1' ? 'sky' : 'amber') : 'slate'));
 
@@ -9030,7 +9080,9 @@
                               >
                                 <div className="flex items-center justify-between text-[11px] mb-1">
                                   <span className="font-extrabold opacity-75">{period.label}</span>
-                                  <span className="text-[10px] opacity-60 font-mono">{period.time}</span>
+                                  <span className={`text-[10px] font-mono ${cell.customTime ? 'text-indigo-600 font-bold' : 'opacity-60'}`}>
+                                    {cell.customTime || period.time}
+                                  </span>
                                 </div>
                                 {cell.subject ? (
                                   <div>
@@ -9113,6 +9165,20 @@
                       onChange={(e) => setEditSubject(e.target.value)}
                       placeholder="예: 영어2급, 컴퓨터-1, 돌봄, 독서논술"
                       className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:ring-2 focus:ring-indigo-500 transition"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700">⏰ 시간 직접 지정 (선택)</label>
+                      <span className="text-[10px] text-slate-400">비워두면 기본 시간({activePeriodObj.time}) 적용</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={editCustomTime}
+                      onChange={(e) => setEditCustomTime(e.target.value)}
+                      placeholder={`예: 14:00 ~ 15:30 (기본: ${activePeriodObj.time})`}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:ring-2 focus:ring-indigo-500 transition"
                     />
                   </div>
 
@@ -9219,6 +9285,122 @@
                   >
                     기본값으로 복원
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 신규: 교시별 기본 시간대 전체 수정 모달 */}
+          {isPeriodModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-2xl">⏰</span>
+                    <div>
+                      <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                        시간표 교시별 시간대 설정
+                      </h3>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        각 교시의 시작~종료 시간과 교시명을 우리 가족 일정에 맞게 수정하세요.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPeriodModalOpen(false)}
+                    className="text-xs font-bold text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-2.5 max-h-[58vh] overflow-y-auto pr-1">
+                  {tempPeriods.map((p, idx) => (
+                    <div key={p.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-800">
+                          #{idx + 1} {p.label}
+                        </span>
+                        <input
+                          type="text"
+                          value={p.desc || ''}
+                          onChange={(e) => {
+                            const updated = [...tempPeriods];
+                            updated[idx] = { ...updated[idx], desc: e.target.value };
+                            setTempPeriods(updated);
+                          }}
+                          placeholder="구분/설명 (예: 정규수업, 방과후)"
+                          className="text-[11px] px-2 py-0.5 bg-white border border-slate-200 rounded-lg text-slate-600 font-medium w-36 text-right"
+                        />
+                      </div>
+                      <div className="grid grid-cols-12 gap-2">
+                        <div className="col-span-5">
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">교시명</label>
+                          <input
+                            type="text"
+                            value={p.label}
+                            onChange={(e) => {
+                              const updated = [...tempPeriods];
+                              updated[idx] = { ...updated[idx], label: e.target.value };
+                              setTempPeriods(updated);
+                            }}
+                            className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div className="col-span-7">
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">시간대 (시작 ~ 종료)</label>
+                          <input
+                            type="text"
+                            value={p.time}
+                            onChange={(e) => {
+                              const updated = [...tempPeriods];
+                              updated[idx] = { ...updated[idx], time: e.target.value };
+                              setTempPeriods(updated);
+                            }}
+                            placeholder="예: 09:00 ~ 11:20"
+                            className="w-full px-2.5 py-1.5 text-xs font-mono bg-white border border-slate-200 rounded-xl font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-2 flex flex-col sm:flex-row items-center gap-2 border-t border-slate-100">
+                  {onResetPeriodsToDefault && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('모든 교시 시간대를 최초 기본값으로 복원하시겠습니까?')) {
+                          onResetPeriodsToDefault();
+                          setIsPeriodModalOpen(false);
+                        }
+                      }}
+                      className="w-full sm:w-auto px-3 py-2.5 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs transition"
+                    >
+                      🔄 기본 시간대로 복원
+                    </button>
+                  )}
+                  <div className="flex-1 w-full flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsPeriodModalOpen(false)}
+                      className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onSavePeriods) onSavePeriods(tempPeriods);
+                        setIsPeriodModalOpen(false);
+                      }}
+                      className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition"
+                    >
+                      시간대 저장하기
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -9347,6 +9529,14 @@
           return saved ? JSON.parse(saved) : DEFAULT_TIMETABLE_CELLS;
         } catch (e) {
           return DEFAULT_TIMETABLE_CELLS;
+        }
+      });
+      const [timetablePeriods, setTimetablePeriods] = useState(() => {
+        try {
+          const saved = localStorage.getItem('family_timetable_periods_backup');
+          return saved ? JSON.parse(saved) : TIMETABLE_PERIODS;
+        } catch (e) {
+          return TIMETABLE_PERIODS;
         }
       });
 
@@ -10239,6 +10429,10 @@
                 if (data && data.cells) {
                   setTimetableCells(data.cells);
                   try { localStorage.setItem('family_timetables_backup', JSON.stringify(data.cells)); } catch (e) {}
+                }
+                if (data && data.periods && Array.isArray(data.periods)) {
+                  setTimetablePeriods(data.periods);
+                  try { localStorage.setItem('family_timetable_periods_backup', JSON.stringify(data.periods)); } catch (e) {}
                 }
               }
             }, (err) => console.warn("family_timetables snapshot error:", err));
@@ -12082,6 +12276,50 @@
         }
       };
 
+      // 신규: 주원·주아 교시별 시간대 저장 핸들러
+      const handleSaveTimetablePeriods = async (newPeriods) => {
+        setTimetablePeriods(newPeriods);
+        try { localStorage.setItem('family_timetable_periods_backup', JSON.stringify(newPeriods)); } catch (e) {}
+
+        if (dbRef.current) {
+          try {
+            await dbRef.current.collection('family_timetables').doc('main').set({
+              periods: newPeriods,
+              updatedAt: Date.now(),
+              updatedBy: currentMember.name
+            }, { merge: true });
+            showToast('⏰ 교시별 시간표 시간이 저장되었습니다.');
+          } catch (err) {
+            console.error("Failed to save timetable periods to Firestore:", err);
+            showToast('⚠️ 시간표 시간 저장 중 오류가 발생했습니다.');
+          }
+        } else {
+          showToast('⏰ 로컬 시간표 시간이 저장되었습니다.');
+        }
+      };
+
+      // 신규: 교시별 시간대 기본값으로 복원 핸들러
+      const handleResetPeriodsToDefault = async () => {
+        setTimetablePeriods(TIMETABLE_PERIODS);
+        try { localStorage.setItem('family_timetable_periods_backup', JSON.stringify(TIMETABLE_PERIODS)); } catch (e) {}
+
+        if (dbRef.current) {
+          try {
+            await dbRef.current.collection('family_timetables').doc('main').set({
+              periods: TIMETABLE_PERIODS,
+              updatedAt: Date.now(),
+              updatedBy: currentMember.name
+            }, { merge: true });
+            showToast('🔄 교시별 시간대가 기본값으로 복원되었습니다.');
+          } catch (err) {
+            console.error("Failed to reset timetable periods:", err);
+            showToast('⚠️ 시간대 복원 중 오류가 발생했습니다.');
+          }
+        } else {
+          showToast('🔄 로컬 시간대가 기본값으로 복원되었습니다.');
+        }
+      };
+
       const weekDays = useMemo(() => {
         const parts = selectedDate.split('-').map(Number);
         const curr = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
@@ -12545,11 +12783,11 @@
                       );
                     }
 
-                    const juwonItems = TIMETABLE_PERIODS
+                    const juwonItems = timetablePeriods
                       .map(p => ({ period: p, cell: timetableCells[`child1_${todayDayKey}_${p.id}`] }))
                       .filter(item => item.cell && item.cell.subject);
 
-                    const juaItems = TIMETABLE_PERIODS
+                    const juaItems = timetablePeriods
                       .map(p => ({ period: p, cell: timetableCells[`child2_${todayDayKey}_${p.id}`] }))
                       .filter(item => item.cell && item.cell.subject);
 
@@ -12867,8 +13105,11 @@
             {mainTab === 'timetable' && (
               <TimetableSection
                 timetableCells={timetableCells}
+                timetablePeriods={timetablePeriods}
                 onSaveCell={handleSaveTimetableCell}
+                onSavePeriods={handleSaveTimetablePeriods}
                 onResetToDefault={handleResetTimetableToDefault}
+                onResetPeriodsToDefault={handleResetPeriodsToDefault}
                 currentMember={currentMember}
                 isParent={isParent}
                 showToast={showToast}
